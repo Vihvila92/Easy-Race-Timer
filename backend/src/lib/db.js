@@ -1,6 +1,7 @@
 // Plain JS version of getPool for Jest without TS transform
 const { Pool } = require('pg');
 require('dotenv').config();
+const { logger } = require('../logger');
 
 let pool;
 function getPool() {
@@ -16,6 +17,23 @@ function getPool() {
       application_name: appName,
       options: `-c search_path=public -c idle_in_transaction_session_timeout=${idleTxnTimeoutMs} -c lock_timeout=${lockTimeoutMs}`
     });
+    // Wrap query for timing
+    const origQuery = pool.query.bind(pool);
+    pool.query = async function (...args) {
+      const start = process.hrtime.bigint();
+      try {
+        const result = await origQuery(...args);
+        const durMs = Number(process.hrtime.bigint() - start) / 1e6;
+        if (durMs > (parseInt(process.env.DB_SLOW_QUERY_MS || '200', 10))) {
+          logger.warn({ sql: args[0], duration_ms: durMs.toFixed(1) }, 'slow query');
+        }
+        return result;
+      } catch (e) {
+        const durMs = Number(process.hrtime.bigint() - start) / 1e6;
+        logger.error({ sql: args[0], duration_ms: durMs.toFixed(1), err: e.message }, 'query error');
+        throw e;
+      }
+    };
   }
   return pool;
 }
