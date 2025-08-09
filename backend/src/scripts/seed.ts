@@ -1,5 +1,6 @@
 import { getPool } from '../lib/db';
 import { runWithOrg } from '../lib/orgContext';
+import type { PoolClient } from 'pg';
 import crypto from 'crypto';
 
 interface SeedOptions { orgs?: number; competitorsPerOrg?: number; competitionsPerOrg?: number; entriesPerCompetition?: number; }
@@ -34,7 +35,7 @@ async function seed(opts: SeedOptions) {
     // Insert competitors & competitions via org context
     const competitors: string[] = [];
     for (let i=0;i<competitorsPerOrg;i++) {
-      await runWithOrg(pool, orgId, async (c) => {
+  await runWithOrg(pool, orgId, async (c: PoolClient) => {
         const { first, last } = randName();
         const { rows } = await c.query('INSERT INTO competitors(organization_id, first_name, last_name, birth_year) VALUES ($1,$2,$3,$4) RETURNING id', [orgId, first, last, 1980 + (i % 30)]);
         competitors.push(rows[0].id);
@@ -42,21 +43,21 @@ async function seed(opts: SeedOptions) {
     }
     const competitions: string[] = [];
     for (let cIdx=0;cIdx<competitionsPerOrg;cIdx++) {
-      await runWithOrg(pool, orgId, async (c) => {
+  await runWithOrg(pool, orgId, async (c: PoolClient) => {
         const { rows } = await c.query('INSERT INTO competitions(organization_id,name,start_time) VALUES ($1,$2, now() + ($3||\' hours\')::interval) RETURNING id', [orgId, `Competition ${cIdx+1}`, (cIdx*2).toString()]);
         competitions.push(rows[0].id);
       });
     }
     for (const compId of competitions) {
       // Categories
-      await runWithOrg(pool, orgId, c => c.query('INSERT INTO competition_categories(competition_id,name,min_age,max_age) VALUES ($1,$2,$3,$4)', [compId, 'Open', 0, 120]));
+  await runWithOrg(pool, orgId, (c: PoolClient) => c.query('INSERT INTO competition_categories(competition_id,name,min_age,max_age) VALUES ($1,$2,$3,$4)', [compId, 'Open', 0, 120]));
       // Entries
       const sample = competitors.slice().sort(()=>0.5-Math.random()).slice(0, Math.min(entriesPerCompetition, competitors.length));
       let bib = 1;
       for (const competitorId of sample) {
-        await runWithOrg(pool, orgId, c => c.query('INSERT INTO competition_entries(competition_id, competitor_id, bib_number) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [compId, competitorId, bib++]));
+  await runWithOrg(pool, orgId, (c: PoolClient) => c.query('INSERT INTO competition_entries(competition_id, competitor_id, bib_number) VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [compId, competitorId, bib++]));
         // Timing event initial (start)
-        await runWithOrg(pool, orgId, c => c.query('INSERT INTO timing_events(competition_id, competitor_id, event_time, source) VALUES ($1,$2, now(), $3)', [compId, competitorId, 'seed']));
+  await runWithOrg(pool, orgId, (c: PoolClient) => c.query('INSERT INTO timing_events(competition_id, competitor_id, event_time, source) VALUES ($1,$2, now(), $3)', [compId, competitorId, 'seed']));
       }
     }
     console.log(`Org ${orgId} -> competitors=${competitors.length} competitions=${competitions.length}`);
