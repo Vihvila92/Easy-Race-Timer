@@ -78,7 +78,14 @@ paths:
             schema:
               $ref: '#/components/schemas/CreateEntry'
       responses:
-        '201': { description: Created }
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Entry' }
         '400': { $ref: '#/components/responses/OrgHeaderRequired' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/EntryExists' }
@@ -142,3 +149,11 @@ components:
         competition_id: { type: string, format: uuid }
         competitor_id: { type: string, format: uuid }
         bib_number: { type: integer, minimum: 1 }
+    Entry:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        competition_id: { type: string, format: uuid }
+        competitor_id: { type: string, format: uuid }
+        bib_number: { type: integer, nullable: true }
+        created_at: { type: string, format: date-time }
