@@ -5,6 +5,7 @@ const { requestIdMiddleware } = require('./middleware/requestId');
 const { loggingMiddleware } = require('./middleware/logging');
 const { loadConfig } = require('./config');
 const { competitionsRouter } = require('./routes/competitions');
+const { entriesRouter } = require('./routes/entries');
 const { errorHandler } = require('./middleware/errorHandler');
 
 dotenv.config({ path: '../.env' });
@@ -20,6 +21,7 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/competitions', competitionsRouter);
+app.use('/', entriesRouter);
 app.use(errorHandler);
 
 const { PORT: port } = loadConfig();

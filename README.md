@@ -1,5 +1,7 @@
 # Easy Race Timer
 
+[![Backend CI](https://github.com/Vihvila92/Easy-Race-Timer/actions/workflows/backend-ci.yml/badge.svg)](https://github.com/Vihvila92/Easy-Race-Timer/actions/workflows/backend-ci.yml) [![CodeQL](https://github.com/Vihvila92/Easy-Race-Timer/actions/workflows/codeql.yml/badge.svg)](https://github.com/Vihvila92/Easy-Race-Timer/actions/workflows/codeql.yml)
+
 Nykyaikainen, web-pohjainen ajanotto-ohjelmisto suomalaisille urheiluseuroille ja kilpailujärjestäjille. Järjestelmä tukee useita urheilulajeja ja tarjoaa kolme eri käyttöönottomahdollisuutta organisaation tarpeiden mukaan.
 
 ## 🎯 Projektin Tavoitteet
