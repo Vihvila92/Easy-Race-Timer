@@ -6,6 +6,8 @@ const { loggingMiddleware } = require('./middleware/logging');
 const { loadConfig } = require('./config');
 const { competitionsRouter } = require('./routes/competitions');
 const { entriesRouter } = require('./routes/entries');
+const { authRouter } = require('./routes/auth');
+const { authMiddleware } = require('./middleware/auth');
 const { errorHandler } = require('./middleware/errorHandler');
 
 dotenv.config({ path: '../.env' });
@@ -13,7 +15,8 @@ dotenv.config({ path: '../.env' });
 const app = express();
 app.use(express.json());
 app.use(requestIdMiddleware);
-app.use(orgContextMiddleware);
+app.use(orgContextMiddleware); // header x-org-id (legacy / tests)
+app.use(authMiddleware); // JWT sets req.user + orgId override
 app.use(loggingMiddleware);
 
 app.get('/health', (_req, res) => {
@@ -21,6 +24,7 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/competitions', competitionsRouter);
+app.use('/auth', authRouter);
 app.use('/', entriesRouter);
 app.use(errorHandler);
 
