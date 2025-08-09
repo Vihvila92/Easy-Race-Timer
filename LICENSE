@@ -1,0 +1,96 @@
+# Easy Race Timer License
+
+Copyright (c) 2025 Valtteri Vehviläinen
+
+## Free Use License for Sports Organizations
+
+Permission is hereby granted, free of charge, to any person or organization
+obtaining a copy of this software and associated documentation files (the
+"Software"), to use, copy, modify, and distribute the Software, subject to
+the following conditions:
+
+### Permitted Uses
+
+1. **Free use by sports organizations**: Sports clubs, federations, and
+   organizations may use this software completely free of charge for timing
+   competitions and events.
+
+2. **Competition entry fees**: Organizations may charge normal entry fees
+   for competitions using this software - this is not considered commercial
+   use of the software.
+
+3. **Modifications and improvements**: Users may modify the software for
+   their own needs and are encouraged to contribute improvements back to
+   the community.
+
+4. **Self-hosting**: Organizations may host the software on their own
+   servers or cloud infrastructure.
+
+### Prohibited Uses
+
+1. **Commercial software services**: You may NOT charge money specifically
+   for providing this software as a service, hosting it for others, or
+   selling access to the software functionality.
+
+2. **Reselling or sublicensing**: You may NOT sell this software or grant
+   commercial sublicenses to third parties.
+
+3. **Proprietary derivatives**: You may NOT create closed-source commercial
+   versions based on this software.
+
+### Commercial Exception
+
+The copyright holder (Valtteri Vehviläinen) reserves the exclusive right to
+provide commercial hosting services, consulting, and support for this software.
+If you wish to provide commercial services around this software, please contact
+the copyright holder for a separate commercial license.
+
+### Conditions
+
+1. **Attribution**: The above copyright notice and this license notice must be
+   included in all copies or substantial portions of the Software.
+
+2. **Source code availability**: Any modifications to the software must be made
+   available as source code when distributed.
+
+3. **Same license**: Any distributed versions must use this same license.
+
+### Disclaimer
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+COPYRIGHT HOLDER BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+---
+
+## Additional Terms for Sports Organizations
+
+This software is specifically designed for sports timing and competition management.
+While using this software, organizations are encouraged to:
+
+1. **Respect competitor privacy**: Implement proper GDPR compliance when handling
+   personal data of athletes and participants.
+
+2. **Ensure timing accuracy**: Use appropriate backup timing methods and verify
+   results before publishing official competition results.
+
+3. **Support the community**: Consider contributing improvements back to the
+   project to benefit all sports organizations.
+
+4. **Finnish sports compliance**: Ensure your specific use case meets all
+   applicable Finnish sports federation regulations and requirements.
+
+## Summary
+
+- ✅ **FREE for sports organizations** - Use completely free for competitions
+- ✅ **Competition entry fees allowed** - Normal entry fees are NOT commercial use
+- ✅ **Self-hosting allowed** - Host on your own infrastructure
+- ✅ **Modifications allowed** - Customize for your needs
+- ❌ **NO commercial software services** - Can't charge for providing the software
+- ❌ **NO reselling** - Can't sell the software to others
+- ❌ **NO proprietary versions** - Must keep modifications open source
+
+For commercial services, contact: <valtteri@vehvilainen.cc>
