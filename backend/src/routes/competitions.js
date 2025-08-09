@@ -22,7 +22,10 @@ router.get('/', requireOrgMiddleware, async (req, res, next) => {
   const orgId = req.orgId;
   const parsed = listQuerySchema.safeParse(req.query);
   if (!parsed.success) return res.status(422).json({ error: { code: 'VALIDATION_ERROR', message: 'Invalid query params', details: parsed.error.issues } });
-  const limit = Math.min(parseInt(parsed.data.limit || '100', 10), 200);
+  const limit = Math.min(
+    parseInt(parsed.data.limit || String(DEFAULT_COMPETITION_LIST_LIMIT), 10),
+    MAX_COMPETITION_LIST_LIMIT
+  );
   const offset = Math.max(parseInt(parsed.data.offset || '0', 10), 0);
   try {
     const pool = getPool();
