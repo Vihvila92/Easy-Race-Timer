@@ -20,3 +20,10 @@ export async function dbConnect() {
   await p.query('SELECT 1');
   return p;
 }
+
+// CommonJS bridge for JS requires (tests) without ts-node
+// @ts-ignore
+if (typeof module !== 'undefined') {
+  // @ts-ignore
+  module.exports = { getPool, dbConnect };
+}
