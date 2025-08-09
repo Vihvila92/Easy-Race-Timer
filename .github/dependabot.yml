@@ -6,8 +6,7 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 5
     versioning-strategy: increase
-    # labels removed ("dependencies", "backend") because they do not yet exist in the repo.
-    # Re-add after creating them under Settings > Labels.
+    labels: ["dependencies", "backend"]
     commit-message:
       prefix: "chore(deps)"
       include: "scope"
@@ -23,7 +22,7 @@ updates:
       interval: "weekly"
     open-pull-requests-limit: 5
     versioning-strategy: increase
-    # labels removed ("dependencies", "frontend") until labels are created.
+    labels: ["dependencies", "frontend"]
     commit-message:
       prefix: "chore(deps)"
       include: "scope"
@@ -37,7 +36,7 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    # labels removed ("dependencies", "ci") until created.
+    labels: ["dependencies", "ci"]
     commit-message:
       prefix: "chore(deps)"
       include: "scope"
