@@ -2,7 +2,7 @@
 
 Minimal Express backend scaffold with migrations, multi-tenant RLS (read + write isolation), and test utilities.
 
-Added features: custom migration runner (checksums + drift), structured logging, competitions & entries APIs, org header middleware, RLS integration tests, Dependabot & CodeQL.
+Added features: custom migration runner (checksums + drift), structured logging, auth (users/org membership, JWT), competitions, entries & competitors APIs, org header + JWT org context override, RLS integration tests, Dependabot & CodeQL.
 
 ## Local Development Database
 
@@ -85,6 +85,14 @@ runWithOrg(pool, orgId, async (client) => {
 
 Row Level Security uses a custom GUC `app.current_org_id` set per session. `runWithOrg` enables context; outside a context only limited admin operations (e.g. seeding organizations) are allowed. Policies cover SELECT/INSERT/UPDATE/DELETE for: organizations (read; write only when no context), competitors, competitions, competition_categories, competition_entries, timing_events.
 
+## Authentication
+
+- Signup: `POST /auth/signup` (email, password, optional organization_name) -> creates user & organization (if provided), returns JWT.
+- Login: `POST /auth/login` -> returns JWT + first org membership id (if any).
+- JWT Payload: `{ sub: userId, email, orgId? }` where orgId is embedded if membership was established during signup/login.
+- Middleware: extracts Bearer token, sets `req.user` and overrides `req.orgId` when a token includes org context (fallback remains legacy `x-org-id` header for tests).
+- Passwords: bcrypt hash with salt rounds (default 10). Adjust via env later if needed.
+
 ## Migration Integrity
 
 Each migration's SHA-256 checksum is stored. `migrate:status` flags drift, `migrate:rebaseline` updates stored checksums after intentional edits. An advisory lock prevents concurrent runners. `migrate:check` is CI-friendly: fails build on pending/drift/missing checksums. Unsafe commands (`down`, `rebaseline`) are blocked when `MIGRATION_ENV=production` unless `MIGRATION_FORCE=1`.
@@ -101,11 +109,10 @@ Also sets `application_name` (env: `DB_APPLICATION_NAME`).
 
 ## TODO (future)
 
-- Auth (JWT) & user/role management
-- WebSocket realtime timing events
+- Timing events ingestion & WebSocket realtime updates
 - Metrics / tracing (OpenTelemetry) & latency SLOs
-- Rate limiting & error code documentation
-- Additional endpoints (competitors CRUD, competitions detail, timing events ingestion)
+- Rate limiting & expanded error code catalog
+- Competition detail & results aggregation endpoints
 - Seed script expansion & deterministic sample data
-- Pagination metadata total counts (currently only page size & count returned)
+- Pagination metadata total counts (currently only page size returned)
 - API versioning strategy documentation

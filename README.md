@@ -1,6 +1,6 @@
 # Easy Race Timer
 
-Modern, web-based timing software for Finnish sports organizations and competition organizers. The system supports multiple sports and offers three deployment options based on organizational needs.
+Modern, web-based timing software for sports organizations and competition organizers. The system targets multi-sport events and provides scalable deployment options. All documentation moving forward is maintained in English.
 
 ## 🎯 Project Goals
 
@@ -32,14 +32,14 @@ Modern, web-based timing software for Finnish sports organizations and competiti
 
 ### Three deployment options
 
-#### 1. Standalone (0 EUR/month)
+#### 1. Standalone 
 
 - **Deployment**: Docker Compose on local machine
 - **Database**: Local PostgreSQL
 - **Suitable for**: Individual clubs, development, demo
 - **Limitations**: No cloud features, manual maintenance
 
-#### 2. Self-hosted Cloud (25-45 EUR/month)
+#### 2. Self-hosted Cloud
 
 - **Deployment**: VPS server + Docker Compose
 - **Database**: Managed backups (automated)
@@ -137,31 +137,30 @@ Modern, web-based timing software for Finnish sports organizations and competiti
 - **Encryption**: HTTPS/WSS encrypted connections
 - **Backup**: Automatic, encrypted backups
 
-## 🌐 Language Support
+## 🌐 Language Support (Planned)
 
-- **Finnish**: Primary language, full localization
-- **English**: International use
-- **Dynamic switching**: Language can be changed on the fly
-- **API documentation**: English (international standard)
+- English primary documentation language
+- Future: runtime i18n (initially EN, optional FI re-introduction later)
+- API error codes stable & English based
 
 ## 📄 Documentation
 
-- **[Technical Architecture](TECHNICAL_ARCHITECTURE.md)**: Comprehensive technical design
-- **[Finnish README](README.md)**: Suomenkielinen dokumentaatio
-- **User guides**: Coming when implementation progresses
-- **API documentation**: Coming with backend development
+- **[Technical Architecture](TECHNICAL_ARCHITECTURE.md)** – Comprehensive design
+- **User guides** – Planned (post MVP)
+- **API documentation** – Planned OpenAPI spec (auth, competitions, entries, competitors)
 
 ## 🚧 Current Status
 
-**Development phase**: Planning complete, implementation starting
+**Current phase**: Early backend implementation (auth, competitions, entries, competitors) with migration system & RLS.
 
-**Next steps**:
+**Immediate next steps**:
 
-1. Backend PostgreSQL schema and API foundations
-2. React frontend foundation and component library
-3. First working MVP with timing features
+1. OpenAPI spec & documentation automation
+2. Frontend scaffold & auth integration
+3. Timing event ingestion model
+4. Real-time/WebSocket design baseline
 
-**Participation**: Can join the project when first MVP is ready
+**Contribution**: Open once MVP backend endpoints stabilized.
 
 ---
 
@@ -175,29 +174,29 @@ Modern, web-based timing software for Finnish sports organizations and competiti
 ### Phase 1: Core System (v1.0)
 
 - [x] Project structure and README
-- [ ] Backend API (Node.js)
-- [ ] Frontend basics (React)
-- [ ] Bilingual support (FI/EN) - i18n implementation
-- [ ] Simple button-based timing
-- [ ] Competitor management
-- [ ] Results display
-- [ ] Docker container setup
+- [x] Backend API foundations (Express + PostgreSQL + RLS)
+- [x] Auth (signup/login, JWT middleware, users & org membership)
+- [x] Competitions (create/list)
+- [x] Entries (create/list, pagination, conflicts)
+- [x] Competitors CRUD
+- [ ] Timing events ingestion
+- [ ] Basic results aggregation & display
+- [ ] Docker container setup (runtime images)
 
 ### Phase 2: Modularity (v1.5)
 
-- [ ] Role-based user management
-- [ ] Browser-based client computer support
-- [ ] Automatic view selection based on role
-- [ ] Real-time WebSocket connections
-- [ ] Role distribution across machines
-- [ ] Communication system between client computers
+- [ ] Role-based UI views (start/finish/display/admin)
+- [ ] WebSocket connections (live results)
+- [ ] Real-time timing events propagation
+- [ ] Client role routing
+- [ ] Internal messaging primitives
 
 ### Phase 3: Cloud Service (v2.0)
 
-- [ ] VPS deployment
-- [ ] Internet connections
-- [ ] User management and authentication
-- [ ] Mobile browser support
+- [ ] Hardened VPS deployment docs
+- [ ] Managed cloud Helm chart
+- [ ] Scaling policies
+- [ ] Mobile offline PWA support
 
 ### Phase 4: IoT and Automation (v3.0)
 
@@ -239,8 +238,8 @@ Easy-Race-Timer/
 │   └── (Future)
 ├── docker-compose.yml       # Full system orchestration
 ├── docs/                    # Documentation
-├── README.md               # Finnish documentation
-└── README_EN.md           # This file (English)
+├── README.md               # Project overview (English)
+└── (legacy bilingual docs removed)
 ```
 
 ## 🎮 Use Cases
@@ -294,32 +293,9 @@ Easy-Race-Timer/
 4. **Progressive Enhancement**: Start simple, add features gradually
 5. **Future-Proof**: Keep architecture open for future extensions
 
-## 🌐 Language Support and Internationalization
+## 🌐 Internationalization (Deferred)
 
-### Built-in Languages
-
-- **Finnish (FI)**: Primary language and development language
-- **English (EN)**: International use, built-in
-
-### Technical Implementation
-
-- **React i18n**: Internationalization in React components
-- **Backend i18n**: API messages and error texts in both languages
-- **User Choice**: Language selectable from user interface
-- **Dynamic Switching**: Language can be changed on the fly
-
-### Future Language Extensions
-
-- Community translations
-- Additional languages as needed (Swedish, German, etc.)
-- Translation tool integration
-
-### Documentation Language Support
-
-- **README**: Finnish (primary) + English (README_EN.md)
-- **API Documentation**: English (international standard)
-- **User Guides**: Both languages
-- **Code Comments**: English (developer-friendly)
+Initial release ships with English only. Future optional i18n will be re-scoped once core timing & result features are stable.
 
 ## 📝 Notes
 
@@ -340,7 +316,7 @@ Easy-Race-Timer/
 
 ---
 
-**Updated:** August 9, 2025 (synchronized with Finnish README)
+**Updated:** August 9, 2025
 
 ## 📄 License
 

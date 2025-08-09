@@ -4,6 +4,10 @@ All notable changes will be documented in this file (keep focused on backend sco
 
 ## Unreleased
 
+- Added user authentication (users table, org_users join, signup & login endpoints)
+- Added JWT middleware & password hashing (bcrypt) utilities
+- Added competitors CRUD endpoints & tests (list/create/update/delete)
+- Improved test stability (unique emails) & added DB pool teardown
 - (add new entries above this line)
 
 ## 0.0.1-alpha (2025-08-09)

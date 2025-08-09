@@ -5,6 +5,8 @@
 | ORG_HEADER_REQUIRED | 400 | Missing x-org-id header | Sent by requireOrgMiddleware |
 | VALIDATION_ERROR | 422 | Input validation failed | Includes Zod issues array |
 | ENTRY_EXISTS | 409 | Duplicate competition entry | Unique constraint violation |
+| USER_EXISTS | 409 | Email already registered | Signup duplicate email |
+| INVALID_CREDENTIALS | 401 | Bad email or password | Login failure (no distinction) |
 | NOT_FOUND | 404 | Resource not visible or missing | RLS may hide resources |
 
 ## Conventions
