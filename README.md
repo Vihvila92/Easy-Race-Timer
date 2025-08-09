@@ -1,376 +1,360 @@
 # Easy Race Timer
 
-[![Backend CI](https://github.com/Vihvila92/Easy-Race-Timer/actions/workflows/backend-ci.yml/badge.svg)](https://github.com/Vihvila92/Easy-Race-Timer/actions/workflows/backend-ci.yml) [![CodeQL](https://github.com/Vihvila92/Easy-Race-Timer/actions/workflows/codeql.yml/badge.svg)](https://github.com/Vihvila92/Easy-Race-Timer/actions/workflows/codeql.yml)
+Modern, web-based timing software for Finnish sports organizations and competition organizers. The system supports multiple sports and offers three deployment options based on organizational needs.
 
-Nykyaikainen, web-pohjainen ajanotto-ohjelmisto suomalaisille urheiluseuroille ja kilpailujärjestäjille. Järjestelmä tukee useita urheilulajeja ja tarjoaa kolme eri käyttöönottomahdollisuutta organisaation tarpeiden mukaan.
+## 🎯 Project Goals
 
-## 🎯 Projektin Tavoitteet
+- **Ease of use**: Intuitive interface for stressful competition situations
+- **Flexibility**: Supports single time trials to events with thousands of participants
+- **Reliability**: Comprehensive stopwatch backup system for technical failures
+- **Accessibility**: Works on older Android/iOS devices and slow network connections
+- **Language support**: Fully bilingual (Finnish/English) interface
 
-- **Helppokäyttöisyys**: Intuitiivinen käyttöliittymä stressaavissa kilpailutilanteissa
-- **Joustavuus**: Tukee yhden kilpailijan aikakisasta tuhansien kilpailijoiden tapahtumiin
-- **Luotettavuus**: Kattava sekunttikellojen varmuusjärjestelmä teknisten ongelmien varalle
-- **Saavutettavuus**: Toimii vanhoilla Android/iOS-laitteilla ja hitailla verkkoyhteyksillä
-- **Kielituki**: Täysin kaksikielinen (suomi/englanti) käyttöliittymä
+## 🏁 Supported Sports and Competition Types
 
-## 🏁 Tuetut Lajit ja Kilpailutyypit
+### Comprehensive sport support
 
-### Monipuolinen lajituki
+- **Athletics**: Running, marathon, cross-country
+- **Cycling**: Road, cyclocross, MTB
+- **Triathlon**: Swimming-cycling-running combinations
+- **Skiing**: Cross-country, sprints
+- **Other sports**: Easy to add new sports
 
-- **Yleisurheilu**: Juoksu, maraton, cross-country
-- **Pyöräily**: Maantie, cyclocross, MTB
-- **Triathlon**: Uinti-pyöräily-juoksu yhdistelmäkisat
-- **Hiihto**: Maastohiihto, sprintit
-- **Muut lajit**: Helposti lisättävissä uusia lajeja
+### Competition types
 
-### Kilpailutyypit
+- **Mass starts**: Everyone starts at the same time
+- **Individual start times**: Time trial type competitions
+- **Multi-day events**: Competitions spanning several days
+- **Relays**: Team competitions
+- **Series competitions**: Multiple competition totals
 
-- **Joukkuelähdöt**: Kaikki lähtevät samaan aikaan
-- **Yksilölliset lähtöajat**: Time trial -tyyppiset kisat
-- **Monierä-kilpailut**: Usean päivän kisat
-- **Viestit**: Joukkuekilpailut
-- **Sarjakisat**: Usean kilpailun kokonaisuudet
+## 🏗️ System Architecture
 
-## 🏗️ Järjestelmän Arkkitehtuuri
+### Three deployment options
 
-### Kolme käyttöönottomahdollisuutta
+#### 1. Standalone (0 EUR/month)
 
-#### 1. Standalone (0 EUR/kk)
+- **Deployment**: Docker Compose on local machine
+- **Database**: Local PostgreSQL
+- **Suitable for**: Individual clubs, development, demo
+- **Limitations**: No cloud features, manual maintenance
 
-- **Käyttöönotto**: Docker Compose paikallisessa koneessa
-- **Tietokanta**: Paikallinen PostgreSQL
-- **Soveltuu**: Yksittäiset seurat, kehitys, demo
-- **Rajoitukset**: Ei pilvi-ominaisuuksia, manuaalinen huolto
+#### 2. Self-hosted Cloud (25-45 EUR/month)
 
-#### 2. Self-hosted Cloud (25-45 EUR/kk)
-
-- **Käyttöönotto**: VPS-palvelin + Docker Compose
-- **Tietokanta**: Hallinnoidut varmuuskopiot
-- **Soveltuu**: Seurat jotka haluavat pilvi-edut mutta pitää datan omassa hallinnassa
-- **Ominaisuudet**: SSL-sertifikaatit, automaattiset päivitykset
+- **Deployment**: VPS server + Docker Compose
+- **Database**: Managed backups (automated)
+- **Suitable for**: Clubs wanting cloud benefits while keeping data under own control
+- **Features**: SSL certificates, automatic updates
 
 #### 3. Managed Cloud (Kubernetes)
 
-- **Käyttöönotto**: Täysin hallinnoitu Kubernetes-ympäristö
-- **Tietokanta**: Pilvipalvelun hallinnoima tietokanta
-- **Soveltuu**: Suuret organisaatiot, korkeat saatavuusvaatimukset
-- **Ominaisuudet**: 99.9% käytettävyys, automaattinen skaalaus, 24/7 tuki
+- **Deployment**: Fully managed Kubernetes environment
+- **Database**: Cloud service managed database
+- **Suitable for**: Large organizations, high availability requirements
+- **Features**: 99.9% uptime, automatic scaling, 24/7 support
 
-### Teknologiavalinta
+### Technology choices
 
 - **Backend**: Node.js 18+ LTS, Express.js, TypeScript
 - **Frontend**: React 18+, TypeScript, Tailwind CSS
-- **Tietokanta**: PostgreSQL 14+ Row-Level Security:llä
-- **Reaaliaikaisuus**: Socket.io WebSocket-yhteydet
-- **Autentikointi**: JWT-pohjaiset token-systeemit
-- **Konttiteknologia**: Docker + Kubernetes
+- **Database**: PostgreSQL 14+ with Row-Level Security
+- **Real-time**: Socket.io WebSocket connections
+- **Authentication**: JWT-based token systems
+- **Containerization**: Docker + Kubernetes
 
-### Komponentit ja Toiminnallisuudet
+## 🚀 Development Status
 
-#### Kilpailujen Hallinta
+### Planning Phase (Complete ✅)
 
-- **Kilpailujen luonti**: Helppo lomake kilpailujen perustamiseen
-- **Sarjajaottelu**: Ikä-, sukupuoli- ja tasoperusteinen kategorisointi
-- **Kilpailijarekisteri**: Keskitetty kilpailijarekisteri organisaatiolle
-- **Ilmoittautuminen**: Kilpailijoiden ilmoittautuminen kisaan
+- [x] System architecture defined
+- [x] Technology choices made
+- [x] Database design complete
+- [x] API design complete
+- [x] Multi-tenant architecture planned
+- [x] Stopwatch backup system designed
+- [x] Comprehensive technical documentation
 
-#### Ajanotto-järjestelmä
+### Upcoming Development Phases
 
-- **Digitaalinen ajanotto**: Tarkat ajanotoet submilli-sekunnin tarkkuudella
-- **Verkkosynchronisointi**: NTP-tyyppinen aikasynkronointi eri laitteiden välillä
-- **Sekuntikellojen varmuusjärjestelmä**: Useamman sekuntikellon tuki eri käynnistysajoilla
-- **Automaattinen muunnos**: Sekuntikello-ajoista kisa-aikoihin automaattinen muunnos
+#### Phase 1: Backend Core (v0.1)
 
-#### Tulosten Hallinta
+- [ ] PostgreSQL database schema
+- [ ] REST API foundations
+- [ ] JWT authentication
+- [ ] Multi-tenant data isolation
+- [ ] WebSocket basics
 
-- **Reaaliaikaiset tulokset**: Välittömät päivitykset WebSocket-yhteyksien kautta
-- **Tulossarjat**: Kategoria- ja kokonaiskilpailujen tulokset
-- **Tulosten vienti**: PDF, Excel ja virallisten liittojen formaatit
-- **GDPR-yhteensopivuus**: Henkilötietojen hallinta EU-säädösten mukaisesti
+#### Phase 2: Frontend Core (v0.2)
 
-#### Käyttöliittymät
+- [ ] React application foundation
+- [ ] Component library (Tailwind + Shadcn/ui)
+- [ ] Competition management UI
+- [ ] Competitor registry UI
+- [ ] Bilingual support (i18n)
 
-- **Lähtökone**: Kilpailijoiden lähdön hallinnointi
-- **Maalikone**: Maaliin tulon ajanotto
-- **Tulospalvelu**: Yleisönäyttö ja tulosten julkaisu
-- **Ylläpito**: Kilpailujen ja järjestelmän hallinnointi
+#### Phase 3: Timing (v0.3)
 
-## 🚀 Kehityksen Tila
+- [ ] Digital timing interface
+- [ ] Real-time result updates
+- [ ] Time synchronization system
+- [ ] Basic result calculation
 
-### Suunnitteluvaihe (Valmis ✅)
+#### Phase 4: Manual Timing (v0.4)
 
-- [x] Järjestelmäarkkitehtuuri määritelty
-- [x] Teknologiavalinnat tehty
-- [x] Tietokantasuunnittelu valmis
-- [x] API-suunnittelu valmis
-- [x] Multi-tenant arkkitehtuuri suunniteltu
-- [x] Sekunttikellojen varmuusjärjestelmä suunniteltu
-- [x] Kattava tekninen dokumentaatio
+- [ ] Stopwatch registration
+- [ ] Automatic time conversion
+- [ ] Paper form generation
+- [ ] Manual time import
 
-### Tulevat Kehitysvaiheet
+#### Phase 5: Production Ready (v1.0)
 
-#### Vaihe 1: Backend Core (v0.1)
+- [ ] Docker container configuration
+- [ ] Security audit
+- [ ] Performance testing
+- [ ] GDPR compliance verification
+- [ ] User guide documentation
 
-- [ ] PostgreSQL tietokantaschema
-- [ ] REST API perusrungot
-- [ ] JWT-autentikointi
-- [ ] Multi-tenant tietojen eristys
-- [ ] WebSocket perustoiminnot
+## 🔧 Technical Notes
 
-#### Vaihe 2: Frontend Core (v0.2)
+### Reliability and Backup Systems
 
-- [ ] React-sovelluksen pohja
-- [ ] Komponenttikirjasto (Tailwind + Shadcn/ui)
-- [ ] Kilpailujen hallinnan käyttöliittymä
-- [ ] Kilpailijarekisterin käyttöliittymä
-- [ ] Kaksikielisyys (i18n)
+- **Stopwatch support**: Multiple stopwatches with different start times
+- **Automatic conversion**: Stopwatch times automatically converted to race times
+- **Offline operation**: Works without internet, syncs when connection returns
+- **Paper forms**: Automatic backup form generation
 
-#### Vaihe 3: Ajanotto (v0.3)
+### Performance and Scalability
 
-- [ ] Digitaalinen ajanotto-käyttöliittymä
-- [ ] Reaaliaikaiset tulospäivitykset
-- [ ] Aikasynkronointi-järjestelmä
-- [ ] Perus tulosten laskenta
+- **Older devices**: Optimized for Android 7+/iOS 12+ devices
+- **Low memory usage**: Works on 2GB RAM devices
+- **Fast response**: Sub-second timing accuracy
+- **Concurrent users**: Supports hundreds of simultaneous users
 
-#### Vaihe 4: Manual Timing (v0.4)
+### Security and Privacy
 
-- [ ] Sekunttikellojen rekisteröinti
-- [ ] Automaattinen aikojen muunnos
-- [ ] Paperilomakkeiden generointi
-- [ ] Manuaalisten aikojen tuonti
+- **GDPR compliance**: Full EU data protection regulation support
+- **Multi-tenant isolation**: Organization data completely isolated
+- **Encryption**: HTTPS/WSS encrypted connections
+- **Backup**: Automatic, encrypted backups
 
-#### Vaihe 5: Production Ready (v1.0)
+## 🌐 Language Support
 
-- [ ] Docker-konttikonfiguraatio
-- [ ] Tietoturva-auditointi
-- [ ] Suorituskykytestaus
-- [ ] GDPR-yhteensopivuuden varmistaminen
-- [ ] Käyttöohjeiden kirjoittaminen
+- **Finnish**: Primary language, full localization
+- **English**: International use
+- **Dynamic switching**: Language can be changed on the fly
+- **API documentation**: English (international standard)
 
-## 📁 Projektirakenne
+## 📄 Documentation
 
-```text
-Easy-Race-Timer/
-├── backend/                    # Node.js TypeScript API
-│   ├── src/
-│   │   ├── controllers/        # HTTP route handlers
-│   │   ├── models/            # Tietokantamallit ja -skemat
-│   │   ├── services/          # Liiketoimintalogiikka
-│   │   ├── middleware/        # Multi-tenant, auth, validointi
-│   │   ├── websocket/         # Socket.io WebSocket handlers
-│   │   ├── migrations/        # Tietokannan migraatiot
-│   │   └── types/             # TypeScript tyyppimääritykset
-│   ├── tests/                 # Backend testit (Jest)
-│   └── Dockerfile
-├── frontend/                   # React TypeScript sovellus
-│   ├── src/
-│   │   ├── components/        # React komponentit
-│   │   │   ├── competitions/  # Kilpailujen hallinta
-│   │   │   ├── competitors/   # Kilpailijarekisteri
-│   │   │   ├── timing/        # Ajanotto-käyttöliittymät
-│   │   │   ├── results/       # Tulosnäytöt
-│   │   │   ├── admin/         # Ylläpito
-│   │   │   └── common/        # Yleiset komponentit
-│   │   ├── hooks/             # Custom React hooks
-│   │   ├── services/          # API-kutsut ja WebSocket
-│   │   ├── auth/              # Autentikointi ja roolit
-│   │   ├── i18n/              # Kaksikielisyys (FI/EN)
-│   │   └── types/             # Frontend tyyppimääritykset
-│   ├── tests/                 # Frontend testit (Vitest)
-│   └── Dockerfile
-├── database/                   # Tietokanta-asennukset
-│   ├── schema/                # PostgreSQL schema
-│   ├── migrations/            # Tietokannan versiointi
-│   └── seeds/                 # Testidatat
-├── deployment/                 # Käyttöönottokonfiguraatiot
-│   ├── standalone/            # Docker Compose (kehitys/pienet)
-│   ├── self-hosted-cloud/     # VPS deployment
-│   └── managed-cloud/         # Kubernetes manifests
-├── docs/                      # Dokumentaatio
-│   ├── api/                   # API dokumentaatio
-│   ├── user-guide/            # Käyttöohjeet (FI/EN)
-│   └── development/           # Kehittäjädokumentaatio
-├── tests/                     # E2E testit (Playwright)
-├── TECHNICAL_ARCHITECTURE.md  # Tekninen arkkitehtuuridokumentaatio
-├── README.md                  # Tämä tiedosto (Suomi)
-└── README_EN.md              # Englanninkielinen README
-```
+- **[Technical Architecture](TECHNICAL_ARCHITECTURE.md)**: Comprehensive technical design
+- **[Finnish README](README.md)**: Suomenkielinen dokumentaatio
+- **User guides**: Coming when implementation progresses
+- **API documentation**: Coming with backend development
 
-## 🎮 Käyttötapaukset
+## 🚧 Current Status
 
-### Pieni seura: Standalone-käyttöönotto
+**Development phase**: Planning complete, implementation starting
 
-Esimerkki: Uuraisten Urheilijat, 50 kilpailijaa
+**Next steps**:
 
-1. **Asennus**: Lataa Docker Compose -tiedosto ja käynnistä `docker-compose up`
-2. **Kilpailun luonti**: Avaa selain -> luo uusi kilpailu
-3. **Kilpailijoiden lisäys**: Syötä kilpailijat järjestelmään
-4. **Ajanotto**: Yhdellä koneella sekä lähtö- että maaliajanotto
-5. **Tulokset**: Automaattinen tulosten laskenta ja näyttö
+1. Backend PostgreSQL schema and API foundations
+2. React frontend foundation and component library
+3. First working MVP with timing features
 
-**Kustannukset**: 0 EUR (paitsi oma laitteisto)
-
-### Keskikokoinen seura: Self-hosted Cloud
-
-Esimerkki: Jyväskylän Kenttäurheilijat, 300 kilpailijaa
-
-1. **Asennus**: VPS-palvelin (€35/kk) + automaattinen Docker-asennus
-2. **Multi-device käyttö**:
-   - Lähtökone: Tablet lähtöviivalla
-   - Maalikone: Kannettava maalissa
-   - Tulospalvelu: Näyttö yleisölle
-3. **Reaaliaikaiset tulokset**: Kaikki laitteet synkronoituna
-4. **Varmuusjärjestelmä**: Sekunttikellot paperilomakkeilla
-
-**Kustannukset**: €35/kk VPS + SSL-sertifikaatti
-
-### Suuri organisaatio: Managed Cloud
-
-Esimerkki: Suomen Urheiluliitto, useita kilpailuja samanaikaisesti
-
-1. **Käyttöönotto**: Täysin hallinnoitu Kubernetes-ympäristö
-2. **Skaalautuvuus**: Automaattinen kapasiteetin lisäys kovan kuormituksen aikana
-3. **Monitorointi**: 24/7 järjestelmän seuranta ja hälyytykset
-4. **Tuki**: Tekninen tuki kilpailupäivinä
-5. **Integraatiot**: Liittojen tulostietokantaintegraatiot
-
-## 🔧 Teknisiä Huomioita
-
-### Luotettavuus ja Varmuusjärjestelmät
-
-- **Sekunttikellojen tuki**: Useampi sekunttikello eri käynnistysajoilla
-- **Automaattinen muunnos**: Sekunttikello-ajat muunnetaan automaattisesti kisa-aikoihin
-- **Offline-toiminta**: Toimii ilman verkkoyhteyttä, synkronoi kun yhteys palautuu
-- **Paperilomakkeet**: Automaattinen varmuuslomakkeiden generointi
-
-### Suorituskyky ja Skalautuvuus
-
-- **Vanhat laitteet**: Optimoitu Android 7+/iOS 12+ laitteille
-- **Alhainen muistinkulutus**: Toimii 2GB RAM laitteilla
-- **Nopea reagointi**: Sub-sekunnin ajanotto tarkkuudella
-- **Samanaikaiskäyttäjät**: Tukee satoja samanaikaisia käyttäjiä
-
-### Tietoturva ja Yksityisyys
-
-- **GDPR-yhteensopivuus**: Täysi EU:n tietosuoja-asetuksen tuki
-- **Multi-tenant eristys**: Organisaatioiden data täysin eristetty
-- **Salaus**: HTTPS/WSS salatut yhteydet
-- **Varmuuskopiointi**: Automaattiset, salatut varmuuskopiot
-
-## 🌐 Kielituki
-
-- **Suomi**: Ensisijainen kieli, täysi lokalisointi
-- **Englanti**: Kansainvälinen käyttö
-- **Dynaaminen vaihto**: Kieltä voi vaihtaa lennossa
-- **API-dokumentaatio**: Englanti (kansainvälinen standardi)
-
-## 📄 Dokumentaatio
-
-- **[Tekninen arkkitehtuuri](TECHNICAL_ARCHITECTURE.md)**: Kattava tekninen suunnittelu
-- **[English README](README_EN.md)**: International documentation
-- **Käyttöohjeet**: Tulossa kun implementaatio etenee
-- **API-dokumentaatio**: Tulossa backend-kehityksen mukana
-
-## 🚧 Nykyinen Status
-
-**Kehitysvaihe**: Suunnitteluvaihe valmis, implementaatio alkamassa
-
-**Seuraavat askeleet**:
-
-1. Backend PostgreSQL-schema ja API-rungot
-2. React frontend pohja ja komponenttikirjasto
-3. Ensimmäinen toimiva MVP ajanotto-ominaisuuksilla
-
-**Osallistuminen**: Projektiin voi osallistua kun ensimmäinen MVP valmis
+**Participation**: Can join the project when first MVP is ready
 
 ---
 
-**Päivitetty:** 9. elokuuta 2025
+**Updated:** August 9, 2025
 
-**Dokumentaatio**: [Tekninen arkkitehtuuri](TECHNICAL_ARCHITECTURE.md) | [English](README_EN.md)
-**Politiikat**: [Tietoturva](SECURITY.md) | [Code of Conduct](CODE_OF_CONDUCT.md)
+**Documentation**: [Technical Architecture](TECHNICAL_ARCHITECTURE.md) | [Suomi](README.md)
+**Policies**: [Security](SECURITY.md) | [Code of Conduct](CODE_OF_CONDUCT.md)
 
-## 👤 Roolipohjainen Käyttöliittymä
+## 🚀 Development Phases
 
-### Käyttäjäroolit
+### Phase 1: Core System (v1.0)
 
-- **Admin**: Pääkäyttäjä, kaikki ominaisuudet käytössä
-- **Start**: Lähtöaikojen otto ja kilpailijoiden hallinta
-- **Finish**: Maaliin tulon ajanotto
-- **Display**: Tulosten ja tietojen näyttö yleisölle
-- **Timer**: Yleinen ajanotto-rooli (start + finish)
+- [x] Project structure and README
+- [ ] Backend API (Node.js)
+- [ ] Frontend basics (React)
+- [ ] Bilingual support (FI/EN) - i18n implementation
+- [ ] Simple button-based timing
+- [ ] Competitor management
+- [ ] Results display
+- [ ] Docker container setup
 
-### Automaattinen näkymän valinta
+### Phase 2: Modularity (v1.5)
 
-1. **Kirjautuminen**: Käyttäjä syöttää tunnukset
-2. **Roolin tunnistus**: Järjestelmä tunnistaa käyttäjän roolin
-3. **Näkymän ohjaus**: Selain ohjautuu automaattisesti oikeaan näkymään
-4. **Rajoitetut toiminnot**: Käyttäjä näkee vain oman roolinsa mukaiset toiminnot
+- [ ] Role-based user management
+- [ ] Browser-based client computer support
+- [ ] Automatic view selection based on role
+- [ ] Real-time WebSocket connections
+- [ ] Role distribution across machines
+- [ ] Communication system between client computers
 
-### Joustavuus
+### Phase 3: Cloud Service (v2.0)
 
-- **Admin-käyttäjät**: Voivat valita haluamansa näkymän
-- **Roolien vaihto**: Mahdollista vaihtaa roolia uudelleenkirjautumisella
-- **Mobiilituki**: Kaikki näkymät toimivat myös mobiililaitteilla
+- [ ] VPS deployment
+- [ ] Internet connections
+- [ ] User management and authentication
+- [ ] Mobile browser support
 
-## 🔧 Kehitysperiaatteet
+### Phase 4: IoT and Automation (v3.0)
 
-1. **Don't Reinvent the Wheel**: Käytä valmiita komponentteja ja kirjastoja
-2. **Modulaarisuus**: Komponentit eristetty ja uudelleenkäytettävä
-3. **DRY Principle**: Minimoi koodin toistaminen
-4. **Progressive Enhancement**: Aloita yksinkertaisesta, lisää ominaisuuksia vähitellen
-5. **Future-Proof**: Pidä arkkitehtuuri avoimena tulevaisuuden laajennuksille
+- [ ] Raspberry Pi integration
+- [ ] Automatic sensors
+- [ ] Split timing system
+- [ ] Offline cache functionality
 
-## 🌐 Kielituki ja Kansainvälistäminen
+## 📁 Project Structure (Planned)
 
-### Sisäänrakennetut kielet
+```text
+Easy-Race-Timer/
+├── backend/                 # Node.js API server
+│   ├── src/
+│   │   ├── controllers/     # Route handlers
+│   │   ├── models/          # Database models
+│   │   ├── services/        # Business logic
+│   │   ├── utils/           # Utility functions
+│   │   └── websocket/       # WebSocket handlers
+│   ├── package.json
+│   └── Dockerfile
+├── frontend/                # React application (All roles)
+│   ├── src/
+│   │   ├── components/      # React components
+│   │   │   ├── Timer/       # Timing components
+│   │   │   ├── Competitors/ # Competitor management
+│   │   │   ├── Results/     # Results display
+│   │   │   ├── Admin/       # Administration
+│   │   │   ├── StartView/   # Start computer view
+│   │   │   ├── FinishView/  # Finish computer view
+│   │   │   └── DisplayView/ # Announcement computer view
+│   │   ├── hooks/           # Custom React hooks
+│   │   ├── services/        # API calls
+│   │   ├── auth/            # User management and roles
+│   │   └── i18n/            # Internationalization (FI/EN)
+│   ├── package.json
+│   └── Dockerfile
+├── raspberry-pi/            # IoT integration
+│   └── (Future)
+├── docker-compose.yml       # Full system orchestration
+├── docs/                    # Documentation
+├── README.md               # Finnish documentation
+└── README_EN.md           # This file (English)
+```
 
-- **Suomi (FI)**: Ensisijainen kieli ja kehityskieli
-- **Englanti (EN)**: Kansainvälinen käyttö, sisäänrakennettuna
+## 🎮 Use Cases
 
-### Tekninen toteutus
+### Small Competition (1 computer)
 
-- **React i18n**: Kansainvälistäminen React-komponenteissa
-- **Backend i18n**: API-viestit ja virhetekstit molemmilla kielillä
-- **Käyttäjän valinta**: Kieli valittavissa käyttöliittymästä
-- **Dynaaminen vaihtaminen**: Kieltä voi vaihtaa lennossa
+1. Start Docker Compose
+2. Open browser -> master computer serves all roles
+3. Add competitors
+4. Record times with button presses
+5. Display results
 
-### Tulevaisuuden kielilaajennukset
+### Large Competition (multiple computers)
 
-- Käännökset yhteisön toimesta
-- Lisäkielet tarpeen mukaan (Ruotsi, Saksa, jne.)
-- Käännöstyökalujen integraatio
+1. **Master computer**: Login with admin role -> management view
+2. **Start computer**: Login with start role -> start view opens automatically
+3. **Finish computer**: Login with finish role -> finish view opens automatically
+4. **Announcement computer**: Login with display role -> results display opens automatically
+5. Everything synchronizes in real-time via WebSocket connections
 
-### Dokumentaation kielituki
+**Note**: All client computers use the same React application with different views
 
-- **README**: Suomi (ensisijainen) + Englanti (README_EN.md)
-- **API-dokumentaatio**: Englanti (kansainvälinen standardi)
-- **Käyttöohjeet**: Molemmat kielet
-- **Koodikommentit**: Englanti (kehittäjäystävällisyys)
+## 👤 Role-Based User Interface
 
-## 📝 Huomioita
+### User Roles
 
-- Tietokanta pysyy kevyenä, mutta järjestelmän tulee skaalautua isompiin kilpailuihin
-- Nopeus on kriittistä - ei saa olla viivettä ajanoton aikana
-- Offline-toiminta tärkeää (network-katkokset eivät saa vaikuttaa)
-- Käyttöliittymän tulee olla intuitiivinen myös stressaavissa tilanteissa
+- **Admin**: Main user, all features available
+- **Start**: Start time recording and competitor management
+- **Finish**: Finish time recording
+- **Display**: Results and information display for audience
+- **Timer**: General timing role (start + finish)
 
-## � Lisenssi
+### Automatic View Selection
 
-Tämä projekti on lisensoitu mukautetulla "Free Use License for Sports Organizations" -lisenssillä.
+1. **Login**: User enters credentials
+2. **Role Recognition**: System identifies user's role
+3. **View Routing**: Browser automatically navigates to the correct view
+4. **Restricted Functions**: User sees only functions relevant to their role
 
-Yhteenveto:
+### Flexibility
 
-- ✅ Ilmainen käyttö urheiluseuroille ja -järjestöille kilpailujen ajanottoon
-- ✅ Saa periä normaalit osallistumismaksut kilpailijoilta
-- ✅ Saa muokata ja ylläpitää omaa instanssia (self-hosting)
-- ❌ Ei saa myydä palveluna tai jälleenmyydä ohjelmistoa
-- ❌ Ei suljettuja, proprietaarisia johdannaisia
-- ➡️ Kaupallisia palveluita varten ota yhteyttä: [valtteri@vehvilainen.cc](mailto:valtteri@vehvilainen.cc)
+- **Admin users**: Can choose their preferred view
+- **Role switching**: Possible to change role by re-logging in
+- **Mobile support**: All views work on mobile devices as well
 
-Täydet ehdot: katso tiedosto LICENSE.
+## 🔧 Development Principles
 
-Lisämateriaalit: [Tietoturvapolitiikka](SECURITY.md) · [Code of Conduct](CODE_OF_CONDUCT.md) · [Contributing](CONTRIBUTING.md)
+1. **Don't Reinvent the Wheel**: Use existing components and libraries
+2. **Modularity**: Components isolated and reusable
+3. **DRY Principle**: Minimize code repetition
+4. **Progressive Enhancement**: Start simple, add features gradually
+5. **Future-Proof**: Keep architecture open for future extensions
 
-## 🔄 Päivitystiedot
+## 🌐 Language Support and Internationalization
 
-**Päivitetty:** 9. elokuuta 2025
+### Built-in Languages
+
+- **Finnish (FI)**: Primary language and development language
+- **English (EN)**: International use, built-in
+
+### Technical Implementation
+
+- **React i18n**: Internationalization in React components
+- **Backend i18n**: API messages and error texts in both languages
+- **User Choice**: Language selectable from user interface
+- **Dynamic Switching**: Language can be changed on the fly
+
+### Future Language Extensions
+
+- Community translations
+- Additional languages as needed (Swedish, German, etc.)
+- Translation tool integration
+
+### Documentation Language Support
+
+- **README**: Finnish (primary) + English (README_EN.md)
+- **API Documentation**: English (international standard)
+- **User Guides**: Both languages
+- **Code Comments**: English (developer-friendly)
+
+## 📝 Notes
+
+- Database stays lightweight, but system must scale to larger competitions
+- Speed is critical - no delays during timing
+- Offline operation important (network interruptions must not affect timing)
+- User interface must be intuitive even in stressful situations
+
+## 🚧 Development Status
+
+**Current Phase**: Project planning and basic structure creation
+
+**Next Steps**:
+
+1. Backend API skeleton
+2. React frontend foundation
+3. First working timing prototype
+
+---
+
+**Updated:** August 9, 2025 (synchronized with Finnish README)
+
+## 📄 License
+
+This project uses a custom "Free Use License for Sports Organizations".
+
+Summary:
+
+- ✅ Free use for sports clubs, federations, and event organizers
+- ✅ Normal competition entry fees allowed
+- ✅ Self-hosting and modifications allowed (must keep same license)
+- ❌ Not allowed to sell as a hosted/commercial SaaS service
+- ❌ No reselling or proprietary closed-source derivatives
+- ➡️ For commercial hosting/support services contact: [valtteri@vehvilainen.cc](mailto:valtteri@vehvilainen.cc)
+
+Full terms: see LICENSE file.
+
+Related policies: [Security Policy](SECURITY.md) · [Code of Conduct](CODE_OF_CONDUCT.md) · [Contributing](CONTRIBUTING.md)
