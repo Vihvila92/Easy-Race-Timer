@@ -1,6 +1,6 @@
 {
   "name": "easy-race-timer-backend",
-  "version": "0.1.0",
+  "version": "0.0.1-alpha",
   "private": true,
   "type": "commonjs",
   "main": "dist/index.js",
