@@ -4,13 +4,11 @@ const { getPool } = require('../lib/db');
 const { runWithOrg } = require('../lib/orgContext');
 const { requireOrgMiddleware } = require('../middleware/requireOrg');
 
-const router = express.Router();
-
-// Validation for creating an entry
-const createEntrySchema = z.object({
-  competition_id: z.string().uuid(),
-  competitor_id: z.string().uuid(),
+// Pagination / validation constants
 const MAX_BIB_NUMBER = 99999;
+const DEFAULT_ENTRIES_LIMIT = 500;
+const MAX_ENTRIES_LIMIT = 1000;
+
 const router = express.Router();
 
 // Validation for creating an entry

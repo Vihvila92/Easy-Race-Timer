@@ -4,6 +4,10 @@ const { getPool } = require('../lib/db');
 const { runWithOrg } = require('../lib/orgContext');
 const { requireOrgMiddleware } = require('../middleware/requireOrg');
 
+// Pagination constants
+const DEFAULT_COMPETITION_LIST_LIMIT = 100;
+const MAX_COMPETITION_LIST_LIMIT = 200;
+
 // Validation schemas
 const createCompetitionSchema = z.object({
   name: z.string().min(1).max(200),
