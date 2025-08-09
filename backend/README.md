@@ -2,6 +2,8 @@
 
 Minimal Express backend scaffold with migrations, multi-tenant RLS (read + write isolation), and test utilities.
 
+Added features: custom migration runner (checksums + drift), structured logging, competitions & entries APIs, org header middleware, RLS integration tests, Dependabot & CodeQL.
+
 ## Local Development Database
 
 Requires Docker. A Postgres 15 instance is defined in `deployment/docker-compose.dev.yml`.
@@ -99,7 +101,11 @@ Also sets `application_name` (env: `DB_APPLICATION_NAME`).
 
 ## TODO (future)
 
-- CI workflow (Docker + tests + migrate:check)
-- API route scaffolding
-- Observability (structured logging, tracing)
-- Performance tuning & indexes
+- Auth (JWT) & user/role management
+- WebSocket realtime timing events
+- Metrics / tracing (OpenTelemetry) & latency SLOs
+- Rate limiting & error code documentation
+- Additional endpoints (competitors CRUD, competitions detail, timing events ingestion)
+- Seed script expansion & deterministic sample data
+- Pagination metadata total counts (currently only page size & count returned)
+- API versioning strategy documentation
