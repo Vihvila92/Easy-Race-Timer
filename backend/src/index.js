@@ -5,6 +5,7 @@ const { requestIdMiddleware } = require('./middleware/requestId');
 const { loggingMiddleware } = require('./middleware/logging');
 const { loadConfig } = require('./config');
 const { competitionsRouter } = require('./routes/competitions');
+const { competitorsRouter } = require('./routes/competitors');
 const { entriesRouter } = require('./routes/entries');
 const { authRouter } = require('./routes/auth');
 const { authMiddleware } = require('./middleware/auth');
@@ -24,6 +25,7 @@ app.get('/health', (_req, res) => {
 });
 
 app.use('/competitions', competitionsRouter);
+app.use('/competitors', competitorsRouter);
 app.use('/auth', authRouter);
 app.use('/', entriesRouter);
 app.use(errorHandler);
