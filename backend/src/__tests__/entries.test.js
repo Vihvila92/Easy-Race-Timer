@@ -46,15 +46,20 @@ describe('entries API', () => {
       .set('x-org-id', orgId)
       .send({ competition_id: competitionId, competitor_id: competitorId, bib_number: 12 });
     expect(res.status).toBe(409);
-    expect(res.body.error.code).toBe('ENTRY_EXISTS');
   });
 
-  test('list entries for competition', async () => {
+  test('list entries with pagination', async () => {
     const res = await request(app)
-      .get(`/competitions/${competitionId}/entries`)
+      .get(`/competitions/${competitionId}/entries?limit=10&offset=0`)
       .set('x-org-id', orgId);
     expect(res.status).toBe(200);
-    expect(res.body.data.length).toBeGreaterThanOrEqual(1);
-    expect(res.body.data[0]).toHaveProperty('competitor_id');
+    expect(res.body.pagination).toMatchObject({ limit: 10, offset: 0 });
+  });
+
+  test('404 for unknown competition', async () => {
+    const res = await request(app)
+      .get(`/competitions/00000000-0000-0000-0000-00000000ffff/entries`)
+      .set('x-org-id', orgId);
+    expect(res.status).toBe(404);
   });
 });

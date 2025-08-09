@@ -1,7 +1,6 @@
 const request = require('supertest');
 const { start } = require('../index');
 const { getPool } = require('../lib/db');
-const { runWithOrg } = require('../lib/orgContext');
 
 let server;
 
@@ -37,18 +36,19 @@ maybeDescribe('Competitions API', () => {
     expect(res.status).toBe(400);
   });
 
-  test('create and list competition', async () => {
+  test('create and list competition with pagination', async () => {
     const createRes = await request(server)
       .post('/competitions')
       .set('x-org-id', testOrg)
-  .send({ name: 'My Race', start_time: new Date().toISOString() });
+      .send({ name: 'My Race', start_time: new Date().toISOString() });
     expect(createRes.status).toBe(201);
-  expect(createRes.body.data.name).toBe('My Race');
+    expect(createRes.body.data.name).toBe('My Race');
 
     const listRes = await request(server)
-      .get('/competitions')
+      .get('/competitions?limit=5&offset=0')
       .set('x-org-id', testOrg);
     expect(listRes.status).toBe(200);
+    expect(listRes.body.pagination.limit).toBe(5);
     expect(Array.isArray(listRes.body.data)).toBe(true);
     expect(listRes.body.data.find(c => c.id === createRes.body.data.id)).toBeTruthy();
   });
