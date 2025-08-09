@@ -31,7 +31,7 @@ router.get('/competitions/:id/entries', requireOrgMiddleware, async (req, res, n
   const competitionId = req.params.id;
   const parsed = listEntriesQuerySchema.safeParse(req.query);
   if (!parsed.success) return res.status(422).json({ error: { code: 'VALIDATION_ERROR', message: 'Invalid query params', details: parsed.error.issues } });
-  const limit = Math.min(parseInt(parsed.data.limit || '500', 10), 1000);
+  const limit = Math.min(parseInt(parsed.data.limit || String(DEFAULT_ENTRIES_LIMIT), 10), MAX_ENTRIES_LIMIT);
   const offset = Math.max(parseInt(parsed.data.offset || '0', 10), 0);
   try {
     const pool = getPool();
