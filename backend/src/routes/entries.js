@@ -10,7 +10,14 @@ const router = express.Router();
 const createEntrySchema = z.object({
   competition_id: z.string().uuid(),
   competitor_id: z.string().uuid(),
-  bib_number: z.number().int().positive().max(99999).optional()
+const MAX_BIB_NUMBER = 99999;
+const router = express.Router();
+
+// Validation for creating an entry
+const createEntrySchema = z.object({
+  competition_id: z.string().uuid(),
+  competitor_id: z.string().uuid(),
+  bib_number: z.number().int().positive().max(MAX_BIB_NUMBER).optional()
 });
 
 const listEntriesQuerySchema = z.object({
