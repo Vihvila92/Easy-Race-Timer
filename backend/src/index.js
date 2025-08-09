@@ -2,6 +2,8 @@ const express = require('express');
 const dotenv = require('dotenv');
 const { orgContextMiddleware } = require('./middleware/orgContext.js');
 const { loadConfig } = require('./config');
+const { competitionsRouter } = require('./routes/competitions');
+const { errorHandler } = require('./middleware/errorHandler');
 
 dotenv.config({ path: '../.env' });
 
@@ -12,6 +14,9 @@ app.use(orgContextMiddleware);
 app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
+
+app.use('/competitions', competitionsRouter);
+app.use(errorHandler);
 
 const { PORT: port } = loadConfig();
 function start() {

@@ -10,6 +10,7 @@ services:
       - '5432:5432'
     volumes:
       - ert_db_data:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U ert']
       interval: 5s

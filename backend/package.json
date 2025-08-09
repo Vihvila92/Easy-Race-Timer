@@ -10,11 +10,15 @@
     "start": "node dist/index.js",
     "migrate:up": "ts-node-dev --transpile-only src/migrate.ts up",
     "migrate:down": "ts-node-dev --transpile-only src/migrate.ts down",
-    "migrate:status": "ts-node-dev --transpile-only src/migrate.ts status",
+  "migrate:status": "ts-node-dev --transpile-only src/migrate.ts status",
+  "migrate:backfill": "ts-node-dev --transpile-only src/migrate.ts backfill",
+  "migrate:rebaseline": "ts-node-dev --transpile-only src/migrate.ts rebaseline",
+  "migrate:new": "ts-node-dev --transpile-only src/migrate.ts new",
+  "seed": "ts-node-dev --transpile-only src/scripts/seed.ts",
     "test": "jest --passWithNoTests",
     "db:up": "docker compose -f ../deployment/docker-compose.dev.yml up -d",
     "db:down": "docker compose -f ../deployment/docker-compose.dev.yml down",
-    "test:int": "cross-env DATABASE_URL=postgres://ert:ertpass@localhost:5432/ert_dev jest --runInBand src/__tests__/orgContext.test.js"
+  "test:int": "cross-env DATABASE_URL=postgres://ert:ertpass@localhost:5432/ert_dev APP_ROLE=1 jest --runInBand src/__tests__/orgContext.test.js"
   },
   "dependencies": {
     "dotenv": "^16.4.5",

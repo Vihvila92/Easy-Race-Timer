@@ -6,6 +6,7 @@ const { Pool } = require('pg');
  * @param {string} orgId UUID of organization
  */
 async function setOrgContext(client, orgId) {
+  await client.query('SET row_security = on');
   await client.query('SELECT set_config($1, $2, false)', ['app.current_org_id', orgId]);
 }
 
