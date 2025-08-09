@@ -1,6 +1,7 @@
 const express = require('express');
 const dotenv = require('dotenv');
 const { orgContextMiddleware } = require('./middleware/orgContext.js');
+const { loadConfig } = require('./config');
 
 dotenv.config({ path: '../.env' });
 
@@ -12,7 +13,7 @@ app.get('/health', (_req, res) => {
   res.json({ status: 'ok' });
 });
 
-const port = process.env.PORT || 3000;
+const { PORT: port } = loadConfig();
 function start() {
   return app.listen(port, () => console.log(`API listening on ${port}`));
 }

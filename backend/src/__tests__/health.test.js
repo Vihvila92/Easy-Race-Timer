@@ -1,4 +1,5 @@
 const request = require('supertest');
+process.env.DATABASE_URL = process.env.DATABASE_URL || 'https://example.com/db';
 const app = require('../index.js').default;
 
 describe('GET /health', () => {
