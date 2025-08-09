@@ -40,6 +40,15 @@ describe('entries API', () => {
     expect(res.body.data).toMatchObject({ competition_id: competitionId, competitor_id: competitorId, bib_number: 12 });
   });
 
+  test('duplicate entry rejected with 409', async () => {
+    const res = await request(app)
+      .post('/entries')
+      .set('x-org-id', orgId)
+      .send({ competition_id: competitionId, competitor_id: competitorId, bib_number: 12 });
+    expect(res.status).toBe(409);
+    expect(res.body.error.code).toBe('ENTRY_EXISTS');
+  });
+
   test('list entries for competition', async () => {
     const res = await request(app)
       .get(`/competitions/${competitionId}/entries`)
