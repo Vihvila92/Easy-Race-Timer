@@ -16,12 +16,8 @@ jobs:
       actions: read
       contents: read
       security-events: write
-    strategy:
-      fail-fast: false
-      matrix:
-        # Scan both JavaScript and TypeScript sources. Even though the build compiles TS,
-        # listing both ensures CodeQL runs appropriate extractors for mixed code.
-        language: [ 'javascript', 'typescript' ]
+    # Note: The CodeQL "javascript" extractor already covers both .js and .ts files. Using a
+    # matrix with both 'javascript' and 'typescript' causes duplicate analysis warnings.
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -34,7 +30,7 @@ jobs:
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
-          languages: ${{ matrix.language }}
+          languages: javascript
           queries: +security-and-quality
 
       - name: Install backend deps
@@ -49,4 +45,4 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
         with:
-          category: '/language:${{ matrix.language }}'
+          category: '/language:javascript'
