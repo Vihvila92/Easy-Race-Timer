@@ -22,7 +22,6 @@ const updateCompetitorSchema = z.object({
   last_name: z.string().min(1).max(100).optional(),
   birth_year: z.number().int().min(1900).max(2100).optional()
 });
-
 const updateCompetitorSchema = z.object({
   first_name: z.string().min(1).max(100).optional(),
   last_name: z.string().min(1).max(100).optional(),
