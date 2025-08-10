@@ -20,7 +20,13 @@ const createCompetitorSchema = z.object({
 const updateCompetitorSchema = z.object({
   first_name: z.string().min(1).max(100).optional(),
   last_name: z.string().min(1).max(100).optional(),
-  birth_year: z.number().int().min(1900).max(new Date().getFullYear()).nullable().optional()
+  birth_year: z.number().int().min(1900).max(2100).optional()
+});
+
+const updateCompetitorSchema = z.object({
+  first_name: z.string().min(1).max(100).optional(),
+  last_name: z.string().min(1).max(100).optional(),
+  birth_year: z.number().int().min(1900).max(2100).nullable().optional()
 }).refine(d => Object.keys(d).length > 0, { message: 'At least one field required' });
 
 const DEFAULT_LIMIT = 100;
