@@ -65,11 +65,12 @@ jobs:
       - name: Install deps
         working-directory: backend
         run: npm ci
-      - name: Drift check (no apply)
+      - name: Apply migrations
         working-directory: backend
-        run: |
-          # Run check; if pending migrations exist this fails early.
-          npm run migrate:check
+        run: npm run migrate:up
+      - name: Drift & checksum check
+        working-directory: backend
+        run: npm run migrate:check
 
   lint:
     name: Lint
