@@ -21,6 +21,7 @@
   "test:int": "cross-env JEST_INT=1 DATABASE_URL=postgres://ert:ertpass@localhost:5432/ert_dev APP_ROLE=1 jest --runInBand --passWithNoTests",
   "test:int:ci": "cross-env JEST_INT=1 jest --runInBand --passWithNoTests || (echo 'Retrying failed integration tests once with verbose output...' && cross-env JEST_INT=1 jest --runInBand --verbose --passWithNoTests)",
   "test:coverage": "cross-env JEST_INT=1 jest --coverage --passWithNoTests",
+  "coverage:badge": "node scripts/coverage-badge.js",
   "test:all": "npm run test:unit && npm run test:int",
   "lint": "eslint 'src/**/*.{ts,js}'",
   "lint:fix": "npm run lint -- --fix",

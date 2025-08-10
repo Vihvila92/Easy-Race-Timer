@@ -1,5 +1,9 @@
 # Backend
 
+<!-- markdownlint-disable MD010 -->
+
+![Coverage Badge](./docs/badges/coverage.svg)
+
 Minimal Express backend scaffold with migrations, multi-tenant RLS (read + write isolation), and test utilities.
 
 Added features: custom migration runner (checksums + drift), structured logging, auth (users/org membership, JWT), competitions, entries & competitors APIs, org header + JWT org context override, RLS integration tests, Dependabot & CodeQL.
