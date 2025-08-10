@@ -1,12 +1,23 @@
 const pino = require('pino');
 const { loadConfig } = require('./config');
 
-const config = loadConfig();
+let cachedLogger;
+function getLogger() {
+  if (!cachedLogger) {
+    let level = process.env.LOG_LEVEL || 'info';
+    try {
+      const cfg = loadConfig();
+      if (cfg.LOG_LEVEL) level = cfg.LOG_LEVEL;
+    } catch (e) {
+      // In unit mode without DATABASE_URL config may fail; keep default level
+    }
+    cachedLogger = pino({
+      level,
+      base: undefined,
+      timestamp: pino.stdTimeFunctions.isoTime
+    });
+  }
+  return cachedLogger;
+}
 
-const logger = pino({
-  level: process.env.LOG_LEVEL || config.LOG_LEVEL || 'info',
-  base: undefined, // omit pid, hostname
-  timestamp: pino.stdTimeFunctions.isoTime
-});
-
-module.exports = { logger };
+module.exports = { logger: getLogger(), getLogger };

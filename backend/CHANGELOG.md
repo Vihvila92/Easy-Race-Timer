@@ -4,6 +4,15 @@ All notable changes will be documented in this file (keep focused on backend sco
 
 ## Unreleased
 
+- Added user authentication (users table, org_users join, signup & login endpoints)
+- Added JWT middleware & password hashing (bcrypt) utilities
+- Added competitors CRUD endpoints & tests (list/create/update/delete)
+- Improved test stability (unique emails) & added DB pool teardown
+- Added competition & competitor detail endpoints (GET /competitions/:id, GET /competitors/:id)
+- Added negative auth & validation tests (duplicate signup 409, bad login 401, missing org header 400, competitor validation 422)
+- Enforced required JWT_SECRET at startup (process exit if missing) + 15m exp HS256 tokens
+- Expanded OpenAPI draft spec (auth, competitions, competitors, entries, detail endpoints)
+- Standardized list responses shape: { data: [...], pagination: { limit, offset, count } }
 - (add new entries above this line)
 
 ## 0.0.1-alpha (2025-08-09)

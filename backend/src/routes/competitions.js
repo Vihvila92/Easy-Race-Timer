@@ -41,6 +41,20 @@ router.get('/', requireOrgMiddleware, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Competition detail
+router.get('/:id', requireOrgMiddleware, async (req, res, next) => {
+  const orgId = req.orgId; const id = req.params.id;
+  try {
+    const pool = getPool();
+    const row = await runWithOrg(pool, orgId, async (client) => {
+      const { rows } = await client.query('SELECT id, name, start_time, created_at FROM competitions WHERE id=$1', [id]);
+      return rows[0];
+    });
+    if (!row) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Competition not found' } });
+    res.json({ data: row });
+  } catch (e) { next(e); }
+});
+
 // Create competition
 router.post('/', requireOrgMiddleware, async (req, res, next) => {
   const orgId = req.orgId;

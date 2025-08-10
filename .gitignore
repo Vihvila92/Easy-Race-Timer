@@ -1,29 +1,43 @@
-# Dependencies
+#############################################
+# General / Dependencies
+#############################################
 node_modules/
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
 
-# Production builds
+#############################################
+# Builds & Outputs
+#############################################
 dist/
 build/
 out/
+coverage/
+coverage-report/
+coverage-final.json
+test-results/
+artifacts/
+*.lcov
+*.tsbuildinfo
 
-# Environment variables
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
+#############################################
+# Environment Files (keep examples)
+#############################################
+.env*
+**/.env*
+!**/.env.example
 
-# IDE and editor files
+#############################################
+# IDE / Editor / OS
+#############################################
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
-
-# OS generated files
 .DS_Store
 .DS_Store?
 ._*
@@ -32,111 +46,74 @@ out/
 ehthumbs.db
 Thumbs.db
 
-# Environment variables (root)
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Environment variables (any nested packages / services)
-**/.env
-**/.env.local
-**/.env.development.local
-**/.env.test.local
-**/.env.production.local
-
-# Logs
-logs/
-*.log
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-lerna-debug.log*
-pnpm-debug.log*
-
-# Runtime data
-pids/
-*.pid
-*.seed
-*.pid.lock
-
-# Coverage directory used by tools like istanbul
-coverage/
-*.lcov
-
-# nyc test coverage
+#############################################
+# Caches
+#############################################
 .nyc_output
-
-# TypeScript cache
-*.tsbuildinfo
-
-# Optional npm cache directory
-.npm
-
-# Optional eslint cache
-# TypeScript cache
 .turbo/
 .tscache/
-
-# Optional eslint cache
 .eslintcache
-
-# pnpm store (if pnpm chosen)
 .pnpm-store/
+.npm
+.jest/
+.parcel-cache/
+.vite/
+.webpack-cache/
+.rollup.cache
+.esbuild/
 
-# Optional REPL history
-.node_repl_history
+#############################################
+# Runtime / Temp
+#############################################
+pids/
+*.pid
+*.pid.lock
+tmp/
+temp/
+.tmp/
+*.tmp
 
-# Output of 'npm pack'
-*.tgz
-
-# Yarn Integrity file
-.yarn-integrity
-
-# Database files
-# Database files
+#############################################
+# Databases / Data
+#############################################
 *.db
 *.sqlite
 *.sqlite3
 database/data/
 pgdata/
 **/pgdata/
-
-# Docker volumes and data
 docker-data/
 postgres-data/
 
-# Backup files
-# Backup files
+#############################################
+# Backups / Dumps
+#############################################
 backups/
 *.sql.gz
 *.backup
 *.dump
 
-# Temporary files
-# Temporary files
-tmp/
-temp/
-.tmp/
-*.tmp
-
-# Test artifacts
-test-results/
+#############################################
+# Test / E2E Artifacts
+#############################################
 playwright-report/
+playwright/.auth/
 screenshots/
 videos/
 
-# Build artifacts
-# Build artifacts
+#############################################
+# Build / Packaging Artifacts
+#############################################
 *.tar.gz
 *.zip
+*.tgz
 *.bak
 *.orig
 *.rej
 
-# Certificate files (should not be committed)
-# Certificate files (should not be committed)
+#############################################
+# Certificates (never commit real secrets)
+#############################################
 *.pem
 *.key
 *.crt
@@ -144,47 +121,37 @@ videos/
 *.p12
 *.pfx
 
-# Local configuration overrides
+#############################################
+# Local Overrides / Config
+#############################################
 docker-compose.override.yml
 docker-compose.local.yml
-
-# Kubernetes secrets
-# Kubernetes secrets
-secrets/
-*.secret.yaml
-*.secrets.yaml
-
-# Monitoring and metrics data
-prometheus-data/
-grafana-data/
-
-# Development tools
-# Development tools
-.vite/
-.parcel-cache/
-.webpack-cache/
-.rollup.cache
-.esbuild/
-
-# Package manager lock files (npm chosen as default)
-yarn.lock
-pnpm-lock.yaml
-shrinkwrap.yaml
-# Keep package-lock.json committed for deterministic builds
-
-# Local development files
-# Local development files
 local-config.json
 dev-notes.md
 TODO.local.md
 
-# Playwright auth storage
-playwright/.auth/
+#############################################
+# Secrets / K8s
+#############################################
+secrets/
+*.secret.yaml
+*.secrets.yaml
 
-# Coverage variations
-coverage-final.json
-coverage-report/
+#############################################
+# Monitoring Data
+#############################################
+prometheus-data/
+grafana-data/
 
-# Mac artifact variations
+#############################################
+# Package Manager Alt Locks (npm chosen)
+#############################################
+yarn.lock
+pnpm-lock.yaml
+shrinkwrap.yaml
+
+#############################################
+# Mac Metadata Variants
+#############################################
 .AppleDouble
 .LSOverride

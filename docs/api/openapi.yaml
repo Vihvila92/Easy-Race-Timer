@@ -2,14 +2,47 @@ openapi: 3.1.0
 info:
   title: Easy Race Timer API
   version: 0.1.0
-  description: |
-    Early draft OpenAPI spec (partial). Covers competitions and entries endpoints.
+  description: >-
+    Early draft OpenAPI spec (partial). Auth, competitions, competitors, entries.
 servers:
   - url: https://api.example.com
     description: Production (placeholder)
   - url: http://localhost:3000
     description: Local development
 paths:
+  /auth/signup:
+    post:
+      summary: User signup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+                organization_name: { type: string }
+      responses:
+        '201': { description: Created }
+        '409': { description: USER_EXISTS }
+  /auth/login:
+    post:
+      summary: User login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200': { description: OK }
+        '401': { description: INVALID_CREDENTIALS }
   /competitions:
     get:
       summary: List competitions
@@ -30,14 +63,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/Competition'
-                  pagination:
-                    $ref: '#/components/schemas/Pagination'
+                $ref: '#/components/schemas/CompetitionListResponse'
         '400': { $ref: '#/components/responses/OrgHeaderRequired' }
     post:
       summary: Create competition
@@ -63,6 +89,86 @@ paths:
                   data: { $ref: '#/components/schemas/Competition' }
         '400': { $ref: '#/components/responses/OrgHeaderRequired' }
         '422': { $ref: '#/components/responses/ValidationError' }
+  /competitions/{id}:
+    get:
+      summary: Competition detail
+      parameters:
+        - in: header
+          name: x-org-id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompetitionDetailResponse'
+        '404': { $ref: '#/components/responses/NotFound' }
+  /competitors:
+    get:
+      summary: List competitors
+      parameters:
+        - in: header
+          name: x-org-id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompetitorListResponse'
+    post:
+      summary: Create competitor
+      parameters:
+        - in: header
+          name: x-org-id
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ first_name, last_name ]
+              properties:
+                first_name: { type: string }
+                last_name: { type: string }
+                birth_year: { type: integer, minimum: 1900, maximum: 2100 }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompetitorDetailResponse'
+  /competitors/{id}:
+    get:
+      summary: Competitor detail
+      parameters:
+        - in: header
+          name: x-org-id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompetitorDetailResponse'
+        '404': { $ref: '#/components/responses/NotFound' }
   /entries:
     post:
       summary: Create competition entry
@@ -109,7 +215,12 @@ paths:
           name: offset
           schema: { type: integer, minimum: 0, default: 0 }
       responses:
-        '200': { description: OK }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntryListResponse'
         '400': { $ref: '#/components/responses/OrgHeaderRequired' }
         '404': { $ref: '#/components/responses/NotFound' }
 components:
@@ -123,6 +234,43 @@ components:
     EntryExists:
       description: Competitor already entered in competition
   schemas:
+    CompetitionDetailResponse:
+      type: object
+      properties:
+        data: { $ref: '#/components/schemas/Competition' }
+    CompetitionListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Competition' }
+        pagination: { $ref: '#/components/schemas/Pagination' }
+    Competitor:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        first_name: { type: string }
+        last_name: { type: string }
+        birth_year: { type: integer, nullable: true }
+        created_at: { type: string, format: date-time }
+    CompetitorDetailResponse:
+      type: object
+      properties:
+        data: { $ref: '#/components/schemas/Competitor' }
+    CompetitorListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Competitor' }
+        pagination: { $ref: '#/components/schemas/Pagination' }
+    EntryListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Entry' }
+        pagination: { $ref: '#/components/schemas/Pagination' }
     Pagination:
       type: object
       properties:
