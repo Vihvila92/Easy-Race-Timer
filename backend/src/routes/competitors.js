@@ -14,7 +14,7 @@ const listQuerySchema = z.object({
 const createCompetitorSchema = z.object({
   first_name: z.string().min(1).max(100),
   last_name: z.string().min(1).max(100),
-  birth_year: z.number().int().min(1900).max(new Date().getFullYear()).optional()
+  birth_year: z.number().int().min(1900).max(2100).optional()
 });
 
 const updateCompetitorSchema = z.object({
