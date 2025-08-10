@@ -8,9 +8,12 @@
 | USER_EXISTS | 409 | Email already registered | Signup duplicate email |
 | INVALID_CREDENTIALS | 401 | Bad email or password | Login failure (no distinction) |
 | NOT_FOUND | 404 | Resource not visible or missing | RLS may hide resources |
+| UNAUTHORIZED | 401 | Missing / invalid auth token | Returned by protected future routes |
+| RATE_LIMITED | 429 | Too many requests | Placeholder (rate limiting not yet implemented) |
 
 ## Conventions
 
 - `error.code` is stable for client logic.
 - Additional details in `error.details` when present (e.g., validation issues).
 - Future errors (auth, rate limiting) will be appended here.
+- Standard list responses return `{ data, pagination }` while detail returns `{ data }`.

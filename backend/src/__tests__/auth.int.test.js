@@ -1,3 +1,4 @@
+// Integration: auth flow
 const request = require('supertest');
 const { default: app } = require('../index');
 
@@ -16,20 +17,18 @@ describe('auth flow', () => {
     expect(orgId).toBeTruthy();
   });
 
-  test('login returns token', async () => {
+  test('login returns token with exp claim', async () => {
     const res = await request(app)
       .post('/auth/login')
       .send({ email, password });
     expect(res.status).toBe(200);
     expect(res.body.data.token).toBeTruthy();
-    // orgId can be null if no membership but here should match created
     if (orgId) expect(res.body.data.orgId).toBe(orgId);
-  // decode token header.payload.signature (no verify) to assert exp claim exists
-  const token = res.body.data.token;
-  const payloadB64 = token.split('.')[1];
-  const json = JSON.parse(Buffer.from(payloadB64, 'base64').toString('utf8'));
-  expect(json.exp).toBeDefined();
-  expect(json.exp - json.iat).toBeLessThanOrEqual(15 * 60 + 5); // allow small clock drift margin
+    const token = res.body.data.token;
+    const payloadB64 = token.split('.')[1];
+    const json = JSON.parse(Buffer.from(payloadB64, 'base64').toString('utf8'));
+    expect(json.exp).toBeDefined();
+    expect(json.exp - json.iat).toBeLessThanOrEqual(15 * 60 + 5);
   });
 
   test('duplicate signup returns 409', async () => {
@@ -46,15 +45,3 @@ describe('auth flow', () => {
     expect(res.status).toBe(401);
   });
 });
-
-afterAll(async () => {
-  try {
-    const { getPool } = require('../lib/db');
-    const pool = getPool();
-    await pool.end();
-  } catch (e) {
-    // ignore
-  }
-});
-
-// Pool closed via globalTeardown.

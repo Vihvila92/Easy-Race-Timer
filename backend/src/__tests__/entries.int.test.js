@@ -1,13 +1,11 @@
+// Integration: entries API
 const request = require('supertest');
 const appModule = require('../index');
 const { getPool } = require('../lib/db');
 const { runWithOrg } = require('../lib/orgContext');
 
 const app = appModule.default;
-const hasDb = !!process.env.DATABASE_URL;
-const maybeDescribe = hasDb ? describe : describe.skip;
 
-// Helper to seed org + competitor + competition
 async function seedOrgData(orgId) {
   const pool = getPool();
   await pool.query('INSERT INTO organizations(id, name) VALUES ($1,$2) ON CONFLICT DO NOTHING', [orgId, 'SeedOrg']);
@@ -19,18 +17,13 @@ async function seedOrgData(orgId) {
   return compRes;
 }
 
-maybeDescribe('entries API', () => {
+describe('entries API', () => {
   const orgId = '00000000-0000-0000-0000-0000000000aa';
   let competitionId; let competitorId;
 
   beforeAll(async () => {
     const seeded = await seedOrgData(orgId);
     competitionId = seeded.competitionId; competitorId = seeded.competitorId;
-  });
-
-  afterAll(async () => {
-    const pool = getPool();
-    await pool.end();
   });
 
   test('create entry', async () => {

@@ -32,7 +32,7 @@ Modern, web-based timing software for sports organizations and competition organ
 
 ### Three deployment options
 
-#### 1. Standalone 
+#### 1. Standalone
 
 - **Deployment**: Docker Compose on local machine
 - **Database**: Local PostgreSQL
@@ -147,7 +147,7 @@ Modern, web-based timing software for sports organizations and competition organ
 
 - **[Technical Architecture](TECHNICAL_ARCHITECTURE.md)** – Comprehensive design
 - **User guides** – Planned (post MVP)
-- **API documentation** – Planned OpenAPI spec (auth, competitions, entries, competitors)
+- **API documentation** – Draft OpenAPI spec at `docs/api/openapi.yaml` (auth, competitions, competitors, entries)
 
 ## 🚧 Current Status
 

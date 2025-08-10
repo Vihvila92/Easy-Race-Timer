@@ -6,9 +6,39 @@ on:
   pull_request:
     branches: [ main ]
 
+concurrency:
+  group: backend-ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  backend:
+  openapi-diff:
+    name: OpenAPI diff & CHANGELOG check
     runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Fetch main
+        run: git fetch origin main:main
+      - name: Diff OpenAPI
+        run: |
+          set -e
+          if git diff --name-only origin/main...HEAD -- docs/api/openapi.yaml | grep -q 'openapi.yaml'; then
+            echo "OpenAPI spec changed." >> $GITHUB_STEP_SUMMARY
+            if git diff --name-only origin/main...HEAD -- backend/CHANGELOG.md | grep -q 'backend/CHANGELOG.md'; then
+              echo "CHANGELOG updated." >> $GITHUB_STEP_SUMMARY
+            else
+              echo "CHANGELOG not updated for OpenAPI change." >> $GITHUB_STEP_SUMMARY
+              exit 1
+            fi
+          else
+            echo "No OpenAPI changes." >> $GITHUB_STEP_SUMMARY
+          fi
+  migrations-check:
+    name: Migrations drift check
+    runs-on: ubuntu-latest
+    needs: openapi-diff
     services:
       postgres:
         image: postgres:15-alpine
@@ -17,48 +47,222 @@ jobs:
           POSTGRES_PASSWORD: ertpass
           POSTGRES_DB: ert_dev
         ports: ['5432:5432']
-        # Use single-line healthcheck options (line continuations can break docker create in Actions)
         options: >-
           --health-cmd="pg_isready -U ert" --health-interval=5s --health-timeout=5s --health-retries=5
     env:
       DATABASE_URL: postgres://ert:ertpass@localhost:5432/ert_dev
       NODE_ENV: test
+      JWT_SECRET: ci_test_secret
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
           cache-dependency-path: '**/package-lock.json'
+      - name: Install deps
+        working-directory: backend
+        run: npm ci
+      - name: Drift check (no apply)
+        working-directory: backend
+        run: |
+          # Run check; if pending migrations exist this fails early.
+          npm run migrate:check
 
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    needs: migrations-check
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: '**/package-lock.json'
+      - name: Install deps
+        working-directory: backend
+        run: npm ci
+      - name: Run ESLint
+        working-directory: backend
+        run: npm run lint
+
+  unit-tests:
+    name: Unit tests
+    needs: [lint]
+    runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      JWT_SECRET: ci_test_secret
+      CI: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: '**/package-lock.json'
+      - name: Install deps
+        working-directory: backend
+        run: npm ci
+      - name: Run unit tests
+        working-directory: backend
+        run: npm run test:unit --silent
+      - name: Upload junit (unit)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-test-results-unit
+          path: backend/test-results/junit.xml
+          if-no-files-found: ignore
+
+  integration-tests:
+    name: Integration (pg ${{ matrix.pg }})
+    needs: unit-tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        pg: [14, 15, 16]
+    services:
+      postgres:
+        image: postgres:${{ matrix.pg }}-alpine
+        env:
+          POSTGRES_USER: ert
+          POSTGRES_PASSWORD: ertpass
+          POSTGRES_DB: ert_dev
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U ert" --health-interval=5s --health-timeout=5s --health-retries=5
+    env:
+      DATABASE_URL: postgres://ert:ertpass@localhost:5432/ert_dev
+      NODE_ENV: test
+      JWT_SECRET: ci_test_secret
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: '**/package-lock.json'
       - name: Install backend deps
         working-directory: backend
         run: npm ci
-
       - name: Wait for Postgres
         run: |
-          for i in {1..20}; do
-            pg_isready -h localhost -p 5432 -U ert && break;
+          READY=0
+          for i in {1..50}; do
+            if pg_isready -h localhost -p 5432 -U ert; then READY=1; break; fi
             sleep 1;
           done
-
+          if [ "$READY" -ne 1 ]; then echo "Postgres did not become ready"; exit 1; fi
       - name: Run migrations
         working-directory: backend
         run: npm run migrate:up
-
       - name: Migration drift check
         working-directory: backend
-        run: npx ts-node src/migrate.ts check
-
-      - name: Unit tests
+        run: npm run migrate:check
+      - name: Run integration tests (with retry)
         working-directory: backend
-        run: npm test --silent
-
-      - name: Integration tests (RLS)
+        run: npm run test:int:ci --silent
+      - name: Coverage report
+        if: success() && matrix.pg == '15'
         working-directory: backend
-        env:
-          APP_ROLE: '1'
-        run: npm run test:int --silent
+        run: npm run test:coverage --silent
+      - name: Generate coverage badge
+        if: success() && matrix.pg == '15'
+        working-directory: backend
+        run: npm run coverage:badge
+      - name: Upload coverage artifact
+        if: always() && matrix.pg == '15'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-lcov
+          path: backend/coverage
+          if-no-files-found: ignore
+      - name: Upload coverage badge artifact
+        if: always() && matrix.pg == '15'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-badge
+          path: backend/docs/badges/coverage.svg
+          if-no-files-found: ignore
+      - name: Upload junit (integration)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: junit-test-results-int-pg${{ matrix.pg }}
+          path: backend/test-results/junit.xml
+          if-no-files-found: ignore
+
+  report:
+    name: Test Report & Coverage Summary
+    needs: integration-tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download unit test results
+        uses: actions/download-artifact@v4
+        with:
+          name: junit-test-results-unit
+          path: artifacts/unit
+      - name: Download integration pg14
+        uses: actions/download-artifact@v4
+        with:
+          name: junit-test-results-int-pg14
+          path: artifacts/pg14
+      - name: Download integration pg15
+        uses: actions/download-artifact@v4
+        with:
+          name: junit-test-results-int-pg15
+          path: artifacts/pg15
+      - name: Download integration pg16
+        uses: actions/download-artifact@v4
+        with:
+          name: junit-test-results-int-pg16
+          path: artifacts/pg16
+        continue-on-error: true
+      - name: Download coverage
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-lcov
+          path: coverage
+      - name: Summarize coverage
+        id: cov
+        run: |
+          if [ -f coverage/coverage-summary.json ]; then
+            STMT=$(jq '.total.statements.pct' coverage/coverage-summary.json)
+            BR=$(jq '.total.branches.pct' coverage/coverage-summary.json)
+            FN=$(jq '.total.functions.pct' coverage/coverage-summary.json)
+            LN=$(jq '.total.lines.pct' coverage/coverage-summary.json)
+            echo "statements=${STMT}" >> $GITHUB_OUTPUT
+            echo "branches=${BR}" >> $GITHUB_OUTPUT
+            echo "functions=${FN}" >> $GITHUB_OUTPUT
+            echo "lines=${LN}" >> $GITHUB_OUTPUT
+          else
+            echo "No coverage summary found"; exit 1;
+          fi
+      - name: Download coverage badge
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-badge
+          path: badge
+        continue-on-error: true
+      - name: Publish summary
+        run: |
+          echo "### Test Coverage" >> $GITHUB_STEP_SUMMARY
+          echo "Statements: ${{ steps.cov.outputs.statements }}%" >> $GITHUB_STEP_SUMMARY
+          echo "Branches: ${{ steps.cov.outputs.branches }}%" >> $GITHUB_STEP_SUMMARY
+          echo "Functions: ${{ steps.cov.outputs.functions }}%" >> $GITHUB_STEP_SUMMARY
+          echo "Lines: ${{ steps.cov.outputs.lines }}%" >> $GITHUB_STEP_SUMMARY
+          if [ -f badge/coverage.svg ]; then
+            echo "\n#### Badge" >> $GITHUB_STEP_SUMMARY
+            echo "![](badge/coverage.svg)" >> $GITHUB_STEP_SUMMARY
+          fi

@@ -5,6 +5,7 @@ Status reference date: 2025-08-09
 Ordering: Top to bottom = execution order (within each section). Each line is a unit suitable for a focused PR unless noted as a combined task.
 
 ---
+
 ## 0. Completed (Baseline)
 
 - Repository + initial architecture docs
@@ -19,19 +20,20 @@ Ordering: Top to bottom = execution order (within each section). Each line is a 
 - Documentation English conversion & sync
 
 ---
+
 ## 1. Immediate Next (Before Merging Current Feature Branch)
 
-1. OpenAPI spec skeleton (auth, competitions list/create, entries list/create, competitors CRUD, error schemas) `docs/api/openapi.yaml`.
-2. GET /competitions/:id (detail) endpoint + test.
-3. GET /competitors/:id endpoint + test.
-4. Standardize list responses to `{ data: [...], pagination: { limit, offset, count } }` (competitions, entries, competitors) + update tests.
-5. Negative tests: duplicate signup (409), bad login (401), missing x-org-id (400), validation error (422 competitor create missing last_name or birth_year invalid).
-6. Enforce required `JWT_SECRET` at process start (throw if missing) + test.
-7. Add token `exp` (15m) & algorithm HS256 explicitly; test presence of exp claim.
-8. Update `docs/api/ERROR_CODES.md` (ensure USER_EXISTS, INVALID_CREDENTIALS, add UNAUTHORIZED, add RATE_LIMITED placeholder).
-9. Update CHANGELOG (Unreleased) for new endpoints & pagination change.
-10. Update OpenAPI with new detail endpoints & pagination schema after step 4.
-11. Create PR: feat/auth-and-competitors.
+1. ✅ OpenAPI spec skeleton (auth, competitions list/create, entries list/create, competitors CRUD, error schemas) `docs/api/openapi.yaml`.
+2. ✅ GET /competitions/:id (detail) endpoint + test.
+3. ✅ GET /competitors/:id endpoint + test.
+4. ✅ Standardize list responses to `{ data: [...], pagination: { limit, offset, count } }` (competitions, entries, competitors) + update tests.
+5. ✅ Negative tests: duplicate signup (409), bad login (401), missing x-org-id (400), validation error (422 competitor create missing last_name or birth_year invalid).
+6. ✅ Enforce required `JWT_SECRET` at process start (throw if missing) + test.
+7. ✅ Add token `exp` (15m) & algorithm HS256 explicitly; test presence of exp claim.
+8. ✅ Update `docs/api/ERROR_CODES.md` (ensure USER_EXISTS, INVALID_CREDENTIALS, add UNAUTHORIZED, add RATE_LIMITED placeholder).
+9. ✅ Update CHANGELOG (Unreleased) for new endpoints & pagination change.
+10. ⏳ Refine OpenAPI with uniform response schemas (detail/data + pagination components) – in progress.
+11. ⏳ Create PR: feat/auth-and-competitors (after item 10 complete).
 
 ---
  
@@ -164,6 +166,23 @@ Ordering: Top to bottom = execution order (within each section). Each line is a 
 
 ---
  
+## Completed (CI & Testing Enhancements)
+
+- Split unit vs integration test jobs (matrix across PostgreSQL 14, 15, 16)
+- Added early migrations drift check job
+- Added concurrency cancellation for faster feedback
+- Added aggregated coverage & junit artifact publishing job
+- Added coverage thresholds + summary in GitHub Actions
+- Introduced ESLint with separate lint job
+- OpenAPI diff + CHANGELOG enforcement
+- Flaky test retry (1 attempt) with reporter
+- Coverage badge generation (artifact)
+
+## Upcoming (Testing/CI Next Steps)
+
+- Merge junit reports into single consolidated view (optional)
+- Automate coverage badge commit to docs (optional)
+
 ## Cross-Cutting Guidelines
 
 - Each migration accompanied by tests where logic changes (RLS, constraints).

@@ -4,6 +4,8 @@ Minimal Express backend scaffold with migrations, multi-tenant RLS (read + write
 
 Added features: custom migration runner (checksums + drift), structured logging, auth (users/org membership, JWT), competitions, entries & competitors APIs, org header + JWT org context override, RLS integration tests, Dependabot & CodeQL.
 
+OpenAPI draft spec: see `../docs/api/openapi.yaml` (kept in sync as endpoints evolve).
+
 ## Local Development Database
 
 Requires Docker. A Postgres 15 instance is defined in `deployment/docker-compose.dev.yml`.
@@ -80,7 +82,6 @@ runWithOrg(pool, orgId, async (client) => {
 | test:int | RLS integration test (requires DB, uses app role) |
 | seed | Populate database with sample data (orgs, competitions, competitors, entries, events) |
 
-
 ## RLS Overview
 
 Row Level Security uses a custom GUC `app.current_org_id` set per session. `runWithOrg` enables context; outside a context only limited admin operations (e.g. seeding organizations) are allowed. Policies cover SELECT/INSERT/UPDATE/DELETE for: organizations (read; write only when no context), competitors, competitions, competition_categories, competition_entries, timing_events.
@@ -92,6 +93,7 @@ Row Level Security uses a custom GUC `app.current_org_id` set per session. `runW
 - JWT Payload: `{ sub: userId, email, orgId? }` where orgId is embedded if membership was established during signup/login.
 - Middleware: extracts Bearer token, sets `req.user` and overrides `req.orgId` when a token includes org context (fallback remains legacy `x-org-id` header for tests).
 - Passwords: bcrypt hash with salt rounds (default 10). Adjust via env later if needed.
+- Tokens: HS256, 15 minute expiry (set via `exp`). `JWT_SECRET` must be defined at process start or the server exits.
 
 ## Migration Integrity
 

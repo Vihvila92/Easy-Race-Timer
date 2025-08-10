@@ -9,9 +9,9 @@ Refer to:
 
 ## Structure
 
-- `api/` (planned OpenAPI spec)
-- `user-guide/` (planned step-by-step usage guides)
-- `development/` (coding standards, contribution, style guides)
+`api/` - OpenAPI draft spec in `api/openapi.yaml`
+`user-guide/` - (planned) step-by-step usage guides
+`development/` - (planned) coding standards, contribution, style guides
 
 ## Implemented Backend Features (Summary)
 
@@ -24,6 +24,7 @@ Refer to:
 
 ## Pending Documentation
 
-- OpenAPI spec (auth, competitions, entries, competitors)
-- Real-time timing event protocol
-- Extended error code catalog (auth, conflicts)
+OpenAPI spec refinement (auth, competitions, entries, competitors)
+Standard response schema documentation (list vs detail)
+Real-time timing event protocol
+Extended error code catalog (auth, conflicts)

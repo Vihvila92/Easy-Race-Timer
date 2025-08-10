@@ -1,3 +1,4 @@
+// Integration: competitions API
 const request = require('supertest');
 const { start } = require('../index');
 const { getPool } = require('../lib/db');
@@ -9,24 +10,18 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  if (server) {
-    await new Promise(res => server.close(res));
-  }
+  if (server) server.close();
   const pool = getPool();
   await pool.end();
 });
 
-// Helper to ensure an org exists + context (seed may have created, but create if missing)
 async function ensureOrg(orgId) {
   const pool = getPool();
   await pool.query(`INSERT INTO organizations(id, name) VALUES ($1,$2)
     ON CONFLICT (id) DO NOTHING`, [orgId, 'Test Org']);
 }
 
-const hasDb = !!process.env.DATABASE_URL;
-const maybeDescribe = hasDb ? describe : describe.skip;
-
-maybeDescribe('Competitions API', () => {
+describe('Competitions API', () => {
   const testOrg = '00000000-0000-0000-0000-000000000001';
 
   beforeAll(async () => {
@@ -38,7 +33,7 @@ maybeDescribe('Competitions API', () => {
     expect(res.status).toBe(400);
   });
 
-  test('create and list competition with pagination', async () => {
+  test('create, list, detail competition', async () => {
     const createRes = await request(server)
       .post('/competitions')
       .set('x-org-id', testOrg)
@@ -53,7 +48,7 @@ maybeDescribe('Competitions API', () => {
     expect(listRes.body.pagination.limit).toBe(5);
     expect(Array.isArray(listRes.body.data)).toBe(true);
     expect(listRes.body.data.find(c => c.id === createRes.body.data.id)).toBeTruthy();
-    // fetch detail
+
     const detail = await request(server)
       .get(`/competitions/${createRes.body.data.id}`)
       .set('x-org-id', testOrg);
