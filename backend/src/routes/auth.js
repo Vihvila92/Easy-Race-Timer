@@ -44,7 +44,7 @@ router.post('/signup', async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-const loginSchema = z.object({ email: z.string().email(), password: z.string().min(8) });
+const loginSchema = z.object({ email: z.string().email(), password: z.string() });
 
 router.post('/login', async (req, res, next) => {
   const parsed = loginSchema.safeParse(req.body);
