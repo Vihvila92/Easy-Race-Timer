@@ -51,5 +51,11 @@ maybeDescribe('Competitions API', () => {
     expect(listRes.body.pagination.limit).toBe(5);
     expect(Array.isArray(listRes.body.data)).toBe(true);
     expect(listRes.body.data.find(c => c.id === createRes.body.data.id)).toBeTruthy();
+    // fetch detail
+    const detail = await request(server)
+      .get(`/competitions/${createRes.body.data.id}`)
+      .set('x-org-id', testOrg);
+    expect(detail.status).toBe(200);
+    expect(detail.body.data.id).toBe(createRes.body.data.id);
   });
 });

@@ -28,6 +28,25 @@ describe('competitors CRUD', () => {
       .set('x-org-id', orgId);
     expect(res.status).toBe(200);
     expect(res.body.data.find(c => c.id === competitorId)).toBeTruthy();
+    const detail = await request(app)
+      .get(`/competitors/${competitorId}`)
+      .set('x-org-id', orgId);
+    expect(detail.status).toBe(200);
+    expect(detail.body.data.id).toBe(competitorId);
+  });
+
+  test('validation error on missing last_name', async () => {
+    const bad = await request(app)
+      .post('/competitors')
+      .set('x-org-id', orgId)
+      .send({ first_name: 'OnlyFirst' });
+    expect(bad.status).toBe(422);
+  });
+
+  test('missing org header rejected', async () => {
+    const res = await request(app)
+      .get('/competitors');
+    expect(res.status).toBe(400);
   });
 
   test('patch competitor', async () => {

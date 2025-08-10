@@ -43,6 +43,20 @@ router.get('/', requireOrgMiddleware, async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+// Competitor detail
+router.get('/:id', requireOrgMiddleware, async (req, res, next) => {
+  const orgId = req.orgId; const id = req.params.id;
+  try {
+    const pool = getPool();
+    const row = await runWithOrg(pool, orgId, async (client) => {
+      const { rows } = await client.query('SELECT id, first_name, last_name, birth_year, created_at FROM competitors WHERE id=$1', [id]);
+      return rows[0];
+    });
+    if (!row) return res.status(404).json({ error: { code: 'NOT_FOUND', message: 'Competitor not found' } });
+    res.json({ data: row });
+  } catch (e) { next(e); }
+});
+
 // Create competitor
 router.post('/', requireOrgMiddleware, async (req, res, next) => {
   const orgId = req.orgId;

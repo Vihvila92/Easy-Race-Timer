@@ -25,6 +25,20 @@ describe('auth flow', () => {
     // orgId can be null if no membership but here should match created
     if (orgId) expect(res.body.data.orgId).toBe(orgId);
   });
+
+  test('duplicate signup returns 409', async () => {
+    const res = await request(app)
+      .post('/auth/signup')
+      .send({ email, password, organization_name: 'Org One' });
+    expect(res.status).toBe(409);
+  });
+
+  test('bad login rejected', async () => {
+    const res = await request(app)
+      .post('/auth/login')
+      .send({ email, password: 'WrongPass123' });
+    expect(res.status).toBe(401);
+  });
 });
 
 afterAll(async () => {

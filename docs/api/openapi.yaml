@@ -10,6 +10,39 @@ servers:
   - url: http://localhost:3000
     description: Local development
 paths:
+  /auth/signup:
+    post:
+      summary: User signup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string, minLength: 8 }
+                organization_name: { type: string }
+      responses:
+        '201': { description: Created }
+        '409': { description: USER_EXISTS }
+  /auth/login:
+    post:
+      summary: User login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email: { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200': { description: OK }
+        '401': { description: INVALID_CREDENTIALS }
   /competitions:
     get:
       summary: List competitions
@@ -63,6 +96,55 @@ paths:
                   data: { $ref: '#/components/schemas/Competition' }
         '400': { $ref: '#/components/responses/OrgHeaderRequired' }
         '422': { $ref: '#/components/responses/ValidationError' }
+  /competitions/{id}:
+    get:
+      summary: Competition detail
+      parameters:
+        - in: header
+          name: x-org-id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: OK }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /competitors:
+    get:
+      summary: List competitors
+      parameters:
+        - in: header
+          name: x-org-id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: OK }
+    post:
+      summary: Create competitor
+      parameters:
+        - in: header
+          name: x-org-id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '201': { description: Created }
+  /competitors/{id}:
+    get:
+      summary: Competitor detail
+      parameters:
+        - in: header
+          name: x-org-id
+          required: true
+          schema: { type: string, format: uuid }
+        - in: path
+          name: id
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: OK }
+        '404': { $ref: '#/components/responses/NotFound' }
   /entries:
     post:
       summary: Create competition entry
