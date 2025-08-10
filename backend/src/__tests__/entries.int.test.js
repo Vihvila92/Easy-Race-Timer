@@ -57,4 +57,5 @@ describe('entries API', () => {
       .set('x-org-id', orgId);
     expect(res.status).toBe(404);
   });
+
 });

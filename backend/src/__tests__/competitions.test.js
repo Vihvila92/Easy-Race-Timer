@@ -23,7 +23,7 @@ async function ensureOrg(orgId) {
     ON CONFLICT (id) DO NOTHING`, [orgId, 'Test Org']);
 }
 
-const hasDb = !!process.env.DATABASE_URL;
+const hasDb = !!process.env.DATABASE_URL; // Only runs in integration (JEST_INT=1)
 const maybeDescribe = hasDb ? describe : describe.skip;
 
 maybeDescribe('Competitions API', () => {

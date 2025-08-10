@@ -38,4 +38,16 @@ function getPool() {
   return pool;
 }
 
-module.exports = { getPool };
+async function closePool() {
+  if (pool) {
+    try {
+      await pool.end();
+    } catch (e) {
+      // ignore
+    } finally {
+      pool = undefined;
+    }
+  }
+}
+
+module.exports = { getPool, closePool };

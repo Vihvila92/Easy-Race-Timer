@@ -1,19 +1,7 @@
 // Integration: competitions API
 const request = require('supertest');
-const { start } = require('../index');
+const { default: app } = require('../index');
 const { getPool } = require('../lib/db');
-
-let server;
-
-beforeAll(async () => {
-  server = start();
-});
-
-afterAll(async () => {
-  if (server) server.close();
-  const pool = getPool();
-  await pool.end();
-});
 
 async function ensureOrg(orgId) {
   const pool = getPool();
@@ -29,19 +17,19 @@ describe('Competitions API', () => {
   });
 
   test('rejects missing org header', async () => {
-    const res = await request(server).get('/competitions');
+  const res = await request(app).get('/competitions');
     expect(res.status).toBe(400);
   });
 
   test('create, list, detail competition', async () => {
-    const createRes = await request(server)
+  const createRes = await request(app)
       .post('/competitions')
       .set('x-org-id', testOrg)
       .send({ name: 'My Race', start_time: new Date().toISOString() });
     expect(createRes.status).toBe(201);
     expect(createRes.body.data.name).toBe('My Race');
 
-    const listRes = await request(server)
+  const listRes = await request(app)
       .get('/competitions?limit=5&offset=0')
       .set('x-org-id', testOrg);
     expect(listRes.status).toBe(200);
@@ -49,7 +37,7 @@ describe('Competitions API', () => {
     expect(Array.isArray(listRes.body.data)).toBe(true);
     expect(listRes.body.data.find(c => c.id === createRes.body.data.id)).toBeTruthy();
 
-    const detail = await request(server)
+  const detail = await request(app)
       .get(`/competitions/${createRes.body.data.id}`)
       .set('x-org-id', testOrg);
     expect(detail.status).toBe(200);

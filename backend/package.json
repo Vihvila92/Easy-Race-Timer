@@ -23,6 +23,7 @@
   "test:all": "npm run test:unit && npm run test:int",
   "lint": "eslint 'src/**/*.{ts,js}'",
   "lint:fix": "npm run lint -- --fix",
+  "typecheck": "tsc --noEmit -p tsconfig.json",
     "db:up": "docker compose -f ../deployment/docker-compose.dev.yml up -d",
   "db:down": "docker compose -f ../deployment/docker-compose.dev.yml down"
   },

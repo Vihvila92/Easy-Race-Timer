@@ -4,7 +4,7 @@ const { getPool } = require('../lib/db');
 const { runWithOrg } = require('../lib/orgContext');
 
 const app = appModule.default;
-const hasDb = !!process.env.DATABASE_URL;
+const hasDb = !!process.env.DATABASE_URL; // Only present in integration mode
 const maybeDescribe = hasDb ? describe : describe.skip;
 
 // Helper to seed org + competitor + competition

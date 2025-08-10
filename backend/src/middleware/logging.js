@@ -1,8 +1,8 @@
-const { logger } = require('../logger');
+const { getLogger } = require('../logger');
 
 function loggingMiddleware(req, res, next) {
   const start = process.hrtime.bigint();
-  const child = logger.child({ reqId: req.id, orgId: req.orgId });
+  const child = getLogger().child({ reqId: req.id, orgId: req.orgId });
   req.log = child;
   res.on('finish', () => {
     const durMs = Number(process.hrtime.bigint() - start) / 1e6;

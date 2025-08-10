@@ -1,7 +1,10 @@
 const request = require('supertest');
 const { default: app } = require('../index');
 
-describe('auth flow', () => {
+// Skip in unit mode (no DATABASE_URL) -- full flow covered in auth.int.test.js
+const maybeDescribe = process.env.DATABASE_URL ? describe : describe.skip;
+
+maybeDescribe('auth flow', () => {
   const email = `test+${Date.now()}@example.com`;
   const password = 'P@ssw0rd123';
   let orgId;

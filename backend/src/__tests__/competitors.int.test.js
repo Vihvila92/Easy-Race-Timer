@@ -1,6 +1,7 @@
 // Integration: competitors CRUD
 const request = require('supertest');
 const { default: app } = require('../index');
+// Pool closed via global teardown
 
 describe('competitors CRUD', () => {
   let orgId; let competitorId;
@@ -65,4 +66,5 @@ describe('competitors CRUD', () => {
       .set('x-org-id', orgId);
     expect(again.status).toBe(404);
   });
+
 });

@@ -36,9 +36,21 @@ export async function dbConnect() {
   return p;
 }
 
+export async function closePool() {
+  if (pool) {
+    try {
+      await pool.end();
+    } catch (e) {
+      // ignore
+    } finally {
+      pool = undefined;
+    }
+  }
+}
+
 // CommonJS bridge for JS requires (tests) without ts-node
 // @ts-ignore
 if (typeof module !== 'undefined') {
   // @ts-ignore
-  module.exports = { getPool, dbConnect };
+  module.exports = { getPool, dbConnect, closePool };
 }

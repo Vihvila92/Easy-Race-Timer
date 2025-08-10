@@ -19,7 +19,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        language: [ 'javascript' ]
+        # Scan both JavaScript and TypeScript sources. Even though the build compiles TS,
+        # listing both ensures CodeQL runs appropriate extractors for mixed code.
+        language: [ 'javascript', 'typescript' ]
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

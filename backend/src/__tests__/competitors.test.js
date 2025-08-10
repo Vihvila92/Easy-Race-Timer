@@ -1,7 +1,9 @@
 const request = require('supertest');
 const { default: app } = require('../index');
 
-describe('competitors CRUD', () => {
+const maybeDescribe = process.env.DATABASE_URL ? describe : describe.skip; // integration only
+
+maybeDescribe('competitors CRUD', () => {
   let orgId;
   let competitorId;
   const email = `crud+${Date.now()}@example.com`;
