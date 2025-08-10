@@ -86,7 +86,17 @@ router.patch('/:id', requireOrgMiddleware, async (req, res, next) => {
   if (!parsed.success) return res.status(422).json({ error: { code: 'VALIDATION_ERROR', message: 'Invalid body', details: parsed.error.issues } });
   const fields = parsed.data;
   const sets = []; const values = []; let idx = 1;
-  for (const [k,v] of Object.entries(fields)) { sets.push(`${k} = $${idx++}`); values.push(v === undefined ? null : v); }
+  const allowedColumns = ['first_name', 'last_name', 'birth_year'];
+  const sets = []; const values = []; let idx = 1;
+  for (const [k, v] of Object.entries(fields)) {
+    if (allowedColumns.includes(k)) {
+      sets.push(`${k} = $${idx++}`);
+      values.push(v === undefined ? null : v);
+    }
+  }
+  if (sets.length === 0) {
+    return res.status(400).json({ error: { code: 'NO_VALID_FIELDS', message: 'No valid fields to update' } });
+  }
   values.push(id); const idPosition = idx;
   try {
     const pool = getPool();
