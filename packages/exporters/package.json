@@ -1,0 +1,9 @@
+{
+  "name": "@ert/exporters",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./src/index.ts" },
+  "dependencies": { "@ert/core": "workspace:*", "@ert/i18n": "workspace:*" },
+  "scripts": { "typecheck": "tsc --noEmit" }
+}
