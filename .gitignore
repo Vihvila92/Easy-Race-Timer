@@ -166,11 +166,10 @@ grafana-data/
 .rollup.cache
 .esbuild/
 
-# Package manager lock files (npm chosen as default)
+# Package manager lock files
 yarn.lock
-pnpm-lock.yaml
 shrinkwrap.yaml
-# Keep package-lock.json committed for deterministic builds
+# pnpm-lock.yaml is committed (pnpm workspaces)
 
 # Local development files
 # Local development files
