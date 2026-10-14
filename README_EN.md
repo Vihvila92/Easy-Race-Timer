@@ -2,7 +2,27 @@
 
 Race timing for one laptop. v0.1 covers preparation, a mass start, finish recording, results and anonymization after the retention period. No network is required.
 
-The specification (Finnish) is [`docs/MAARITTELY.md`](docs/MAARITTELY.md). Suomeksi: [`README.md`](README.md).
+The specification (Finnish) is [`docs/MAARITTELY.md`](docs/MAARITTELY.md). Suomeksi: [`README.md`](README.md). Doc map: [`docs/README.md`](docs/README.md).
+
+## Repository
+
+```
+packages/core            results, categories, errors
+packages/people          clubs, consent, anonymization
+packages/i18n            Finnish and English
+packages/sports          running profile
+packages/timing-sources  touch finish
+packages/race-formats    mass start
+packages/exporters       CSV and A4 print
+packages/storage         SQLite
+packages/sync            .ertx
+packages/server          Fastify, composition root
+packages/web             React PWA
+e2e/                     Playwright, Kuulan hölkkä
+testdata/kuulan-holkka/  oracle
+```
+
+The 2025 Postgres draft exists only on the tag `legacy-2025`.
 
 ## Quick start
 

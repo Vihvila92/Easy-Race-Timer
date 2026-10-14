@@ -1,5 +1,7 @@
 # Easy-Race-Timer – repoarvio (14.10.2026)
 
+Tämä teksti kuvaa puuta tagissa `legacy-2025`. Se ei ole nykyisen version arkkitehtuuri. Nykyinen ohjelma on [MAARITTELY.md](MAARITTELY.md) ja [adr/](adr/).
+
 Repo: github.com/Vihvila92/Easy-Race-Timer · 28 committia · viimeisin oma muutos 9.8.2025, sen jälkeen vain Dependabot.
 
 ## Tekninen pino

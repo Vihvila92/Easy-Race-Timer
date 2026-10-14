@@ -2,7 +2,27 @@
 
 Yhden kannettavan ajanotto juoksukilpailuun. v0.1 kattaa valmistelun, yhteislähdön, maalikirjauksen, tulokset ja säilytysajan anonymisoinnin. Verkkoa ei tarvita.
 
-Määrittely on [`docs/MAARITTELY.md`](docs/MAARITTELY.md). English: [`README_EN.md`](README_EN.md).
+Määrittely on [`docs/MAARITTELY.md`](docs/MAARITTELY.md). English: [`README_EN.md`](README_EN.md). Dokumentaation kartta: [`docs/README.md`](docs/README.md).
+
+## Repo
+
+```
+packages/core            tuloslaskenta, sarjat, virheet
+packages/people          seurat, suostumus, anonymisointi
+packages/i18n            suomi ja englanti
+packages/sports          juoksuprofiili
+packages/timing-sources  kosketusmaali
+packages/race-formats    yhteislähtö
+packages/exporters       CSV ja A4-tuloste
+packages/storage         SQLite
+packages/sync            .ertx
+packages/server          Fastify, composition root
+packages/web             React-PWA
+e2e/                     Playwright, Kuulan hölkkä
+testdata/kuulan-holkka/  oraakkeli
+```
+
+Vuoden 2025 Postgres-luonnos on vain tagissa `legacy-2025`.
 
 ## Pikakäynnistys
 
