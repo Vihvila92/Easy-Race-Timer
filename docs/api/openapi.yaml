@@ -7,7 +7,8 @@ info:
     Clients create identifiers and finish times. Errors use the shape in ERROR_CODES.md.
     HTML (`format=html`) is a print export, not an application page.
 servers:
-  - url: http://127.0.0.1:8080
+  - url: /
+    description: The window and the API share one origin. The process chooses a free local port at startup.
 tags:
   - name: system
   - name: setup
@@ -33,6 +34,23 @@ paths:
                 properties:
                   ok: { type: boolean }
                   version: { type: string }
+  /api/v1/runtime:
+    get:
+      tags: [system]
+      operationId: runtime
+      description: Where this process is listening and where it stores the SQLite file. The UI does not need this to call the API.
+      responses:
+        '200':
+          description: Launch facts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url, dataDir, dbPath]
+                properties:
+                  url: { type: string }
+                  dataDir: { type: string }
+                  dbPath: { type: string }
   /api/v1/time:
     get:
       tags: [system]

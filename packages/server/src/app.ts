@@ -12,6 +12,7 @@ export interface AppOptions {
   db: AppDb
   testMode?: boolean
   webDist?: string
+  runtime?: { url: string; dataDir: string; dbPath: string }
 }
 
 export function createApp(options: AppOptions): { app: FastifyInstance; service: RaceService; clock: Clock } {
@@ -43,6 +44,11 @@ export function createApp(options: AppOptions): { app: FastifyInstance; service:
   })
 
   app.get('/api/v1/health', async () => ({ ok: true, version: '0.1.0' }))
+  app.get('/api/v1/runtime', async () => ({
+    url: options.runtime?.url ?? '',
+    dataDir: options.runtime?.dataDir ?? '',
+    dbPath: options.runtime?.dbPath ?? '',
+  }))
   app.get('/api/v1/time', async () => ({ time_ms: clock.now(), iso: new Date(clock.now()).toISOString() }))
   app.post('/api/v1/test/clock', async (request, reply) => {
     if (!options.testMode) return reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Not found' } })

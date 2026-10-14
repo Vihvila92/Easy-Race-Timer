@@ -110,6 +110,11 @@ p.lead { color: var(--secondary); margin-top: 0; max-width: 42rem; }
 }
 .main { padding: 28px 28px 80px; max-width: 1100px; }
 .toolbar, .row, .segment { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.stack { display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+.stack input { width: 100%; }
+.wizard-shell { display: block; }
+.wizard-shell .main { max-width: 40rem; margin: 0 auto; }
+.wizard-steps { font-weight: 650; }
 .card {
   background: var(--card);
   border-radius: var(--radius);

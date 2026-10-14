@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useApp } from './context.js'
 import { flush } from './queue.js'
+import { Wizard } from './wizard.js'
 import { Audit, Clubs, Corrections, Entries, Finish, ImportView, Office, PrintView, Results, Start, Ties } from './views.js'
 
 const VIEWS = [
@@ -17,8 +18,26 @@ const VIEWS = [
   ['/audit', 'nav.audit', Audit],
 ] as const
 
+function Preferences() {
+  const { t, theme, setTheme, locale, setLocale } = useApp()
+  return (
+    <>
+      <div className="segment" role="group" aria-label={t('a11y.language')}>
+        <button type="button" className={locale === 'fi' ? '' : 'secondary'} data-testid="lang-fi" onClick={() => setLocale('fi')}>{t('lang.fi')}</button>
+        <button type="button" className={locale === 'en' ? '' : 'secondary'} data-testid="lang-en" onClick={() => setLocale('en')}>{t('lang.en')}</button>
+      </div>
+      <div className="segment" role="group" aria-label={t('a11y.theme')}>
+        <button type="button" className="secondary" data-testid="theme-light" onClick={() => setTheme('light')}>{t('theme.light')}</button>
+        <button type="button" className="secondary" data-testid="theme-dark" onClick={() => setTheme('dark')}>{t('theme.dark')}</button>
+        <button type="button" className="secondary" data-testid="theme-system" onClick={() => setTheme('system')}>{t('theme.system')}</button>
+      </div>
+      <p className="muted" data-testid="theme-value">{theme}</p>
+    </>
+  )
+}
+
 export function App() {
-  const { t, data, error, theme, setTheme, locale, setLocale } = useApp()
+  const { t, data, error } = useApp()
   const [hash, setHash] = useState(() => window.location.hash.replace('#', '') || '/office')
   useEffect(() => {
     const onHash = () => setHash(window.location.hash.replace('#', '') || '/office')
@@ -29,6 +48,21 @@ export function App() {
   const current = VIEWS.find(([path]) => path === hash) ?? VIEWS[0]
   const View = current[2]
   const waiting = data?.ties.filter((group) => group.status === 'unconfirmed').length ?? 0
+  if (!data) {
+    return <div className="shell wizard-shell"><main className="main"><p>{t('common.loading')}</p></main></div>
+  }
+  if (!data.event) {
+    return (
+      <div className="shell wizard-shell">
+        <main className="main">
+          <div className="row"><Preferences /></div>
+          {error && <p className="error" role="alert" data-testid="form-error">{t('common.error')}: {error}</p>}
+          <Wizard />
+          <p className="footer"><a href="https://github.com/Vihvila92/Easy-Race-Timer">{t('common.source')}</a></p>
+        </main>
+      </div>
+    )
+  }
   return (
     <div className="shell">
       <nav className="nav" aria-label={t('a11y.menu')}>
@@ -42,16 +76,7 @@ export function App() {
             {path === '/ties' && waiting > 0 && <span className="badge" data-testid="tie-badge">{waiting}</span>}
           </a>
         ))}
-        <div className="segment" role="group" aria-label={t('a11y.language')}>
-          <button type="button" className={locale === 'fi' ? '' : 'secondary'} data-testid="lang-fi" onClick={() => setLocale('fi')}>{t('lang.fi')}</button>
-          <button type="button" className={locale === 'en' ? '' : 'secondary'} data-testid="lang-en" onClick={() => setLocale('en')}>{t('lang.en')}</button>
-        </div>
-        <div className="segment" role="group" aria-label={t('a11y.theme')}>
-          <button type="button" className="secondary" data-testid="theme-light" onClick={() => setTheme('light')}>{t('theme.light')}</button>
-          <button type="button" className="secondary" data-testid="theme-dark" onClick={() => setTheme('dark')}>{t('theme.dark')}</button>
-          <button type="button" className="secondary" data-testid="theme-system" onClick={() => setTheme('system')}>{t('theme.system')}</button>
-        </div>
-        <p className="muted" data-testid="theme-value">{theme}</p>
+        <Preferences />
       </nav>
       <main className="main">
         {error && <p className="error" role="alert" data-testid="form-error">{t('common.error')}: {error}</p>}

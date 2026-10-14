@@ -1,4 +1,3 @@
-import { kidsAndAdultsTemplate } from '@ert/sports'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ApiError, api, clockMs, nextTapId } from './api.js'
 import { useApp } from './context.js'
@@ -37,8 +36,9 @@ export function Office() {
             ))}
           </ul>
         </div>
-      ) : (
-        <button type="button" data-testid="create-template" onClick={() => run(() => createTemplate())}>{t('office.template')}</button>
+      ) : null}
+      {event && data.counts.entries === 0 && (
+        <p><a href="#/import" data-testid="wizard-next-import">{t('wizard.importNext')}</a></p>
       )}
       <div className="card">
         <h2>{t('office.ageBasis')}</h2>
@@ -55,43 +55,6 @@ export function Office() {
       </div>
     </section>
   )
-}
-
-async function createTemplate() {
-  const template = kidsAndAdultsTemplate()
-  const date = new Date().toISOString().slice(0, 10)
-  await api('/api/v1/events/import', {
-    method: 'POST',
-    body: JSON.stringify({
-      id: `EV_${date.replace(/-/g, '')}`,
-      name: 'Hölkkä',
-      organizer: '',
-      location: '',
-      date,
-      timezone: 'Europe/Helsinki',
-      sport: 'run',
-      locale_default: 'fi',
-      races: template.races.map((race) => ({
-        id: race.id,
-        name: { fi: race.nameFi, en: race.nameEn },
-        distance_m: race.distanceM,
-        start_mode: 'mass',
-        scheduled_start: `${date}T${race.start}+03:00`,
-        open_category_id: race.id === 'R8' ? 'K8' : null,
-      })),
-      categories: template.categories.map((category) => ({
-        id: category.id,
-        race_id: category.raceId,
-        gender: category.gender,
-        min_age: category.minAge,
-        max_age: category.maxAge,
-        ranked: category.ranked,
-        auto_assign: category.autoAssign,
-        name: { fi: category.nameFi, en: category.nameEn },
-        description: { fi: category.descriptionFi, en: category.descriptionEn },
-      })),
-    }),
-  })
 }
 
 export function ImportView() {

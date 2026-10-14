@@ -7,7 +7,8 @@
   "engines": { "node": ">=22" },
   "scripts": {
     "dev": "pnpm --filter @ert/web dev",
-    "start": "pnpm --filter @ert/server start",
+    "dev:server": "node --env-file=config/dev.env --import tsx packages/server/src/index.ts",
+    "start": "node --import tsx packages/server/src/index.ts",
     "build": "pnpm --filter @ert/web build",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "eslint .",

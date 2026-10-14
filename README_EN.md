@@ -24,32 +24,22 @@ testdata/kuulan-holkka/  oracle
 
 The 2025 Postgres draft exists only on the tag `legacy-2025`.
 
-## Quick start
+## Quick start for developers
 
-Node.js 22 and pnpm 10.33.
+Node.js 22 and pnpm 10.33. These commands are for developers. The club volunteer's path is a later installer, not a terminal. See [docs/roadmap.md](docs/roadmap.md).
 
 ```bash
 pnpm install
 pnpm rebuild better-sqlite3 esbuild
-pnpm dev
-```
-
-In a second terminal:
-
-```bash
-pnpm start
-```
-
-Open `http://127.0.0.1:8080`. The UI is in Finnish and English, light and dark. The finish screen requests a wake lock, and the finish button fills at least a third of the screen.
-
-One process for a race day:
-
-```bash
 pnpm build
-ERT_DB=./data/ert.sqlite pnpm start
+pnpm dev:server
 ```
 
-The server listens on localhost only (`HOST`, `PORT`). Storage is SQLite with WAL and `synchronous=FULL`. A backup is written every five minutes.
+Open the address printed on the `ERT_READY` line. The developer server uses port 8080 and the `./data` folder. The UI is in Finnish and English, light and dark. With no race yet, the first screen is a three-step wizard.
+
+`pnpm dev` starts the Vite UI with a proxy. That proxy is a development aid. The built UI does not contain a host or a port.
+
+`pnpm start` with no variables behaves like the future desktop shell: a free local port and the operating system user-data directory.
 
 ## Tests
 
@@ -64,15 +54,7 @@ pnpm e2e
 
 ## Roadmap
 
-| Milestone | Contents |
-|---|---|
-| M0–M2 | Monorepo, preparation, timing, results, anonymization |
-| M3 | The load test is included. The rehearsal and the real race happen on site. |
-| v0.2 | Several devices, splits, LAN sync |
-| v0.4 | SaaS beta in a separate repository |
-| v1.x | Native apps and a runner portal |
-
-Decisions: [`docs/adr/`](docs/adr/).
+v0.1 is this repository. The next release a volunteer will see is a signed one-click installer. That installer is not built yet. [docs/roadmap.md](docs/roadmap.md). Decisions: [`docs/adr/`](docs/adr/).
 
 ## License and SaaS
 

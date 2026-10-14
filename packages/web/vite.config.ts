@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
 const root = path.dirname(fileURLToPath(import.meta.url))
+const devOrigin = process.env.ERT_DEV_ORIGIN ?? 'http://127.0.0.1:8080'
 
 export default defineConfig({
   plugins: [react()],
@@ -17,9 +18,10 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // Developer proxy only. It is not part of the built app. The built UI uses same-origin /api and /ws.
     proxy: {
-      '/api': 'http://127.0.0.1:8080',
-      '/ws': { target: 'ws://127.0.0.1:8080', ws: true },
+      '/api': devOrigin,
+      '/ws': { target: devOrigin.replace(/^http/, 'ws'), ws: true },
     },
   },
 })

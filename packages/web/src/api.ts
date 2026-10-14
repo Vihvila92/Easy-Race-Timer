@@ -6,6 +6,7 @@ export class ApiError extends Error {
   }
 }
 
+/** Same-origin path. The desktop shell chooses the port; this client must not embed a host. */
 export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
