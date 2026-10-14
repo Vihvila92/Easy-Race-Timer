@@ -1,0 +1,827 @@
+{
+  "event_id": "EV_KUULAN_HOLKKA_2027",
+  "description": "Kisapäivän toimenpiteet aikajärjestyksessä (E2E-skripti).",
+  "actions": [
+    {
+      "at": "2027-06-12T09:00:00.000+03:00",
+      "type": "confirm_club_suggestion",
+      "raw": "Jyväskylän Kenttäurh",
+      "club": "CL_JKU",
+      "add_alias": true,
+      "reason": "Katkaistu nimi, sama seura"
+    },
+    {
+      "at": "2027-06-12T09:01:00.000+03:00",
+      "type": "create_club",
+      "raw": "Vaajakosken Terä",
+      "abbreviation": "VaTe",
+      "name": "Vaajakosken Terä",
+      "municipality": "Jyväskylä"
+    },
+    {
+      "at": "2027-06-12T09:02:00.000+03:00",
+      "type": "resolve_abbreviation_conflict",
+      "raw": "Vaajakosken Teräs",
+      "abbreviation": "VaTe",
+      "resolution": "same_club",
+      "club": "CL_NEW_VATE",
+      "add_alias": true,
+      "reason": "Kirjoitusvirhe seuran nimessä, sama lyhenne"
+    },
+    {
+      "at": "2027-06-12T09:03:00.000+03:00",
+      "type": "merge_clubs",
+      "source": "CL_UU_DUP",
+      "target": "CL_UU",
+      "add_alias": true,
+      "reason": "Kaksoiskappale: 'Uuraisten Urh.' = Uuraisten Urheilijat (UU)"
+    },
+    {
+      "at": "2027-06-12T10:30:00.000+03:00",
+      "type": "change_bib",
+      "bib_from": 109,
+      "bib_to": 150,
+      "reason": "Numerolappu kadonnut, annettu varalappu"
+    },
+    {
+      "at": "2027-06-12T10:35:00.000+03:00",
+      "type": "set_status",
+      "bib": 205,
+      "status": "dns",
+      "reason": "Ilmoitti sairastumisesta"
+    },
+    {
+      "at": "2027-06-12T10:42:10.000+03:00",
+      "type": "register_late",
+      "person": {
+        "first_name": "Ukko",
+        "last_name": "Lahtinen",
+        "gender": "M",
+        "birth_date": "2019-03-14",
+        "email": ""
+      },
+      "club_query": "",
+      "expect_club": "",
+      "race": "R4",
+      "bib": 160,
+      "consent_long_term": "ei"
+    },
+    {
+      "at": "2027-06-12T10:48:00.000+03:00",
+      "type": "change_race_rejected",
+      "bib": 210,
+      "race": "R4",
+      "expect_error": "NO_MATCHING_CATEGORY",
+      "note": "Aikuisille ei ole lyhyttä matkaa; juoksija pysyy 8 km:llä"
+    },
+    {
+      "at": "2027-06-12T10:50:00.000+03:00",
+      "type": "change_race",
+      "bib": 136,
+      "race": "R8",
+      "bib_to": 270,
+      "expect_category": "M",
+      "reason": "17-vuotias haluaa juosta pidemmän matkan -> aikuisten sarja 8 km"
+    },
+    {
+      "at": "2027-06-12T10:55:00.000+03:00",
+      "type": "set_start_offset",
+      "bib": 228,
+      "offset_ms": -1800000,
+      "reason": "Lähtee 4 km:n lähdön mukana 30 min etuajassa (aikataulusyy)"
+    },
+    {
+      "at": "2027-06-12T11:00:00.412+03:00",
+      "type": "start",
+      "race": "R4",
+      "device": "DEV_LAPTOP_1"
+    },
+    {
+      "at": "2027-06-12T11:01:30.000+03:00",
+      "type": "register_late",
+      "person": {
+        "first_name": "Sanni",
+        "last_name": "Hirvonen",
+        "gender": "F",
+        "birth_date": "2016-02-02",
+        "email": ""
+      },
+      "club_query": "UU",
+      "expect_club": "CL_UU",
+      "race": "R4",
+      "bib": 161,
+      "consent_long_term": "ei"
+    },
+    {
+      "at": "2027-06-12T11:01:40.000+03:00",
+      "type": "set_start_offset",
+      "bib": 161,
+      "offset_ms": 120000,
+      "reason": "Myöhästyi lähdöstä, lähti 2 min myöhässä"
+    },
+    {
+      "at": "2027-06-12T11:12:45.000+03:00",
+      "type": "register_late",
+      "person": {
+        "first_name": "Merja",
+        "last_name": "Toivanen",
+        "gender": "F",
+        "birth_date": "1981-09-09",
+        "email": "merja.toivanen@example.com"
+      },
+      "club_query": "muur",
+      "expect_club": "CL_MUYR",
+      "race": "R8",
+      "bib": 260,
+      "consent_long_term": "kyllä"
+    },
+    {
+      "at": "2027-06-12T11:15:58.452+03:00",
+      "type": "finish_tap",
+      "tap_id": "F001",
+      "device": "DEV_LAPTOP_1",
+      "bib": 116,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:16:39.367+03:00",
+      "type": "finish_tap",
+      "tap_id": "F002",
+      "device": "DEV_LAPTOP_1",
+      "bib": 117,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:17:01.248+03:00",
+      "type": "finish_tap",
+      "tap_id": "F003",
+      "device": "DEV_LAPTOP_1",
+      "bib": 134,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:17:06.931+03:00",
+      "type": "finish_tap",
+      "tap_id": "F004",
+      "device": "DEV_LAPTOP_1",
+      "bib": 133,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:18:34.569+03:00",
+      "type": "finish_tap",
+      "tap_id": "F005",
+      "device": "DEV_LAPTOP_1",
+      "bib": 113,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:18:41.175+03:00",
+      "type": "finish_tap",
+      "tap_id": "F006",
+      "device": "DEV_LAPTOP_1",
+      "bib": 135,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:19:14.471+03:00",
+      "type": "finish_tap",
+      "tap_id": "F007",
+      "device": "DEV_LAPTOP_1",
+      "bib": 131,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:19:31.223+03:00",
+      "type": "finish_tap",
+      "tap_id": "F008",
+      "device": "DEV_LAPTOP_1",
+      "bib": 114,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:20:45.073+03:00",
+      "type": "finish_tap",
+      "tap_id": "F009",
+      "device": "DEV_LAPTOP_1",
+      "bib": 132,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:21:19.489+03:00",
+      "type": "finish_tap",
+      "tap_id": "F010",
+      "device": "DEV_LAPTOP_1",
+      "bib": 112,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:21:32.476+03:00",
+      "type": "finish_tap",
+      "tap_id": "F011",
+      "device": "DEV_LAPTOP_1",
+      "bib": null,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:21:32.786+03:00",
+      "type": "finish_tap",
+      "tap_id": "F012",
+      "device": "DEV_LAPTOP_1",
+      "bib": null,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:21:32.808+03:00",
+      "type": "finish_tap",
+      "tap_id": "F013",
+      "device": "DEV_LAPTOP_1",
+      "bib": 126,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:21:58.883+03:00",
+      "type": "finish_tap",
+      "tap_id": "F014",
+      "device": "DEV_LAPTOP_1",
+      "bib": 115,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:22:04.063+03:00",
+      "type": "finish_tap",
+      "tap_id": "F015",
+      "device": "DEV_LAPTOP_1",
+      "bib": 128,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:22:13.652+03:00",
+      "type": "finish_tap",
+      "tap_id": "F016",
+      "device": "DEV_LAPTOP_1",
+      "bib": 129,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:22:14.192+03:00",
+      "type": "finish_tap",
+      "tap_id": "F017",
+      "device": "DEV_LAPTOP_1",
+      "bib": 130,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:23:59.845+03:00",
+      "type": "finish_tap",
+      "tap_id": "F018",
+      "device": "DEV_LAPTOP_1",
+      "bib": 150,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:24:49.892+03:00",
+      "type": "finish_tap",
+      "tap_id": "F019",
+      "device": "DEV_LAPTOP_1",
+      "bib": 161,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:24:55.413+03:00",
+      "type": "finish_tap",
+      "tap_id": "F020",
+      "device": "DEV_LAPTOP_1",
+      "bib": 110,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:26:21.859+03:00",
+      "type": "finish_tap",
+      "tap_id": "F021",
+      "device": "DEV_LAPTOP_1",
+      "bib": 111,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:27:01.057+03:00",
+      "type": "finish_tap",
+      "tap_id": "F022",
+      "device": "DEV_LAPTOP_1",
+      "bib": 125,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:27:55.667+03:00",
+      "type": "finish_tap",
+      "tap_id": "F023",
+      "device": "DEV_LAPTOP_1",
+      "bib": 106,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:28:17.634+03:00",
+      "type": "finish_tap",
+      "tap_id": "F024",
+      "device": "DEV_LAPTOP_1",
+      "bib": 107,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:28:25.221+03:00",
+      "type": "finish_tap",
+      "tap_id": "F025",
+      "device": "DEV_LAPTOP_1",
+      "bib": 124,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:28:39.683+03:00",
+      "type": "finish_tap",
+      "tap_id": "F026",
+      "device": "DEV_LAPTOP_1",
+      "bib": 160,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:30:01.137+03:00",
+      "type": "start",
+      "race": "R8",
+      "device": "DEV_LAPTOP_1"
+    },
+    {
+      "at": "2027-06-12T11:30:46.717+03:00",
+      "type": "finish_tap",
+      "tap_id": "F027",
+      "device": "DEV_LAPTOP_1",
+      "bib": 123,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:30:48.338+03:00",
+      "type": "finish_tap",
+      "tap_id": "F028",
+      "device": "DEV_LAPTOP_1",
+      "bib": 104,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:31:57.771+03:00",
+      "type": "finish_tap",
+      "tap_id": "F029",
+      "device": "DEV_LAPTOP_1",
+      "bib": 103,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:32:07.217+03:00",
+      "type": "finish_tap",
+      "tap_id": "F030",
+      "device": "DEV_LAPTOP_1",
+      "bib": 122,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:32:14.146+03:00",
+      "type": "finish_tap",
+      "tap_id": "F031",
+      "device": "DEV_LAPTOP_1",
+      "bib": 121,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:34:17.593+03:00",
+      "type": "finish_tap",
+      "tap_id": "F032",
+      "device": "DEV_LAPTOP_1",
+      "bib": 120,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:35:05.199+03:00",
+      "type": "finish_tap",
+      "tap_id": "F033",
+      "device": "DEV_LAPTOP_1",
+      "bib": 105,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:37:41.214+03:00",
+      "type": "finish_tap",
+      "tap_id": "F034",
+      "device": "DEV_LAPTOP_1",
+      "bib": 119,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:39:11.255+03:00",
+      "type": "finish_tap",
+      "tap_id": "F035",
+      "device": "DEV_LAPTOP_1",
+      "bib": 102,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:42:04.427+03:00",
+      "type": "finish_tap",
+      "tap_id": "F036",
+      "device": "DEV_LAPTOP_1",
+      "bib": 228,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:43:49.995+03:00",
+      "type": "finish_tap",
+      "tap_id": "F037",
+      "device": "DEV_LAPTOP_1",
+      "bib": 118,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T11:45:27.126+03:00",
+      "type": "finish_tap",
+      "tap_id": "F038",
+      "device": "DEV_LAPTOP_1",
+      "bib": 101,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T12:04:11.067+03:00",
+      "type": "finish_tap",
+      "tap_id": "F039",
+      "device": "DEV_LAPTOP_1",
+      "bib": 207,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T12:04:14.187+03:00",
+      "type": "finish_tap",
+      "tap_id": "F040",
+      "device": "DEV_LAPTOP_1",
+      "bib": 207,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T12:04:30.690+03:00",
+      "type": "finish_tap",
+      "tap_id": "F041",
+      "device": "DEV_LAPTOP_1",
+      "bib": 292,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T12:05:16.929+03:00",
+      "type": "finish_tap",
+      "tap_id": "F042",
+      "device": "DEV_LAPTOP_1",
+      "bib": 209,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T12:05:23.364+03:00",
+      "type": "finish_tap",
+      "tap_id": "F043",
+      "device": "DEV_LAPTOP_1",
+      "bib": 211,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T12:05:48.471+03:00",
+      "type": "finish_tap",
+      "tap_id": "F044",
+      "device": "DEV_LAPTOP_1",
+      "bib": 219,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T12:06:14.685+03:00",
+      "type": "finish_tap",
+      "tap_id": "F045",
+      "device": "DEV_LAPTOP_1",
+      "bib": 222,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T12:06:19.689+03:00",
+      "type": "finish_tap",
+      "tap_id": "F046",
+      "device": "DEV_LAPTOP_1",
+      "bib": 202,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T12:07:45.886+03:00",
+      "type": "finish_tap",
+      "tap_id": "F047",
+      "device": "DEV_LAPTOP_1",
+      "bib": 201,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T12:08:33.799+03:00",
+      "type": "finish_tap",
+      "tap_id": "F048",
+      "device": "DEV_LAPTOP_1",
+      "bib": 212,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T12:10:19.586+03:00",
+      "type": "finish_tap",
+      "tap_id": "F049",
+      "device": "DEV_LAPTOP_1",
+      "bib": 231,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T12:11:08.642+03:00",
+      "type": "finish_tap",
+      "tap_id": "F050",
+      "device": "DEV_LAPTOP_1",
+      "bib": 226,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T12:13:03.568+03:00",
+      "type": "finish_tap",
+      "tap_id": "F051",
+      "device": "DEV_LAPTOP_1",
+      "bib": 206,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T12:15:14.188+03:00",
+      "type": "finish_tap",
+      "tap_id": "F052",
+      "device": "DEV_LAPTOP_1",
+      "bib": 210,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T12:15:43.338+03:00",
+      "type": "finish_tap",
+      "tap_id": "F053",
+      "device": "DEV_LAPTOP_1",
+      "bib": 220,
+      "mode": "bib_first"
+    },
+    {
+      "at": "2027-06-12T12:16:09.268+03:00",
+      "type": "finish_tap",
+      "tap_id": "F054",
+      "device": "DEV_LAPTOP_1",
+      "bib": 214,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T12:16:32.770+03:00",
+      "type": "finish_tap",
+      "tap_id": "F055",
+      "device": "DEV_LAPTOP_1",
+      "bib": 225,
+      "mode": "bib_first"
+    },
+    {
+      "at": "2027-06-12T12:16:58.569+03:00",
+      "type": "finish_tap",
+      "tap_id": "F056",
+      "device": "DEV_LAPTOP_1",
+      "bib": 218,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T12:18:31.344+03:00",
+      "type": "finish_tap",
+      "tap_id": "F057",
+      "device": "DEV_LAPTOP_1",
+      "bib": 215,
+      "mode": "bib_first"
+    },
+    {
+      "at": "2027-06-12T12:18:36.712+03:00",
+      "type": "finish_tap",
+      "tap_id": "F058",
+      "device": "DEV_LAPTOP_1",
+      "bib": 204,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T12:19:04.861+03:00",
+      "type": "finish_tap",
+      "tap_id": "F059",
+      "device": "DEV_LAPTOP_1",
+      "bib": 260,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T12:19:33.937+03:00",
+      "type": "finish_tap",
+      "tap_id": "F060",
+      "device": "DEV_LAPTOP_1",
+      "bib": 217,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T12:19:57.836+03:00",
+      "type": "finish_tap",
+      "tap_id": "F061",
+      "device": "DEV_LAPTOP_1",
+      "bib": 213,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T12:20:10.959+03:00",
+      "type": "finish_tap",
+      "tap_id": "F062",
+      "device": "DEV_LAPTOP_1",
+      "bib": 216,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T12:22:04.541+03:00",
+      "type": "finish_tap",
+      "tap_id": "F063",
+      "device": "DEV_LAPTOP_1",
+      "bib": 224,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T12:22:17.927+03:00",
+      "type": "finish_tap",
+      "tap_id": "F064",
+      "device": "DEV_LAPTOP_1",
+      "bib": 203,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T12:22:58.009+03:00",
+      "type": "finish_tap",
+      "tap_id": "F065",
+      "device": "DEV_LAPTOP_1",
+      "bib": 270,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T12:23:02.109+03:00",
+      "type": "finish_tap",
+      "tap_id": "F066",
+      "device": "DEV_LAPTOP_1",
+      "bib": 208,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T12:26:03.497+03:00",
+      "type": "finish_tap",
+      "tap_id": "F067",
+      "device": "DEV_LAPTOP_1",
+      "bib": 223,
+      "mode": "time_first"
+    },
+    {
+      "at": "2027-06-12T12:26:30.916+03:00",
+      "type": "finish_tap",
+      "tap_id": "F068",
+      "device": "DEV_LAPTOP_1",
+      "bib": 230,
+      "mode": "bib_first"
+    },
+    {
+      "at": "2027-06-12T12:29:50.916+03:00",
+      "type": "copy_time",
+      "source_tap_id": "F050",
+      "bib": 227,
+      "reason": "Tulivat käsi kädessä, sama aika"
+    },
+    {
+      "at": "2027-06-12T12:30:10.916+03:00",
+      "type": "assign_bib",
+      "tap_id": "F011",
+      "bib": 127,
+      "reason": "Numero ei näkynyt; tunnistettu maalikirjurin muistiinpanosta"
+    },
+    {
+      "at": "2027-06-12T12:30:30.916+03:00",
+      "type": "void",
+      "tap_id": "F012",
+      "reason": "Vahinkotuplapainallus"
+    },
+    {
+      "at": "2027-06-12T12:30:50.916+03:00",
+      "type": "void",
+      "tap_id": "F040",
+      "reason": "Sama juoksija kirjattu kahdesti"
+    },
+    {
+      "at": "2027-06-12T12:31:10.916+03:00",
+      "type": "assign_bib",
+      "tap_id": "F041",
+      "bib": 229,
+      "reason": "Näppäilyvirhe 292 -> 229"
+    },
+    {
+      "at": "2027-06-12T12:31:30.916+03:00",
+      "type": "assign_bib",
+      "tap_id": "F063",
+      "bib": 223,
+      "reason": "Juoksijat vaihtoivat lappuja keskenään"
+    },
+    {
+      "at": "2027-06-12T12:31:50.916+03:00",
+      "type": "assign_bib",
+      "tap_id": "F067",
+      "bib": 224,
+      "reason": "Juoksijat vaihtoivat lappuja keskenään"
+    },
+    {
+      "at": "2027-06-12T12:32:10.916+03:00",
+      "type": "set_status",
+      "bib": 221,
+      "status": "dnf",
+      "reason": "Keskeytti 5 km kohdalla (ilmoitti maalissa)"
+    },
+    {
+      "at": "2027-06-12T12:32:30.916+03:00",
+      "type": "check_lock_blocked",
+      "race": "R4",
+      "expect_blockers": [
+        "entry:108:no_result",
+        "tie:R4:21:32",
+        "tie:R4:22:13"
+      ]
+    },
+    {
+      "at": "2027-06-12T12:32:50.916+03:00",
+      "type": "check_lock_blocked",
+      "race": "R8",
+      "expect_blockers": [
+        "tie:R8:41:07"
+      ]
+    },
+    {
+      "at": "2027-06-12T12:33:10.916+03:00",
+      "type": "confirm_tie_order",
+      "race": "R4",
+      "display_time": "21:32",
+      "order": [
+        [
+          127
+        ],
+        [
+          126
+        ]
+      ],
+      "reason": "Kirjausjärjestys vahvistettu"
+    },
+    {
+      "at": "2027-06-12T12:33:30.916+03:00",
+      "type": "confirm_tie_order",
+      "race": "R4",
+      "display_time": "22:13",
+      "order": [
+        [
+          130
+        ],
+        [
+          129
+        ]
+      ],
+      "reason": "Maalikirjurin havainto: myöhemmin kirjattu juoksija oli rinnassa edellä"
+    },
+    {
+      "at": "2027-06-12T12:33:50.916+03:00",
+      "type": "confirm_tie_order",
+      "race": "R8",
+      "display_time": "41:07",
+      "order": [
+        [
+          226,
+          227
+        ]
+      ],
+      "reason": "Ei erotettavissa (tulivat käsi kädessä) -> jaettu sija"
+    },
+    {
+      "at": "2027-06-12T12:34:10.916+03:00",
+      "type": "set_status",
+      "bib": 108,
+      "status": "dns",
+      "reason": "Ei saapunut lähtöön (todettu jälkikäteen)"
+    },
+    {
+      "at": "2027-06-12T12:34:30.916+03:00",
+      "type": "lock",
+      "race": "R4"
+    },
+    {
+      "at": "2027-06-12T12:34:50.916+03:00",
+      "type": "lock",
+      "race": "R8"
+    },
+    {
+      "at": "2027-06-12T12:35:10.916+03:00",
+      "type": "edit_after_lock_rejected",
+      "race": "R8",
+      "expect_error": "EVENT_LOCKED"
+    }
+  ]
+}

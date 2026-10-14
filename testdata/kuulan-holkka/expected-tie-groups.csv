@@ -1,0 +1,4 @@
+race;display_time;bibs_in_tap_order;confirmed_order;reason
+R4;21:32;127 126;127 > 126;Kirjausjärjestys vahvistettu
+R4;22:13;129 130;130 > 129;Maalikirjurin havainto: myöhemmin kirjattu juoksija oli rinnassa edellä
+R8;41:07;226 227;226=227;Ei erotettavissa (tulivat käsi kädessä) -> jaettu sija

@@ -1,0 +1,20 @@
+seura;seuran_lyhenne;riveja;tunnistus;tuonnissa;lopullinen_lyhenne;lopullinen_nimi
+Uuraisten Urheilijat;;15;name;CL_UU;UU;Uuraisten Urheilijat
+;;23;none;;;
+Hankasalmen Hanka;;1;name;CL_HANKA;Hanka;Hankasalmen Hanka
+SaPu;;2;abbreviation;CL_SAPU;SaPu;Saarijärven Pullistus
+UU;;3;abbreviation;CL_UU;UU;Uuraisten Urheilijat
+Muuramen Yritys;;1;name;CL_MUYR;MuYr;Muuramen Yritys
+Vaajakosken Terä;VaTe;1;new;CL_NEW_VATE;VaTe;Vaajakosken Terä
+Jyväskylän Kenttäurheilijat;;4;name;CL_JKU;JKU;Jyväskylän Kenttäurheilijat
+Uuraisten Urh.;;2;name;CL_UU_DUP;UU;Uuraisten Urheilijat
+JKU;;2;abbreviation;CL_JKU;JKU;Jyväskylän Kenttäurheilijat
+Jyväskylän Kenttäurh;;1;fuzzy_suggestion;CL_JKU;JKU;Jyväskylän Kenttäurheilijat
+Hanka;;2;abbreviation;CL_HANKA;Hanka;Hankasalmen Hanka
+Saarijärven Pullistus;;2;name;CL_SAPU;SaPu;Saarijärven Pullistus
+MuYr;;2;abbreviation;CL_MUYR;MuYr;Muuramen Yritys
+PePe;;2;abbreviation;CL_PEPE;PePe;Petäjäveden Petäjät
+uuraisten  urheilijat ;;1;normalized_name;CL_UU;UU;Uuraisten Urheilijat
+Vaajakosken Teräs;VaTe;1;abbreviation_conflict;CL_NEW_VATE;VaTe;Vaajakosken Terä
+Petäjäveden Petäjät;;1;name;CL_PEPE;PePe;Petäjäveden Petäjät
+;UU;1;abbreviation;CL_UU;UU;Uuraisten Urheilijat
