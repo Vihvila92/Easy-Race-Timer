@@ -40,3 +40,14 @@ updates:
     commit-message:
       prefix: "chore(deps)"
       include: "scope"
+  # The npm entries above stay so existing Dependabot pull requests are not closed.
+  # New updates come from the pnpm workspace at the repository root.
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "chore(deps)"
+      include: "scope"

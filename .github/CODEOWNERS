@@ -1,7 +1,8 @@
 # CODEOWNERS
-# Default code owners
 * @Vihvila92
 
-# Backend specific
-/backend/ @Vihvila92
-/database/ @Vihvila92
+/packages/ @Vihvila92
+/e2e/ @Vihvila92
+/docs/ @Vihvila92
+/testdata/ @Vihvila92
+/.github/ @Vihvila92
