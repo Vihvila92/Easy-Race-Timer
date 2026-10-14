@@ -51,27 +51,18 @@ export function App() {
   if (!data) {
     return <div className="shell wizard-shell"><main className="main"><p>{t('common.loading')}</p></main></div>
   }
-  if (!data.event) {
-    return (
-      <div className="shell wizard-shell">
-        <main className="main">
-          <div className="row"><Preferences /></div>
-          {error && <p className="error" role="alert" data-testid="form-error">{t('common.error')}: {error}</p>}
-          <Wizard />
-          <p className="footer"><a href="https://github.com/Vihvila92/Easy-Race-Timer">{t('common.source')}</a></p>
-        </main>
-      </div>
-    )
-  }
+  const settingUp = !data.event
+  const links = settingUp ? VIEWS.filter(([path]) => path === '/import') : VIEWS
+  const showWizard = settingUp && hash !== '/import'
   return (
-    <div className="shell">
+    <div className={showWizard ? 'shell wizard-shell' : 'shell'}>
       <nav className="nav" aria-label={t('a11y.menu')}>
         <div className="brand">
           <strong>{t('app.name')}</strong>
           <span>{t('app.tagline')}</span>
         </div>
-        {VIEWS.map(([path, key]) => (
-          <a key={path} className="nav-link" href={`#${path}`} data-testid={`nav-${path.slice(1)}`} aria-current={current[0] === path ? 'page' : undefined}>
+        {links.map(([path, key]) => (
+          <a key={path} className="nav-link" href={`#${path}`} data-testid={`nav-${path.slice(1)}`} aria-current={!showWizard && current[0] === path ? 'page' : undefined}>
             <span>{t(key)}</span>
             {path === '/ties' && waiting > 0 && <span className="badge" data-testid="tie-badge">{waiting}</span>}
           </a>
@@ -80,7 +71,7 @@ export function App() {
       </nav>
       <main className="main">
         {error && <p className="error" role="alert" data-testid="form-error">{t('common.error')}: {error}</p>}
-        <View />
+        {showWizard ? <Wizard /> : <View />}
         <p className="footer"><a href="https://github.com/Vihvila92/Easy-Race-Timer">{t('common.source')}</a></p>
       </main>
     </div>
