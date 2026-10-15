@@ -47,6 +47,16 @@ export async function createApp(options: AppOptions): Promise<{ app: FastifyInst
   const secret = sessionSecret(options.db)
   const discovered: DiscoveredRoute[] = []
   const app = Fastify({ logger: options.testMode ? false : { level: 'info' } })
+  const globalMax = options.rateLimit?.globalMax ?? DEFAULT_GLOBAL_MAX
+  const strictMax = options.rateLimit?.strictMax ?? DEFAULT_STRICT_MAX
+  const recordingMax = options.rateLimit?.recordingMax ?? DEFAULT_RECORDING_MAX
+  await app.register(rateLimit, {
+    global: true,
+    max: globalMax,
+    timeWindow: RATE_WINDOW,
+  })
+  const strictLimit = { config: { rateLimit: { max: strictMax, timeWindow: RATE_WINDOW } } }
+  const recordingLimit = { config: { rateLimit: { max: recordingMax, timeWindow: RATE_WINDOW } } }
   const authenticated = (request: { headers: { authorization?: string | string[]; cookie?: string | string[] }; ip: string }) => {
     const header = Array.isArray(request.headers.authorization) ? request.headers.authorization[0] : request.headers.authorization
     const cookie = Array.isArray(request.headers.cookie) ? request.headers.cookie[0] : request.headers.cookie
@@ -127,17 +137,6 @@ export async function createApp(options: AppOptions): Promise<{ app: FastifyInst
       return reply.status(401).send(errorBody(new AppError('PIN_REQUIRED', 'PIN required')))
     }
   })
-
-  const globalMax = options.rateLimit?.globalMax ?? DEFAULT_GLOBAL_MAX
-  const strictMax = options.rateLimit?.strictMax ?? DEFAULT_STRICT_MAX
-  const recordingMax = options.rateLimit?.recordingMax ?? DEFAULT_RECORDING_MAX
-  await app.register(rateLimit, {
-    global: true,
-    max: globalMax,
-    timeWindow: RATE_WINDOW,
-  })
-  const strictLimit = { config: { rateLimit: { max: strictMax, timeWindow: RATE_WINDOW } } }
-  const recordingLimit = { config: { rateLimit: { max: recordingMax, timeWindow: RATE_WINDOW } } }
 
   app.get('/api/v1/health', async () => ({ ok: true, version: '0.1.0', pinConfigured: service.pinConfigured() }))
   app.get('/api/v1/runtime', async () => ({
