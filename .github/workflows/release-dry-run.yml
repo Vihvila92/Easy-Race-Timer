@@ -1,0 +1,15 @@
+# Branch push so this pull request can link a dry run before release.yml
+# exists on the default branch. workflow_dispatch stays the supported dry run.
+name: Release dry run
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - valtteriv/ci-release-installers-90bd
+
+jobs:
+  release:
+    uses: ./.github/workflows/release.yml
