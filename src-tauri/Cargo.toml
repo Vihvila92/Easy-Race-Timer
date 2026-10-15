@@ -1,0 +1,25 @@
+[package]
+name = "easy-race-timer"
+version = "0.1.0"
+description = "Easy Race Timer desktop app"
+license = "AGPL-3.0-only"
+edition = "2021"
+rust-version = "1.89"
+publish = false
+
+[lib]
+name = "easy_race_timer_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
