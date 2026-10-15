@@ -42,9 +42,25 @@ Finish taps are append-only. Corrections carry a reason. Do not update a stored 
 
 The Kuulan hölkkä oracle lives in `testdata/kuulan-holkka/generate.py`. Change the scenario there and regenerate; do not hand-edit expected CSV files.
 
-## Personal data
+## Personal data and secrets
 
-Test data and screenshots must not contain real people's personal data. Use the generated test data in `testdata/`.
+- Use only synthetic test data (`testdata/`, the Kuulan hölkkä generator). Never put real names, birth dates or results of participants, especially minors, into issues, fixtures, screenshots or logs.
+- Never commit tokens, keys, passwords, `.env` files or real participant data. Secret scanning with push protection is on. If a push is blocked, remove the secret and rotate it; do not bypass the block. If a secret was committed, report it privately: rotation matters more than rewriting history.
+
+## Dependencies and GitHub Actions
+
+- Add a dependency only when it is needed, and explain why in the pull request.
+- Commit the updated `pnpm-lock.yaml`; do not hand-edit it.
+- Licenses must pass `pnpm check:licenses`.
+- Prefer maintained, widely used packages, and avoid install scripts unless they are required.
+- Dependabot pull requests are reviewed like any other pull request.
+- Pin third-party actions to a full commit SHA, and declare a minimal `permissions:` block in every workflow (default `contents: read`).
+
+## Security-sensitive changes
+
+Changes to authentication (PIN, tokens), consent, publication levels, anonymization and retention, import and export, sync or rate limiting need a test and a note in the pull request description, so the security reviewer can look at them. CodeQL alerts of high severity or above block merging; do not dismiss an alert without review.
+
+`git commit -s` (DCO sign-off) and GPG or SSH signed commits are welcome but not required.
 
 ## License
 
@@ -52,4 +68,4 @@ The root `LICENSE` stays as it is until the copyright holder decides otherwise. 
 
 ## Security
 
-Report vulnerabilities privately through GitHub's **Report a vulnerability** form, as described in [`SECURITY.md`](SECURITY.md). Do not open a public issue for them.
+Report vulnerabilities privately through GitHub's [Report a vulnerability](https://github.com/Vihvila92/Easy-Race-Timer/security/advisories/new) form or by email, as described in [`SECURITY.md`](SECURITY.md). Do not open a public issue, pull request or discussion for them.
