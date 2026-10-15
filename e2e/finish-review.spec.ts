@@ -38,11 +38,7 @@ test.describe('finish review warnings', () => {
 
     await page.goto('/')
     await page.getByTestId('nav-finish').click()
-    await expect(page.getByTestId('finish-hint')).toHaveText('Paina numeronäppäimistön plus-näppäintä (kannettavalla F12) maaliintulon kohdalla.')
-    await page.getByTestId('guidance-expert').click()
     await expect(page.getByTestId('finish-hint')).toHaveCount(0)
-    await page.getByTestId('guidance-guided').click()
-    await expect(page.getByTestId('finish-hint')).toBeVisible()
     await page.getByTestId('finish-bib').fill('105')
     await page.getByTestId('finish-tap').click()
     await expect(page.getByTestId('finish-recorded')).toContainText('Aika kirjattu')

@@ -340,7 +340,7 @@ export function Start() {
 }
 
 export function Finish() {
-  const { t, data, reload, guidance } = useApp()
+  const { t, data, reload } = useApp()
   const [mode, setMode] = useState<'time_first' | 'bib_first'>('time_first')
   const [bib, setBib] = useState('')
   const [toast, setToast] = useState('')
@@ -409,7 +409,7 @@ export function Finish() {
       </div>
       <input aria-label={t('finish.bib')} data-testid="finish-bib" inputMode="numeric" value={bib} onChange={(event) => setBib(event.target.value)} />
       <button type="button" className="finish-tap" data-testid="finish-tap" aria-label={t('finish.tapLabel')} onClick={() => { tap().catch(() => setToast(t('common.offline'))) }}>{t('finish.tap')}</button>
-      {guidance === 'guided' && <p className="muted" data-testid="finish-hint">{t('finish.hint.keys')}</p>}
+      {/* // Rendered once #144 adds the shortcut */}
       <p className="queue-note" data-testid="queue-count">{t('common.offline')}: {queued}</p>
       {lastLabel && <p data-testid="finish-last">{lastLabel}</p>}
       <h2>{t('finish.review')}</h2>
