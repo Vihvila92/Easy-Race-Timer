@@ -679,5 +679,6 @@ components:
                       - CLUB_ABBREVIATION_TAKEN
                       - CLUB_ABBREVIATION_CONFLICT
                       - SYNC_CONFLICT
+                      - BACKUP_FAILED
                   message: { type: string }
                   details: {}

@@ -3,8 +3,8 @@ import { openDatabase } from '@ert/storage'
 import { Clock, RaceService } from './service.js'
 
 describe('finish load', () => {
-  it('keeps 300 taps from 500 entrants under 50 ms at p95', () => {
-    const db = openDatabase(':memory:')
+  it('keeps 300 taps from 500 entrants under 50 ms at p95', async () => {
+    const db = await openDatabase(':memory:')
     const service = new RaceService(db, new Clock())
     service.importEvent({
       id: 'EV_LOAD',

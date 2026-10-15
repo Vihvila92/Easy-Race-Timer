@@ -1,5 +1,13 @@
 export const SCHEMA_VERSION = 1
 
+export interface Migration {
+  version: number
+  up: (raw: import('better-sqlite3').Database) => void
+}
+
+/** Applied in order when schema_meta.schema_version is behind SCHEMA_VERSION. */
+export const MIGRATIONS: Migration[] = []
+
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS schema_meta (
   id INTEGER PRIMARY KEY CHECK (id = 1),

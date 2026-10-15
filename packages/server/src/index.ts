@@ -1,8 +1,9 @@
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { backupDatabase, openDatabase } from '@ert/storage'
+import { openDatabase, type AppDb } from '@ert/storage'
 import { createApp } from './app.js'
+import { startBackupSchedule, writeBackup } from './backup.js'
 import { resolveDataDir, resolveDbPath, resolveListenPort } from './config.js'
 
 const host = process.env.HOST ?? '127.0.0.1'
@@ -13,14 +14,16 @@ const testMode = process.env.ERT_TEST_MODE === '1'
 const webDist = process.env.ERT_WEB_DIST ?? path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../web/dist')
 const runtime = { url: '', dataDir, dbPath }
 
-const db = openDatabase(dbPath)
-const { app } = createApp({ db, testMode, webDist, runtime })
+const db: AppDb = await openDatabase(dbPath).catch((error: unknown) => {
+  console.error(error instanceof Error ? error.message : error)
+  process.exit(1)
+})
 
-const backupTimer = setInterval(() => {
-  const dest = path.join(dataDir, 'backups', `ert-${new Date().toISOString().replace(/[:.]/g, '-')}.sqlite`)
-  try { backupDatabase(db, dest) } catch { /* a memory database has nothing to copy */ }
-}, 5 * 60 * 1000)
-backupTimer.unref()
+const backupDir = path.join(dataDir, 'backups')
+const backup = (reason: string) => writeBackup(db, backupDir, reason)
+startBackupSchedule(db, backupDir)
+
+const { app } = createApp({ db, testMode, webDist, runtime, backup })
 
 app.listen({ port: requestedPort, host }).then(() => {
   const address = app.server.address()

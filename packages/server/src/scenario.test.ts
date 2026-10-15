@@ -18,8 +18,8 @@ function project(csv: string) {
 }
 
 describe('Kuulan hölkkä oracle', () => {
-  it('replays race day and matches every expected file', () => {
-    const db = openDatabase(':memory:')
+  it('replays race day and matches every expected file', async () => {
+    const db = await openDatabase(':memory:')
     const service = new RaceService(db, new Clock())
     service.importEvent(JSON.parse(read('event.json')))
     service.importClubs(JSON.parse(read('clubs-registry.json')).clubs)
@@ -94,8 +94,8 @@ describe('Kuulan hölkkä oracle', () => {
     }
   })
 
-  it('undoes a club merge and puts the moved entries back', () => {
-    const db = openDatabase(':memory:')
+  it('undoes a club merge and puts the moved entries back', async () => {
+    const db = await openDatabase(':memory:')
     const service = new RaceService(db, new Clock())
     service.importEvent(JSON.parse(read('event.json')))
     service.importClubs(JSON.parse(read('clubs-registry.json')).clubs)

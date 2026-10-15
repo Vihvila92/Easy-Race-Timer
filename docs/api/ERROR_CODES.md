@@ -23,5 +23,6 @@ Jokainen virhevastaus on JSON:
 | `CLUB_ABBREVIATION_TAKEN` | 409 | Aktiivisella seuralla on jo tämä lyhenne. |
 | `CLUB_ABBREVIATION_CONFLICT` | 409 | Lyhenne osuu seuraan, jonka nimi ei täsmää. |
 | `SYNC_CONFLICT` | 409 | Varattu v0.2:n ristiriidalle. |
+| `BACKUP_FAILED` | 500 | Varmuuskopio epäonnistui. Migraatio, lukitus, tuonti tai säilytysajo ei jatka. |
 
 `ORG_HEADER_REQUIRED` poistettiin. v0.1:ssä organisaatio on aina `'local'`, eikä otsikkoa vaadita.

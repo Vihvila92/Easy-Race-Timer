@@ -12,6 +12,7 @@ export const ERROR_CODES = [
   'CLUB_ABBREVIATION_TAKEN',
   'CLUB_ABBREVIATION_CONFLICT',
   'SYNC_CONFLICT',
+  'BACKUP_FAILED',
 ] as const
 
 export type ErrorCode = (typeof ERROR_CODES)[number]
@@ -30,6 +31,7 @@ const STATUS: Record<ErrorCode, number> = {
   CLUB_ABBREVIATION_TAKEN: 409,
   CLUB_ABBREVIATION_CONFLICT: 409,
   SYNC_CONFLICT: 409,
+  BACKUP_FAILED: 500,
 }
 
 export class AppError extends Error {

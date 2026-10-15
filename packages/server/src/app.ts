@@ -13,6 +13,8 @@ export interface AppOptions {
   testMode?: boolean
   webDist?: string
   runtime?: { url: string; dataDir: string; dbPath: string }
+  /** Consistent backup. Lock, retention and import wait for it. */
+  backup?: (reason: string) => Promise<unknown>
 }
 
 export function createApp(options: AppOptions): { app: FastifyInstance; service: RaceService; clock: Clock } {
@@ -159,6 +161,7 @@ export function createApp(options: AppOptions): { app: FastifyInstance; service:
   app.get('/api/v1/races/:id/lock-blockers', async (request) => ({ blockers: service.lockBlockers((request.params as { id: string }).id) }))
   app.post('/api/v1/races/:id/lock', async (request) => {
     service.lockRace((request.params as { id: string }).id)
+    await requireBackup('lock')
     return { ok: true }
   })
   app.post('/api/v1/races/:id/unlock', async (request) => {
@@ -229,6 +232,16 @@ export function createApp(options: AppOptions): { app: FastifyInstance; service:
       }
       reply.sendFile('index.html')
     })
+  }
+
+  async function requireBackup(reason: string) {
+    if (!options.backup) return
+    try {
+      await options.backup(reason)
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Backup failed'
+      throw new AppError('BACKUP_FAILED', message)
+    }
   }
 
   return { app, service, clock }
