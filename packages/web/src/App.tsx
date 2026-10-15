@@ -1,7 +1,6 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import { syncServerClock } from './api.js'
 import { useApp } from './context.js'
-import { PreviewPage } from './preview.js'
 import { flush } from './queue.js'
 import { Wizard } from './wizard.js'
 import { Audit, Clubs, Corrections, Entries, Finish, ImportView, Office, PrintView, Results, Start, Ties } from './views.js'
@@ -19,6 +18,11 @@ const VIEWS = [
   ['/print', 'nav.print', PrintView],
   ['/audit', 'nav.audit', Audit],
 ] as const
+
+/** Dev-only. The production build constant-folds this to null and drops the page. */
+const PreviewPage = import.meta.env.DEV
+  ? lazy(() => import('./preview.js').then((module) => ({ default: module.PreviewPage })))
+  : null
 
 function Preferences() {
   const { t, theme, setTheme, locale, setLocale, guidance, setGuidance } = useApp()
@@ -82,7 +86,7 @@ export function App() {
   const View = current[2]
   const waiting = data?.ties.filter((group) => group.status === 'unconfirmed').length ?? 0
   if (needsPin) return <PinGate />
-  const preview = hash === '/preview'
+  const preview = import.meta.env.DEV && hash === '/preview' && PreviewPage != null
   if (!data && !preview) {
     return <div className="shell wizard-shell"><main className="main"><p>{t('common.loading')}</p></main></div>
   }
@@ -102,12 +106,18 @@ export function App() {
             {path === '/ties' && waiting > 0 && <span className="badge" data-testid="tie-badge">{waiting}</span>}
           </a>
         ))}
-        <a className="nav-link" href="#/preview" data-testid="nav-preview" aria-current={preview ? 'page' : undefined}>{t('preview.title')}</a>
+        {import.meta.env.DEV ? (
+          <a className="nav-link" href="#/preview" data-testid="nav-preview" aria-current={preview ? 'page' : undefined}>{t('preview.title')}</a>
+        ) : null}
         <Preferences />
       </nav>
       <main className="main">
         {error && <p className="error" role="alert" data-testid="form-error">{t('common.error')}: {error}</p>}
-        {preview ? <PreviewPage /> : showWizard ? <Wizard /> : <View />}
+        {preview && PreviewPage ? (
+          <Suspense fallback={<p>{t('common.loading')}</p>}>
+            <PreviewPage />
+          </Suspense>
+        ) : showWizard ? <Wizard /> : <View />}
         <p className="footer"><a href="https://github.com/Vihvila92/Easy-Race-Timer">{t('common.source')}</a></p>
       </main>
     </div>

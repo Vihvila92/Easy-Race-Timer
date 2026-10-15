@@ -35,7 +35,7 @@ pnpm build
 pnpm dev:server
 ```
 
-Open the address printed on the `ERT_READY` line. The developer server uses port 8080 and the `./data` folder. The UI is in Finnish and English, light and dark. With no race yet, the first screen is a three-step wizard. Shared components are reviewed at `#/preview`.
+Open the address printed on the `ERT_READY` line. The developer server uses port 8080 and the `./data` folder. The UI is in Finnish and English, light and dark. With no race yet, the first screen is a three-step wizard. A dev build reviews shared components at `#/preview`. That route is not in the production build.
 
 `pnpm dev` starts the Vite UI with a proxy. That proxy is a development aid. The built UI does not contain a host or a port.
 

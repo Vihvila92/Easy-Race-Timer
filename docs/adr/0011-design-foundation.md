@@ -17,7 +17,7 @@ Shared components are `Button` (primary, secondary, danger), `TextField`, `Selec
 
 `HintFrame` is an inline region in the view. It shows a `<view>.hint.<id>` string only while guided mode is on. Guided is the default. The hint is not a dialog or a popover. Turning on expert mode removes the hint without reloading and without changing what the volunteer typed.
 
-`#/preview` renders every component for review. Strings for that page, including the hint, live in `packages/i18n/locales/fi.json` and `en.json`.
+A dev build renders every component at `#/preview`. `import.meta.env.DEV` guards that route, and the production build does not include it. Strings for that page, including the hint, live in `packages/i18n/locales/fi.json` and `en.json`.
 
 Race views keep their current markup until their own issues move them onto these components.
 
@@ -25,4 +25,4 @@ Race views keep their current markup until their own issues move them onto these
 
 - New views import from `packages/web/src/ui` and add strings in both catalogs.
 - A contrast change belongs in the tokens, not in a single view.
-- `#/preview` is the page where axe must report no violations in both themes.
+- In a dev build, `#/preview` is the page where axe must report no violations in both themes. The production bundle does not register that route.

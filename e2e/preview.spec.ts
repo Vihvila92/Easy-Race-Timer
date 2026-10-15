@@ -1,24 +1,46 @@
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
-import { mkdtempSync } from 'node:fs'
+import { spawn, type ChildProcess } from 'node:child_process'
+import { readdirSync, readFileSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { authorize, killServer, startServer, type RunningServer } from './server.ts'
+import { killServer, startServer, type RunningServer } from './server.ts'
+
+const root = path.resolve(import.meta.dirname, '..')
+const devOrigin = 'http://127.0.0.1:5174'
 
 test.describe('component preview', () => {
   let server: RunningServer
+  let vite: ChildProcess
 
   test.beforeAll(async () => {
-    server = await startServer(8099, path.join(mkdtempSync(path.join(tmpdir(), 'ert-preview-')), 'ert.sqlite'))
+    server = await startServer(8096, path.join(mkdtempSync(path.join(tmpdir(), 'ert-preview-')), 'ert.sqlite'))
+    vite = await startVite(5174, server.port)
   })
 
   test.afterAll(async () => {
+    if (vite && vite.exitCode == null) {
+      vite.kill('SIGKILL')
+      await new Promise((resolve) => vite.once('exit', resolve))
+    }
     if (server) await killServer(server)
   })
 
-  test('shows the shared controls, both languages, and an inline guided hint', async ({ page, request }) => {
-    await authorize(request)
-    await page.goto('/#/preview')
+  test('production build does not register the preview route', async ({ page }) => {
+    const bundled = productionJavaScript()
+    expect(bundled).not.toContain('component-preview')
+    expect(bundled).not.toContain('nav-preview')
+    expect(bundled).not.toContain('preview-hint')
+    expect(bundled).not.toContain('#/preview')
+
+    await openProduction(page, server.port)
+    await expect(page.getByTestId('nav-preview')).toHaveCount(0)
+    await expect(page.getByTestId('component-preview')).toHaveCount(0)
+    await expect(page.getByTestId('wizard')).toBeVisible()
+  })
+
+  test('shows the shared controls, both languages, and an inline guided hint', async ({ page }) => {
+    await openDev(page)
     await expect(page.getByTestId('component-preview')).toBeVisible()
     await expect(page.getByRole('heading', { level: 1, name: 'Komponentit' })).toBeVisible()
     await expect(page.getByTestId('preview-hint')).toHaveText('Kirjoita nimi ja valitse matka. Vihje näkyy vain ohjatussa tilassa.')
@@ -62,9 +84,8 @@ test.describe('component preview', () => {
     await expect(page.getByTestId('preview-name')).toHaveValue('Aino')
   })
 
-  test('meets contrast, target size and 375 px width in both themes', async ({ page, request }) => {
-    await authorize(request)
-    await page.goto('/#/preview')
+  test('meets contrast, target size and 375 px width in both themes', async ({ page }) => {
+    await openDev(page)
     await expect(page.getByTestId('preview-hint')).toBeVisible()
     for (const theme of ['light', 'dark'] as const) {
       await page.getByTestId(`theme-${theme}`).click()
@@ -81,9 +102,8 @@ test.describe('component preview', () => {
     }
   })
 
-  test('keeps a long clock on one line when the screen is narrow or zoomed', async ({ page, request }) => {
-    await authorize(request)
-    await page.goto('/#/preview')
+  test('keeps a long clock on one line when the screen is narrow or zoomed', async ({ page }) => {
+    await openDev(page)
     await page.locator('.ui-clock-value').evaluate((el) => {
       el.textContent = '10:59:59,9'
     })
@@ -96,9 +116,8 @@ test.describe('component preview', () => {
     expect(await clockLine(page), '200% zoom').toMatchObject({ lines: 1, nowrap: true, tabular: true })
   })
 
-  test('follows the system appearance until the user overrides it', async ({ page, request }) => {
-    await authorize(request)
-    await page.goto('/#/preview')
+  test('follows the system appearance until the user overrides it', async ({ page }) => {
+    await openDev(page)
     await page.getByTestId('theme-system').click()
     await page.emulateMedia({ colorScheme: 'dark' })
     await expect.poll(() => page.evaluate(() => document.documentElement.dataset.theme)).toBe('dark')
@@ -110,6 +129,58 @@ test.describe('component preview', () => {
     await expect(page.getByTestId('preview-name')).toHaveValue('')
   })
 })
+
+function productionJavaScript(): string {
+  const dist = path.join(root, 'packages/web/dist')
+  const files = [path.join(dist, 'index.html')]
+  const assets = path.join(dist, 'assets')
+  for (const name of readdirSync(assets)) {
+    if (name.endsWith('.js')) files.push(path.join(assets, name))
+  }
+  return files.map((file) => readFileSync(file, 'utf8')).join('\n')
+}
+
+async function openProduction(page: Page, port: number): Promise<void> {
+  const origin = `http://127.0.0.1:${port}`
+  const auth = await page.request.post(`${origin}/api/v1/settings/pin/check`, { data: {} })
+  expect(auth.ok()).toBeTruthy()
+  await page.goto(`${origin}/#/preview`)
+}
+
+async function openDev(page: Page): Promise<void> {
+  const auth = await page.request.post(`${devOrigin}/api/v1/settings/pin/check`, { data: {} })
+  expect(auth.ok()).toBeTruthy()
+  await page.goto(`${devOrigin}/#/preview`)
+}
+
+async function startVite(port: number, apiPort: number): Promise<ChildProcess> {
+  const child = spawn(process.execPath, [
+    path.join(root, 'node_modules/vite/bin/vite.js'),
+    '--port', String(port),
+    '--strictPort',
+    '--host', '127.0.0.1',
+  ], {
+    cwd: path.join(root, 'packages/web'),
+    env: { ...process.env, ERT_DEV_ORIGIN: `http://127.0.0.1:${apiPort}` },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+  let log = ''
+  const keep = (chunk: Buffer) => { log = (log + chunk.toString()).slice(-4000) }
+  child.stdout?.on('data', keep)
+  child.stderr?.on('data', keep)
+  const deadline = Date.now() + 20_000
+  while (Date.now() < deadline) {
+    if (child.exitCode != null) throw new Error(`vite exited\n${log}`)
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/`)
+      if (response.ok) return child
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 200))
+    }
+  }
+  child.kill('SIGKILL')
+  throw new Error(`vite did not start\n${log}`)
+}
 
 async function clockLine(page: Page): Promise<{ lines: number; nowrap: boolean; tabular: boolean }> {
   return page.locator('.ui-clock-value').evaluate((el) => {
