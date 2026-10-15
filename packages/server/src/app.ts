@@ -2,6 +2,7 @@ import path from 'node:path'
 import { existsSync } from 'node:fs'
 import Fastify, { type FastifyInstance } from 'fastify'
 import { z } from 'zod'
+import rateLimit from '@fastify/rate-limit'
 import fastifyStatic from '@fastify/static'
 import websocket from '@fastify/websocket'
 import { AppError, errorBody, resultProjection } from '@ert/core'
@@ -16,6 +17,20 @@ export interface DiscoveredRoute {
   url: string
 }
 
+/** Shared budget for one IP. Route overrides replace this bucket. */
+export const DEFAULT_GLOBAL_MAX = 300
+/** PIN check, imports, and retention. */
+export const DEFAULT_STRICT_MAX = 5
+/** Finish and start recording. High enough that a race-day burst is not refused. */
+export const DEFAULT_RECORDING_MAX = 6_000
+const RATE_WINDOW = '1 minute'
+
+export interface RateLimitSettings {
+  globalMax?: number
+  strictMax?: number
+  recordingMax?: number
+}
+
 export interface AppOptions {
   db: AppDb
   testMode?: boolean
@@ -23,9 +38,10 @@ export interface AppOptions {
   runtime?: { url: string; dataDir: string; dbPath: string }
   /** Consistent backup. Lock, retention and import wait for it. */
   backup?: (reason: string) => Promise<unknown>
+  rateLimit?: RateLimitSettings
 }
 
-export function createApp(options: AppOptions): { app: FastifyInstance; service: RaceService; clock: Clock; discovered: DiscoveredRoute[] } {
+export async function createApp(options: AppOptions): Promise<{ app: FastifyInstance; service: RaceService; clock: Clock; discovered: DiscoveredRoute[] }> {
   const clock = new Clock()
   const service = new RaceService(options.db, clock)
   const secret = sessionSecret(options.db)
@@ -112,6 +128,17 @@ export function createApp(options: AppOptions): { app: FastifyInstance; service:
     }
   })
 
+  const globalMax = options.rateLimit?.globalMax ?? DEFAULT_GLOBAL_MAX
+  const strictMax = options.rateLimit?.strictMax ?? DEFAULT_STRICT_MAX
+  const recordingMax = options.rateLimit?.recordingMax ?? DEFAULT_RECORDING_MAX
+  await app.register(rateLimit, {
+    global: true,
+    max: globalMax,
+    timeWindow: RATE_WINDOW,
+  })
+  const strictLimit = { config: { rateLimit: { max: strictMax, timeWindow: RATE_WINDOW } } }
+  const recordingLimit = { config: { rateLimit: { max: recordingMax, timeWindow: RATE_WINDOW } } }
+
   app.get('/api/v1/health', async () => ({ ok: true, version: '0.1.0', pinConfigured: service.pinConfigured() }))
   app.get('/api/v1/runtime', async () => ({
     url: options.runtime?.url ?? '',
@@ -127,8 +154,8 @@ export function createApp(options: AppOptions): { app: FastifyInstance; service:
   })
 
   app.get('/api/v1/bootstrap', async () => workspace(service))
-  app.post('/api/v1/events/import', async (request) => service.importEvent(request.body as Record<string, unknown>))
-  app.post('/api/v1/clubs/import', async (request) => {
+  app.post('/api/v1/events/import', strictLimit, async (request) => service.importEvent(request.body as Record<string, unknown>))
+  app.post('/api/v1/clubs/import', strictLimit, async (request) => {
     const body = request.body as { clubs: { id: string; abbreviation: string | null; name: string; municipality?: string; official_id?: string }[] }
     return service.importClubs(body.clubs)
   })
@@ -147,8 +174,8 @@ export function createApp(options: AppOptions): { app: FastifyInstance; service:
     const body = request.body as { reason: string }
     return service.undoMerge((request.params as { id: string }).id, body.reason)
   })
-  app.post('/api/v1/entries/import/preview', async (request) => service.previewCsv((request.body as { csv: string }).csv))
-  app.post('/api/v1/entries/import', async (request) => service.importCsv((request.body as { csv: string }).csv))
+  app.post('/api/v1/entries/import/preview', strictLimit, async (request) => service.previewCsv((request.body as { csv: string }).csv))
+  app.post('/api/v1/entries/import', strictLimit, async (request) => service.importCsv((request.body as { csv: string }).csv))
   app.get('/api/v1/suggestions', async (request) => service.suggestions(((request.query as { basis?: 'birth_date' | 'birth_year' }).basis) || service.settings().age_basis))
   app.post('/api/v1/settings/age-basis', async (request) => {
     const body = request.body as { basis: 'birth_date' | 'birth_year'; apply?: boolean }
@@ -164,7 +191,7 @@ export function createApp(options: AppOptions): { app: FastifyInstance; service:
     service.setPin(body.pin, body.currentPin)
     return { ok: true }
   })
-  app.post('/api/v1/settings/pin/check', async (request, reply) => {
+  app.post('/api/v1/settings/pin/check', strictLimit, async (request, reply) => {
     const body = (request.body as { pin?: string } | undefined) ?? {}
     if (!service.pinConfigured() && !isLoopbackAddress(request.ip)) {
       throw new AppError('PIN_REQUIRED', 'PIN required')
@@ -200,11 +227,22 @@ export function createApp(options: AppOptions): { app: FastifyInstance; service:
     return { ok: true }
   })
   app.post('/api/v1/club-actions/conflict', async (request) => service.resolveAbbreviationConflict(request.body as Parameters<RaceService['resolveAbbreviationConflict']>[0]))
-  app.post('/api/v1/races/:id/start', async (request) => {
+  app.post('/api/v1/races/:id/start', recordingLimit, async (request) => {
     const body = request.body as { timeMs?: number; confirm?: boolean }
     return service.startRace((request.params as { id: string }).id, body.timeMs ?? clock.now(), Boolean(body.confirm))
   })
-  app.post('/api/v1/timing-events', async (request) => service.recordFinish(request.body as { id?: string; timeMs: number; bib?: number | null; mode?: string; deviceId?: string; label?: string }))
+  app.post('/api/v1/timing-events', recordingLimit, async (request) => {
+    const body = request.body as { id?: string; timeMs: number; deviceTimeMs?: number; bib?: number | null; mode?: string; deviceId?: string; label?: string }
+    return service.recordFinish({
+      id: body.id,
+      timeMs: body.timeMs,
+      deviceTimeMs: typeof body.deviceTimeMs === 'number' ? body.deviceTimeMs : undefined,
+      bib: body.bib,
+      mode: body.mode,
+      deviceId: body.deviceId,
+      label: body.label,
+    })
+  })
   app.post('/api/v1/corrections/assign-bib', async (request) => {
     const body = request.body as { tapId: string; bib: number; reason: string }
     service.assignBib(body.tapId, body.bib, body.reason)
@@ -266,7 +304,7 @@ export function createApp(options: AppOptions): { app: FastifyInstance; service:
   })
   app.get('/api/v1/club-stats', async () => service.clubStatistics())
   app.get('/api/v1/audit', async () => service.audit())
-  app.post('/api/v1/retention/run', async (request, reply) => {
+  app.post('/api/v1/retention/run', strictLimit, async (request, reply) => {
     const body = (request.body as { at?: unknown; confirm?: boolean } | undefined) ?? {}
     if (body.at !== undefined && !options.testMode) {
       return reply.status(400).send({ error: { code: 'VALIDATION_ERROR', message: 'at is only available in test mode' } })
@@ -297,7 +335,7 @@ export function createApp(options: AppOptions): { app: FastifyInstance; service:
     reply.header('content-type', 'application/zip')
     return service.exportErtx()
   })
-  app.post('/api/v1/sync/import', async (request) => {
+  app.post('/api/v1/sync/import', strictLimit, async (request) => {
     const body = (request.body ?? {}) as { base64?: string; confirm?: boolean }
     if (typeof body.base64 !== 'string' || body.base64.length === 0) {
       throw new AppError('VALIDATION_ERROR', 'base64 is required')

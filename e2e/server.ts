@@ -20,6 +20,10 @@ export async function startServer(port: number, dbFile: string): Promise<Running
       ERT_TEST_MODE: '1',
       ERT_DB: dbFile,
       ERT_WEB_DIST: path.join(root, 'packages/web/dist'),
+      // One browser reloads the UI many times from this address. Production stays at 300 and 5.
+      ERT_RATE_GLOBAL_MAX: '10000',
+      ERT_RATE_STRICT_MAX: '10000',
+      ERT_RATE_RECORDING_MAX: '10000',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
   })

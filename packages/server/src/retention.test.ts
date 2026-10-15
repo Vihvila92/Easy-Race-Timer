@@ -22,7 +22,7 @@ async function fixture(testMode: boolean) {
     firstName: 'Aino', lastName: 'Testi', gender: 'M', birthDate: '1990-01-01', raceId: 'R1', bib: 1, consent: false,
   })
   const calls: string[] = []
-  const { app } = createApp({
+  const { app } = await createApp({
     db,
     testMode,
     backup: async (reason) => {
@@ -116,7 +116,7 @@ describe('retention run', () => {
     service.registerLate({ firstName: 'Aino', lastName: 'Testi', gender: 'M', birthDate: '1990-01-01', raceId: 'R1', bib: 1, consent: false })
     service.setStatus(1, 'dns', 'test')
     service.lockRace('R1')
-    const { app } = createApp({
+    const { app } = await createApp({
       db,
       testMode: true,
       backup: async () => { throw new Error('disk full') },

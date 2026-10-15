@@ -6,7 +6,7 @@ const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/
 
 async function fixture() {
   const db = await openDatabase(':memory:')
-  const { app, service } = createApp({ db, testMode: true })
+  const { app, service } = await createApp({ db, testMode: true })
   service.importEvent({
     id: 'EV',
     name: 'Consent',

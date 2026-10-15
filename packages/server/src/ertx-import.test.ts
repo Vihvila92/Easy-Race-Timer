@@ -19,7 +19,7 @@ async function fixture() {
   })
   service.setPin('1234')
   const backups: string[] = []
-  const { app } = createApp({
+  const { app } = await createApp({
     db,
     testMode: true,
     backup: async (reason) => {
@@ -116,7 +116,7 @@ describe('.ertx import', () => {
     const db = await openDatabase(':memory:')
     const service = new RaceService(db, new Clock())
     service.importEvent({ id: 'EV', name: 'Original', date: '2027-06-12', timezone: 'Europe/Helsinki', sport: 'run', races: [], categories: [] })
-    const { app } = createApp({
+    const { app } = await createApp({
       db,
       testMode: true,
       backup: async () => { throw new Error('disk full') },

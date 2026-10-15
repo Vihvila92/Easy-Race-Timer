@@ -9,7 +9,7 @@ import { createApp } from './app.js'
 describe('setup session', () => {
   it('issues a token without a PIN only to loopback', async () => {
     const db = await openDatabase(':memory:')
-    const { app } = createApp({ db, testMode: true })
+    const { app } = await createApp({ db, testMode: true })
     const remote = await app.inject({
       method: 'POST',
       url: '/api/v1/settings/pin/check',
@@ -24,12 +24,12 @@ describe('setup session', () => {
     expect(local.statusCode).toBe(200)
     expect(local.json().token).toEqual(expect.any(String))
 
-    const { service } = createApp({ db, testMode: true })
+    const { service } = await createApp({ db, testMode: true })
     service.importEvent({
       id: 'EV', name: 'PIN', date: '2027-06-12', timezone: 'Europe/Helsinki', sport: 'run', races: [], categories: [],
     })
     service.setPin('1234')
-    const { app: locked } = createApp({ db, testMode: true })
+    const { app: locked } = await createApp({ db, testMode: true })
     const denied = await locked.inject({
       method: 'POST',
       url: '/api/v1/settings/pin/check',

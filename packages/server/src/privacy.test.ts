@@ -40,7 +40,7 @@ describe('public results privacy', () => {
     expect(JSON.stringify(broadcasts)).not.toContain('Lotta')
     expect(JSON.stringify(broadcasts)).not.toContain('Hämäläinen')
 
-    const { app } = createApp({ db, testMode: true })
+    const { app } = await createApp({ db, testMode: true })
     const session = await app.inject({ method: 'POST', url: '/api/v1/settings/pin/check', payload: {} })
     const auth = { authorization: `Bearer ${session.json().token as string}` }
     await app.inject({

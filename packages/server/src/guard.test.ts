@@ -32,7 +32,7 @@ describe('request guards', () => {
 describe('HTTP guards', () => {
   it('rejects a foreign host, a foreign origin, a text body, and a foreign websocket origin', async () => {
     const db = await openDatabase(':memory:')
-    const { app } = createApp({ db, testMode: true })
+    const { app } = await createApp({ db, testMode: true })
     const host = await app.inject({
       method: 'GET',
       url: '/api/v1/health',

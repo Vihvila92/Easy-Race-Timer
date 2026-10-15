@@ -17,7 +17,7 @@ async function tokenFor(app: FastifyInstance, pin?: string): Promise<string> {
 describe('device token', () => {
   it('classifies every route and refuses unclassified or anonymous writes', async () => {
     const db = await openDatabase(':memory:')
-    const { app, discovered } = createApp({ db, testMode: true })
+    const { app, discovered } = await createApp({ db, testMode: true })
     await app.ready()
     const api = discovered.filter((route) => route.url.startsWith('/api/') || route.url === '/ws')
     expect(api.length).toBeGreaterThan(0)
@@ -63,7 +63,7 @@ describe('device token', () => {
 
   it('sets an HttpOnly Strict cookie and requires the current PIN to change it', async () => {
     const db = await openDatabase(':memory:')
-    const { app, service } = createApp({ db, testMode: true })
+    const { app, service } = await createApp({ db, testMode: true })
     service.importEvent({
       id: 'EV', name: 'PIN', date: '2027-06-12', timezone: 'Europe/Helsinki', sport: 'run', races: [], categories: [],
     })
@@ -107,7 +107,7 @@ describe('device token', () => {
 
   it('issues a token from a checked PIN', async () => {
     const db = await openDatabase(':memory:')
-    const { app, service } = createApp({ db, testMode: true })
+    const { app, service } = await createApp({ db, testMode: true })
     service.importEvent({
       id: 'EV', name: 'PIN', date: '2027-06-12', timezone: 'Europe/Helsinki', sport: 'run', races: [], categories: [],
     })

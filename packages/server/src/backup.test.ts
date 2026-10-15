@@ -50,7 +50,7 @@ describe('lock backup', () => {
       VALUES ('R1', 'local', 'EV', '1 km', '1 km', 1000, 'mass', 1, 1, '1')`)
     db.run(`INSERT INTO category (id, race_id, code, name_fi, name_en, gender, min_age, ranked, auto_assign, sort_order)
       VALUES ('M', 'R1', 'M', 'M', 'M', 'M', 16, 1, 1, 0)`)
-    const { service, app: setup } = createApp({ db })
+    const { service, app: setup } = await createApp({ db })
     service.registerLate({
       firstName: 'A', lastName: 'B', gender: 'M', birthDate: '1990-01-01', raceId: 'R1', bib: 1, consent: false,
     })
@@ -67,7 +67,7 @@ describe('lock backup', () => {
     expect(reasons).toEqual([])
 
     service.setStatus(1, 'dns', 'test')
-    const { app: ok } = createApp({
+    const { app: ok } = await createApp({
       db,
       backup: async (reason) => { reasons.push(reason) },
     })
@@ -81,7 +81,7 @@ describe('lock backup', () => {
     expect(reasons).toEqual(['lock'])
 
     service.unlockRace('R1', 'test')
-    const { app: failing } = createApp({
+    const { app: failing } = await createApp({
       db,
       backup: async () => { throw new Error('disk full') },
     })
