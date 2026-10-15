@@ -6,20 +6,24 @@ v0.1 siirtää dataa vain `.ertx`-tiedostona ja paikallisena WebSocket-ilmoituks
 
 ## WebSocket
 
-`GET /ws` (protokolla 1). Palvelin lähettää heti:
+`GET /ws` (protocol 1). The handshake uses the same device token as the other protected routes (`Authorization: Bearer` or the `ert_session` cookie) and requires a loopback `Origin`. A missing or invalid token is rejected with 401. A missing or foreign `Origin` is rejected with 403, including when a valid token is sent.
+
+After the handshake the server sends:
 
 ```json
 { "type": "device.status", "payload": { "proto": 1 } }
 ```
 
-Muut tyypit:
+Other types are refresh notifications. The payload is an allowlist:
 
-| type | Milloin |
-|---|---|
-| `timing_event.created` | Maalipainallus tallentui |
-| `correction.created` | Korjaus, yhdistäminen tai palautus |
-| `results.updated` | Tulokset vanhenivat |
-| `sync.conflict` | Varattu v0.2:lle |
+| type | payload | when |
+|---|---|---|
+| `timing_event.created` | `id`, plus `raceId` or `kind` (`start`) when known | A finish or a start was stored |
+| `correction.created` | `action` | A correction was stored |
+| `results.updated` | `raceId` when known | Results went stale |
+| `sync.conflict` | | Reserved for v0.2 |
+
+Names, bibs, entry ids, person ids, and correction reasons are not sent.
 
 ## Maalitapahtuma
 
@@ -64,4 +68,4 @@ HTTP: `GET /api/v1/sync/export` palauttaa zipin. `POST /api/v1/sync/import` otta
 
 ## Mitä v0.2 lisää
 
-Sama tapahtuma- ja korjausrunko kulkee LAN-WebSocketissa ja myöhemmin pilvessä. Kellojen näyte (`clockSample`) korjaa ajautumisen. Ristiriita palautetaan koodilla `SYNC_CONFLICT`, eikä kumpaakaan kirjoitusta pudoteta hiljaa.
+v0.2:ssa sama tapahtuma- ja korjausrunko kulkee LAN-WebSocketissa ja myöhemmin pilvessä. v0.1:n `/ws` lähettää vain yllä rajatun ilmoituksen. Kellojen näyte (`clockSample`) korjaa ajautumisen. Ristiriita palautetaan koodilla `SYNC_CONFLICT`, eikä kumpaakaan kirjoitusta pudoteta hiljaa.

@@ -7,7 +7,6 @@ export const PUBLIC_ROUTES = [
   'POST /api/v1/settings/pin/check',
   'GET /api/v1/results',
   'GET /api/v1/club-stats',
-  'GET /ws',
 ] as const
 
 /** Loopback may read these without a token. Other clients need a device token. */
@@ -58,6 +57,7 @@ export const PROTECTED_ROUTES = [
   'POST /api/v1/persons/:id/consents',
   'GET /api/v1/sync/export',
   'POST /api/v1/sync/import',
+  'GET /ws',
 ] as const
 
 const PUBLIC = new Set<string>(PUBLIC_ROUTES)
