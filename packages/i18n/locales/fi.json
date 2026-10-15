@@ -100,7 +100,7 @@
   "finish.bibFirst": "Numero ensin",
   "finish.queue": "Ajat ilman numeroa",
   "finish.assign": "Liitä numero",
-  "finish.hint.keys": "Paina plus-näppäintä (kannettavalla F12) maaliintulon kohdalla.",
+  "finish.hint.keys": "Paina numeronäppäimistön plus-näppäintä (kannettavalla F12) maaliintulon kohdalla.",
   "finish.undo": "Viimeisin maali kumottu",
   "finish.recorded": "Aika kirjattu",
   "finish.duplicate": "Numero {bib} on jo kirjattu – merkitty tarkistettavaksi",

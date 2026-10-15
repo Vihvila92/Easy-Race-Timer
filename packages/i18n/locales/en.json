@@ -100,7 +100,7 @@
   "finish.bibFirst": "Bib first",
   "finish.queue": "Times without a bib",
   "finish.assign": "Assign bib",
-  "finish.hint.keys": "Press the plus key (F12 on a laptop) as the runner finishes.",
+  "finish.hint.keys": "Press the numpad plus key (F12 on a laptop) as the runner finishes.",
   "finish.undo": "Last finish undone",
   "finish.recorded": "Time recorded",
   "finish.duplicate": "Bib {bib} is already recorded – marked for review",
