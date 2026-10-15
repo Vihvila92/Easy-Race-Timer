@@ -6,7 +6,9 @@ v0.1 is a local race-day app. Security fixes are handled as they are reported. A
 
 ## Reporting a vulnerability
 
-Email [valtteri@vehvilainen.cc](mailto:valtteri@vehvilainen.cc).
+Use GitHub private vulnerability reporting: open the repository's **Security** tab and choose **Report a vulnerability**, or go directly to <https://github.com/Vihvila92/Easy-Race-Timer/security/advisories/new>. The report stays private between you and the maintainers.
+
+Do not report vulnerabilities in public issues, pull requests or discussions.
 
 Include, when you can:
 
@@ -15,9 +17,7 @@ Include, when you can:
 3. Impact (data exposure, integrity, denial of service)
 4. A suggested fix (optional)
 
-We aim to acknowledge within 5 business days.
-
-Do not open a public GitHub issue for a vulnerability.
+We aim to acknowledge a report within 5 business days and to agree on a disclosure date with you. We publish fixes as GitHub Security Advisories.
 
 ## Scope
 
@@ -49,4 +49,4 @@ Out of scope for v0.1:
 - Admin actions require a reason and are stored in the correction log.
 - Wrong PIN attempts are rate-limited.
 
-Last updated: 14 Oct 2026
+Last updated: 15 Oct 2026
