@@ -107,5 +107,14 @@ This process is designed to align with the EU Cyber Resilience Act
 
 ## Software bill of materials
 
-We plan to attach a CycloneDX SBOM to every release. Tagged releases with an
-SBOM do not exist yet; this section will be updated when they do.
+A tagged `v*` release includes two CycloneDX SBOMs and a SHA-256 `checksums.txt`
+over every asset:
+
+- `sbom-npm.cdx.json` from the pnpm lockfile
+- `sbom-cargo.cdx.json` from `cargo cyclonedx` on `src-tauri/`
+
+Installers also get GitHub artifact attestations. Check them with
+`sha256sum -c checksums.txt` and
+`gh attestation verify <file> --repo Vihvila92/Easy-Race-Timer`.
+The installers are not notarized and do not use a paid Windows certificate.
+See [docs/release.md](docs/release.md).
