@@ -87,7 +87,7 @@ export interface Workspace {
     start_offset_ms: number
     late_registration: number
   }[]
-  timing: { id: string; bib: number | null; time_ms: number; voided: boolean; mode: string | null; flags: string[] }[]
+  timing: { id: string; bib: number | null; time_ms: number; voided: boolean; mode: string | null; flags: string[]; label?: string }[]
   ties: TieGroup[]
   audit: { id: string; action: string; reason: string }[]
   results: ResultRow[]

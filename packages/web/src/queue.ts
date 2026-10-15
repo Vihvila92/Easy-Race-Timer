@@ -1,11 +1,14 @@
-import { api } from './api.js'
+import { ApiError, api } from './api.js'
 
 export interface QueuedTap {
   id: string
+  deviceId: string
   timeMs: number
   bib: number | null
   mode: string
+  label: string
   synced: boolean
+  conflict?: boolean
 }
 
 const DB_NAME = 'ert-queue'
@@ -39,27 +42,46 @@ export async function pendingCount(): Promise<number> {
   const db = await openDb()
   const rows = await requestToPromise(db.transaction(STORE).objectStore(STORE).getAll()) as QueuedTap[]
   db.close()
-  return rows.filter((row) => !row.synced).length
+  return rows.filter((row) => !row.synced && !row.conflict).length
 }
 
-export async function recordTap(item: Omit<QueuedTap, 'synced'>): Promise<string[]> {
+export async function readQueue(): Promise<QueuedTap[]> {
+  const db = await openDb()
+  const rows = await requestToPromise(db.transaction(STORE).objectStore(STORE).getAll()) as QueuedTap[]
+  db.close()
+  return rows
+}
+
+/** Persist first, then try to sync. A network failure leaves the tap queued. */
+export async function recordTap(item: Omit<QueuedTap, 'synced' | 'conflict'>): Promise<{ flags: string[]; synced: boolean }> {
   await put({ ...item, synced: false })
   return flush(item.id)
 }
 
-export async function flush(focusId?: string): Promise<string[]> {
+export async function flush(focusId?: string): Promise<{ flags: string[]; synced: boolean }> {
   const db = await openDb()
   const rows = await requestToPromise(db.transaction(STORE).objectStore(STORE).getAll()) as QueuedTap[]
   db.close()
   let flags: string[] = []
+  let focusSynced = focusId == null
   for (const item of rows) {
-    if (item.synced) continue
-    const saved = await api<{ flags?: string[] }>('/api/v1/timing-events', {
-      method: 'POST',
-      body: JSON.stringify({ id: item.id, timeMs: item.timeMs, bib: item.bib, mode: item.mode }),
-    })
-    if (item.id === focusId) flags = saved.flags ?? []
-    await put({ ...item, synced: true })
+    if (item.synced || item.conflict) continue
+    try {
+      const saved = await api<{ flags?: string[] }>('/api/v1/timing-events', {
+        method: 'POST',
+        body: JSON.stringify({ id: item.id, deviceId: item.deviceId, timeMs: item.timeMs, bib: item.bib, mode: item.mode, label: item.label }),
+      })
+      if (item.id === focusId) flags = saved.flags ?? []
+      await put({ ...item, synced: true })
+      if (item.id === focusId) focusSynced = true
+    } catch (error) {
+      if (error instanceof ApiError && error.code === 'SYNC_CONFLICT') {
+        await put({ ...item, conflict: true })
+        continue
+      }
+      if (item.id === focusId) focusSynced = false
+      break
+    }
   }
-  return flags
+  return { flags, synced: focusSynced }
 }

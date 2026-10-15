@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ApiError, api, clockMs, nextTapId } from './api.js'
+import { ApiError, api, clientNow, clockMs, createTapId, localDeviceId, nextTapLabel } from './api.js'
 import { useApp } from './context.js'
 import { flush, pendingCount, recordTap } from './queue.js'
 import type { ClubMatch, Preview, Suggestion, TieGroup } from './types.js'
@@ -344,6 +344,7 @@ export function Finish() {
   const [bib, setBib] = useState('')
   const [toast, setToast] = useState('')
   const [lastId, setLastId] = useState('')
+  const [lastLabel, setLastLabel] = useState('')
   const [queued, setQueued] = useState(0)
   const waiting = data?.ties.filter((group) => group.status === 'unconfirmed').length ?? 0
 
@@ -351,9 +352,11 @@ export function Finish() {
     let released = false
     let sentinel: WakeLockSentinel | undefined
     navigator.wakeLock?.request('screen').then((lock) => { if (!released) sentinel = lock }).catch(() => undefined)
-    flush().then(() => pendingCount()).then(setQueued).catch(() => undefined)
-    return () => { released = true; void sentinel?.release() }
-  }, [])
+    const sync = () => { flush().then(() => pendingCount()).then(setQueued).then(() => reload()).catch(() => undefined) }
+    sync()
+    window.addEventListener('online', sync)
+    return () => { released = true; window.removeEventListener('online', sync); void sentinel?.release() }
+  }, [reload])
 
   useEffect(() => {
     if (!toast) return undefined
@@ -362,14 +365,22 @@ export function Finish() {
   }, [toast])
 
   async function tap() {
-    const id = nextTapId()
-    const timeMs = await clockMs()
+    const id = createTapId()
+    const label = nextTapLabel()
+    const timeMs = clientNow()
     const numeric = bib.trim() ? Number(bib) : null
     setLastId(id)
-    const flags = await recordTap({ id, timeMs, bib: numeric, mode })
+    setLastLabel(label)
+    const outcome = await recordTap({ id, deviceId: localDeviceId(), timeMs, bib: numeric, mode, label })
     setQueued(await pendingCount())
-    if (numeric != null && flags.includes('duplicate')) setToast(t('finish.duplicate', { bib: numeric }))
-    else if (numeric != null && flags.includes('unknown_bib')) setToast(t('finish.unknown', { bib: numeric }))
+    if (!outcome.synced) {
+      setToast(t('common.offline'))
+      setBib('')
+      return
+    }
+    if (outcome.flags.includes('before_start')) setToast(t('finish.beforeStart', { bib: numeric ?? '' }))
+    else if (numeric != null && outcome.flags.includes('duplicate')) setToast(t('finish.duplicate', { bib: numeric }))
+    else if (numeric != null && outcome.flags.includes('unknown_bib')) setToast(t('finish.unknown', { bib: numeric }))
     else setToast(t('finish.recorded'))
     setBib('')
     await reload()
@@ -388,20 +399,22 @@ export function Finish() {
       <button type="button" className="finish-tap" data-testid="finish-tap" aria-label={t('finish.tapLabel')} onClick={() => { tap().catch(() => setToast(t('common.offline'))) }}>{t('finish.tap')}</button>
       <p className="muted">{t('finish.hint')}</p>
       <p className="queue-note" data-testid="queue-count">{t('common.offline')}: {queued}</p>
-      {lastId && <p data-testid="finish-last">{lastId}</p>}
+      {lastLabel && <p data-testid="finish-last">{lastLabel}</p>}
       <h2>{t('finish.review')}</h2>
       <ul data-testid="finish-review">
-        {(data?.timing ?? []).filter((event) => event.flags.includes('duplicate') || event.flags.includes('unknown_bib')).map((event) => (
+        {(data?.timing ?? []).filter((event) => event.flags.includes('duplicate') || event.flags.includes('unknown_bib') || event.flags.includes('before_start')).map((event) => (
           <li key={event.id} data-testid={`finish-review-${event.id}`}>
-            {event.flags.includes('unknown_bib')
-              ? t('finish.unknown', { bib: event.bib ?? '' })
-              : t('finish.duplicate', { bib: event.bib ?? '' })}
+            {event.flags.includes('before_start')
+              ? t('finish.beforeStart', { bib: event.bib ?? '' })
+              : event.flags.includes('unknown_bib')
+                ? t('finish.unknown', { bib: event.bib ?? '' })
+                : t('finish.duplicate', { bib: event.bib ?? '' })}
           </li>
         ))}
       </ul>
       <ul data-testid="finish-log">
-        {(data?.timing ?? []).filter((event) => event.id.startsWith('F')).slice(-8).reverse().map((event) => (
-          <li key={event.id} data-testid={`finish-row-${event.id}`} data-sync="ok">{event.id} · {event.bib ?? '—'} · {event.voided ? t('corrections.void') : t('finish.synced')}</li>
+        {(data?.timing ?? []).filter((event) => (event.label || event.id).startsWith('F')).slice(-8).reverse().map((event) => (
+          <li key={event.id} data-testid={`finish-row-${event.id}`} data-label={event.label || event.id} data-id={event.id} data-sync="ok">{event.label || event.id} · {event.bib ?? '—'} · {event.voided ? t('corrections.void') : t('finish.synced')}</li>
         ))}
       </ul>
       {toast && (
@@ -435,7 +448,7 @@ export function Corrections() {
       </div>
       <ul>
         {data.timing.map((event) => (
-          <li key={event.id}><button type="button" className="secondary" onClick={() => setTapId(event.id)}>{event.id}</button> {event.bib ?? '—'} {event.voided ? t('corrections.void') : ''}</li>
+          <li key={event.id}><button type="button" className="secondary" data-id={event.id} data-label={event.label || event.id} onClick={() => setTapId(event.id)}>{event.label || event.id}</button> {event.bib ?? '—'} {event.voided ? t('corrections.void') : ''}</li>
         ))}
       </ul>
     </section>

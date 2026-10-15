@@ -97,15 +97,15 @@ test.describe('Kuulan hölkkä', () => {
       await runAction(page, action)
       if (action.type === 'finish_tap' && action.tap_id === 'F030') {
         const before = await request.get('/api/v1/timing-events')
-        const taps = (await before.json() as { id: string }[]).filter((event) => String(event.id).startsWith('F'))
-        expect(taps.map((event) => event.id)).toContain('F030')
+        const taps = await before.json() as { id: string; label?: string }[]
+        expect(taps.some((event) => event.label === 'F030' || event.id === 'F030')).toBe(true)
         await killServer(server)
         server = await startServer(port, server.dbFile)
         await page.reload()
         await expect(page.getByTestId('nav-finish')).toBeVisible()
         const after = await request.get('/api/v1/timing-events')
-        const kept = (await after.json() as { id: string }[]).filter((event) => String(event.id).startsWith('F'))
-        expect(kept.map((event) => event.id)).toContain('F030')
+        const kept = await after.json() as { id: string; label?: string }[]
+        expect(kept.some((event) => event.label === 'F030' || event.id === 'F030')).toBe(true)
       }
       if (action.type === 'merge_clubs') {
         await page.getByTestId('club-new-abbr').fill('UU')
@@ -295,12 +295,14 @@ async function runAction(page: Page, action: Record<string, any>) {
     await page.getByTestId(action.mode === 'bib_first' ? 'finish-mode-bib' : 'finish-mode-time').click()
     await page.getByTestId('finish-bib').fill(action.bib == null ? '' : String(action.bib))
     await page.getByTestId('finish-tap').click()
-    await expect(page.getByTestId(`finish-row-${action.tap_id}`)).toHaveAttribute('data-sync', 'ok')
+    await expect(page.locator(`[data-label="${action.tap_id}"]`)).toHaveAttribute('data-sync', 'ok')
     return
   }
   if (action.type === 'copy_time' || action.type === 'assign_bib' || action.type === 'void') {
     await open(page, 'corrections')
-    await page.getByTestId('corr-tap').fill(action.tap_id ?? action.source_tap_id)
+    const label = String(action.tap_id ?? action.source_tap_id)
+    const storedId = await page.locator(`[data-label="${label}"]`).first().getAttribute('data-id')
+    await page.getByTestId('corr-tap').fill(storedId || label)
     await page.getByTestId('corr-bib').fill(action.bib == null ? '' : String(action.bib))
     await page.getByTestId('corr-reason').fill(action.reason)
     const button = action.type === 'copy_time' ? 'corr-copy' : action.type === 'void' ? 'corr-void' : 'corr-assign'

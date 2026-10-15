@@ -1,3 +1,4 @@
+import { createId } from '@ert/core'
 import type { Workspace } from './types.js'
 
 export class ApiError extends Error {
@@ -42,7 +43,31 @@ export async function clockMs(): Promise<number> {
   return body.time_ms
 }
 
-export function nextTapId(): string {
+/** Tap instant. Uses the test clock when set, otherwise the device clock. Never waits on the network. */
+export function clientNow(): number {
+  const stored = sessionStorage.getItem('ert-test-clock')
+  if (stored) {
+    const parsed = Date.parse(stored)
+    if (!Number.isNaN(parsed)) return parsed
+  }
+  return Date.now()
+}
+
+export function localDeviceId(): string {
+  const existing = localStorage.getItem('ert-device-id')
+  if (existing) return existing
+  const created = createId()
+  localStorage.setItem('ert-device-id', created)
+  return created
+}
+
+/** Globally unique finish id: this browser's device id plus a ULID. */
+export function createTapId(): string {
+  return `${localDeviceId()}:${createId()}`
+}
+
+/** Display number only. The stored id is createTapId(). */
+export function nextTapLabel(): string {
   const next = Number(sessionStorage.getItem('ert-next-tap') ?? '1')
   sessionStorage.setItem('ert-next-tap', String(next + 1))
   return `F${String(next).padStart(3, '0')}`
