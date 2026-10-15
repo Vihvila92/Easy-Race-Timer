@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
-import { ApiError, api, clientNow, clockMs, createTapId, localDeviceId, nextTapLabel } from './api.js'
+import { ApiError, api, clientNow, clockMs, createTapId, deviceNow, localDeviceId, nextTapLabel, readClockOffset, syncServerClock } from './api.js'
 import { useApp } from './context.js'
 import { flush, pendingCount, recordTap } from './queue.js'
 import type { ClubMatch, Preview, Suggestion, TieGroup } from './types.js'
@@ -346,7 +346,16 @@ export function Finish() {
   const [lastId, setLastId] = useState('')
   const [lastLabel, setLastLabel] = useState('')
   const [queued, setQueued] = useState(0)
+  const [offsetMs, setOffsetMs] = useState(() => readClockOffset()?.offsetMs ?? 0)
   const waiting = data?.ties.filter((group) => group.status === 'unconfirmed').length ?? 0
+  const clockSkew = Math.abs(offsetMs) > 1000
+
+  useEffect(() => {
+    const apply = () => { void syncServerClock().then((sample) => setOffsetMs(sample?.offsetMs ?? readClockOffset()?.offsetMs ?? 0)) }
+    apply()
+    window.addEventListener('online', apply)
+    return () => window.removeEventListener('online', apply)
+  }, [])
 
   useEffect(() => {
     let released = false
@@ -367,11 +376,12 @@ export function Finish() {
   async function tap() {
     const id = createTapId()
     const label = nextTapLabel()
+    const deviceTimeMs = deviceNow()
     const timeMs = clientNow()
     const numeric = bib.trim() ? Number(bib) : null
     setLastId(id)
     setLastLabel(label)
-    const outcome = await recordTap({ id, deviceId: localDeviceId(), timeMs, bib: numeric, mode, label })
+    const outcome = await recordTap({ id, deviceId: localDeviceId(), timeMs, deviceTimeMs, bib: numeric, mode, label })
     setQueued(await pendingCount())
     if (!outcome.synced) {
       setToast(t('common.offline'))
@@ -390,6 +400,7 @@ export function Finish() {
     <section className="finish-layout">
       <h1>{t('finish.title')}</h1>
       <p className="lead">{t('finish.lead')}</p>
+      {clockSkew && <p className="error" role="status" data-testid="clock-offset">{t('finish.clockOffset', { seconds: Math.round(Math.abs(offsetMs) / 1000) })}</p>}
       {waiting > 0 && <p data-testid="finish-ties">{t('ties.waiting', { count: waiting })}</p>}
       <div className="segment" role="group" aria-label={t('finish.bibFirst')}>
         <button type="button" className={mode === 'time_first' ? '' : 'secondary'} data-testid="finish-mode-time" onClick={() => setMode('time_first')}>{t('finish.tap')}</button>

@@ -4,6 +4,8 @@ export interface QueuedTap {
   id: string
   deviceId: string
   timeMs: number
+  /** Raw device clock. timeMs is the value corrected by the stored server offset. */
+  deviceTimeMs?: number
   bib: number | null
   mode: string
   label: string
@@ -69,7 +71,15 @@ export async function flush(focusId?: string): Promise<{ flags: string[]; synced
     try {
       const saved = await api<{ flags?: string[] }>('/api/v1/timing-events', {
         method: 'POST',
-        body: JSON.stringify({ id: item.id, deviceId: item.deviceId, timeMs: item.timeMs, bib: item.bib, mode: item.mode, label: item.label }),
+        body: JSON.stringify({
+          id: item.id,
+          deviceId: item.deviceId,
+          timeMs: item.timeMs,
+          deviceTimeMs: item.deviceTimeMs,
+          bib: item.bib,
+          mode: item.mode,
+          label: item.label,
+        }),
       })
       if (item.id === focusId) flags = saved.flags ?? []
       await put({ ...item, synced: true })

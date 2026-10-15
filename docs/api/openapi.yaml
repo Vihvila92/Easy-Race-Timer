@@ -500,7 +500,8 @@ paths:
               required: [timeMs]
               properties:
                 id: { type: string }
-                timeMs: { type: integer }
+                timeMs: { type: integer, description: Finish instant corrected by the device's stored server-clock offset. }
+                deviceTimeMs: { type: integer, description: Raw device clock at the tap. Stored separately from timeMs. }
                 bib: { type: integer, nullable: true }
                 mode: { type: string }
                 deviceId: { type: string }

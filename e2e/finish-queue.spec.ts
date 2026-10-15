@@ -87,6 +87,33 @@ test.describe('finish queue', () => {
     expect(taps.every((event) => event.id.includes(':'))).toBe(true)
     await other.close()
   })
+
+  test('corrects a finish when the device clock is 90 seconds ahead', async ({ page, request }) => {
+    await authorize(request)
+    expect((await request.post('/api/v1/entries/late', {
+      data: { firstName: 'Kello', lastName: 'Edellä', gender: 'M', birthDate: '1990-01-01', raceId: 'R1', bib: 107, consent: false },
+    })).ok()).toBeTruthy()
+    const real = Date.now()
+    await page.clock.install({ time: real + 90_000 })
+    await page.clock.resume()
+    await page.goto('/')
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('ert-clock-offset'))).toBeTruthy()
+    await page.getByTestId('nav-finish').click()
+    await expect(page.getByTestId('clock-offset')).toBeVisible()
+    const before = Date.now()
+    await page.getByTestId('finish-bib').fill('107')
+    await page.getByTestId('finish-tap').click()
+    await expect(page.getByTestId('finish-recorded')).toBeVisible()
+    const after = Date.now()
+    const listed = await request.get('/api/v1/timing-events')
+    const saved = (await listed.json() as { bib: number | null; time_ms: number; device_time_ms: number }[])
+      .filter((event) => event.bib === 107)
+    expect(saved).toHaveLength(1)
+    expect(saved[0]!.time_ms).toBeGreaterThanOrEqual(before - 2_000)
+    expect(saved[0]!.time_ms).toBeLessThanOrEqual(after + 2_000)
+    expect(saved[0]!.device_time_ms - saved[0]!.time_ms).toBeGreaterThan(80_000)
+    expect(saved[0]!.device_time_ms - saved[0]!.time_ms).toBeLessThan(100_000)
+  })
 })
 
 async function readQueue(page: Page) {

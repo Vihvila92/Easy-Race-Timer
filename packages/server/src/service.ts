@@ -758,7 +758,7 @@ export class RaceService {
     return point.id
   }
 
-  private insertTiming(input: { id?: string; deviceId?: string; raceId: string; pointId: string; timeMs: number; bib: number | null; entryId: string | null; mode: string; source: string; raw: unknown; now: number }) {
+  private insertTiming(input: { id?: string; deviceId?: string; raceId: string; pointId: string; timeMs: number; deviceTimeMs?: number; bib: number | null; entryId: string | null; mode: string; source: string; raw: unknown; now: number }) {
     const device = input.deviceId || this.deviceId
     if (input.id) {
       const existing = this.db.get<TimingRow>('SELECT * FROM timing_event WHERE id = ?', input.id)
@@ -776,10 +776,11 @@ export class RaceService {
     this.db.run('UPDATE device SET next_seq = ? WHERE id = ?', seq + 1, device)
     const id = input.id || createId()
     const normalized = touchButton.normalize({ timeMs: input.timeMs, bib: input.bib, mode: input.mode })[0]
+    const deviceTime = input.deviceTimeMs ?? normalized.timeMs
     this.db.run(
       `INSERT INTO timing_event (id, org_id, race_id, timing_point_id, device_id, seq_no, source, device_time_ms, monotonic_ms, time_ms, bib, entry_id, mode, raw_json, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      id, ORG_ID, input.raceId, input.pointId, device, seq, input.source, normalized.timeMs, normalized.timeMs, normalized.timeMs,
+      id, ORG_ID, input.raceId, input.pointId, device, seq, input.source, deviceTime, normalized.timeMs, normalized.timeMs,
       normalized.bib, input.entryId, normalized.mode, JSON.stringify(input.raw), input.now,
     )
     return this.db.get<TimingRow>('SELECT * FROM timing_event WHERE id = ?', id)!
@@ -804,7 +805,7 @@ export class RaceService {
     return this.races()[0]?.id ?? (() => { throw new AppError('RACE_NOT_STARTED', 'No race') })()
   }
 
-  recordFinish(input: { id?: string; timeMs: number; bib?: number | null; mode?: string; deviceId?: string; label?: string }) {
+  recordFinish(input: { id?: string; timeMs: number; deviceTimeMs?: number; bib?: number | null; mode?: string; deviceId?: string; label?: string }) {
     const bib = input.bib ?? null
     const raceId = this.resolveRaceId(bib, input.timeMs)
     this.assertUnlocked(raceId)
@@ -826,6 +827,7 @@ export class RaceService {
       raceId: entry?.race_id ?? raceId,
       pointId: this.finishPoint('finish'),
       timeMs: input.timeMs,
+      deviceTimeMs: input.deviceTimeMs,
       bib,
       entryId: entry?.id ?? null,
       mode: input.mode ?? 'time_first',

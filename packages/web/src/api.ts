@@ -33,24 +33,88 @@ export function loadWorkspace(): Promise<Workspace> {
   return api<Workspace>('/api/v1/bootstrap')
 }
 
-export async function clockMs(): Promise<number> {
+const CLOCK_OFFSET_KEY = 'ert-clock-offset'
+
+export interface StoredClockOffset {
+  offsetMs: number
+  rttMs: number
+  measuredAt: number
+}
+
+function testClockMs(): number | null {
   const stored = sessionStorage.getItem('ert-test-clock')
-  if (stored) {
-    const parsed = Date.parse(stored)
-    if (!Number.isNaN(parsed)) return parsed
+  if (!stored) return null
+  const parsed = Date.parse(stored)
+  return Number.isNaN(parsed) ? null : parsed
+}
+
+export function readClockOffset(): StoredClockOffset | null {
+  try {
+    const raw = localStorage.getItem(CLOCK_OFFSET_KEY)
+    if (!raw) return null
+    const parsed = JSON.parse(raw) as Partial<StoredClockOffset>
+    if (typeof parsed.offsetMs !== 'number' || !Number.isFinite(parsed.offsetMs)) return null
+    return {
+      offsetMs: parsed.offsetMs,
+      rttMs: typeof parsed.rttMs === 'number' ? parsed.rttMs : Number.POSITIVE_INFINITY,
+      measuredAt: typeof parsed.measuredAt === 'number' ? parsed.measuredAt : 0,
+    }
+  } catch {
+    return null
   }
+}
+
+/** server_time − (t0 + t1) / 2. A fast clock produces a negative offset. */
+export function estimateOffsetMs(serverMs: number, t0: number, t1: number): number {
+  return Math.round(serverMs - (t0 + t1) / 2)
+}
+
+/**
+ * Sample the server clock and keep the smallest round trip.
+ * The simulated test clock is already the server time, so it is left alone.
+ */
+export async function syncServerClock(samples = 3): Promise<StoredClockOffset | null> {
+  if (testClockMs() != null) return null
+  let best: StoredClockOffset | null = null
+  for (let i = 0; i < samples; i += 1) {
+    const t0 = Date.now()
+    let serverMs: number
+    try {
+      const body = await api<{ time_ms: number }>('/api/v1/time')
+      serverMs = body.time_ms
+    } catch {
+      continue
+    }
+    const t1 = Date.now()
+    const sample: StoredClockOffset = {
+      offsetMs: estimateOffsetMs(serverMs, t0, t1),
+      rttMs: t1 - t0,
+      measuredAt: t1,
+    }
+    if (!best || sample.rttMs < best.rttMs) best = sample
+  }
+  if (!best) return readClockOffset()
+  localStorage.setItem(CLOCK_OFFSET_KEY, JSON.stringify(best))
+  return best
+}
+
+export async function clockMs(): Promise<number> {
+  const simulated = testClockMs()
+  if (simulated != null) return simulated
   const body = await api<{ time_ms: number }>('/api/v1/time')
   return body.time_ms
 }
 
-/** Tap instant. Uses the test clock when set, otherwise the device clock. Never waits on the network. */
+/** Device clock, or the simulated test clock. Never waits on the network. */
+export function deviceNow(): number {
+  return testClockMs() ?? Date.now()
+}
+
+/** Tap instant. Test clock as-is; otherwise the device clock plus the stored server offset. */
 export function clientNow(): number {
-  const stored = sessionStorage.getItem('ert-test-clock')
-  if (stored) {
-    const parsed = Date.parse(stored)
-    if (!Number.isNaN(parsed)) return parsed
-  }
-  return Date.now()
+  const simulated = testClockMs()
+  if (simulated != null) return simulated
+  return Date.now() + (readClockOffset()?.offsetMs ?? 0)
 }
 
 export function localDeviceId(): string {

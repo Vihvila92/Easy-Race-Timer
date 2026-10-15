@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { syncServerClock } from './api.js'
 import { useApp } from './context.js'
 import { flush } from './queue.js'
 import { Wizard } from './wizard.js'
@@ -61,7 +62,15 @@ export function App() {
     const onHash = () => setHash(window.location.hash.replace('#', '') || '/office')
     window.addEventListener('hashchange', onHash)
     flush().catch(() => undefined)
-    return () => window.removeEventListener('hashchange', onHash)
+    const measure = () => { void syncServerClock() }
+    measure()
+    window.addEventListener('online', measure)
+    const timer = window.setInterval(measure, 30_000)
+    return () => {
+      window.removeEventListener('hashchange', onHash)
+      window.removeEventListener('online', measure)
+      window.clearInterval(timer)
+    }
   }, [])
   const current = VIEWS.find(([path]) => path === hash) ?? VIEWS[0]
   const View = current[2]
