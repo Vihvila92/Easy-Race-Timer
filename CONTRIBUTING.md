@@ -10,7 +10,7 @@ Issues, pull requests, commit messages, code comments and technical documentatio
 
 1. Every change starts from an issue with acceptance criteria, a label and a milestone.
 2. Work on a branch of your own, for example `feat/finish-undo` or `docs/install-guide`. Nobody pushes to `main` directly.
-3. Open a pull request that links the issue (`Closes #123`) and fill in the pull request template.
+3. Open a pull request and fill in the pull request template. Add a `Closes #n` line for every issue the pull request fixes, so GitHub closes them on merge.
 4. The pull request needs green required checks (`check` and CodeQL), a review and resolved conversations. A maintainer squash-merges it.
 5. Update the documentation in the same pull request as the change. Record architectural decisions as an ADR in [`docs/adr/`](docs/adr/).
 
