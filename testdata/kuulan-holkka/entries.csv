@@ -1,0 +1,68 @@
+etunimi;sukunimi;sukupuoli;syntymaaika;syntymavuosi;seura;seuran_lyhenne;matka;numero;sahkoposti;pitkaaikainen_tallennus;suostumuksen_antaja
+Johanna;Nieminen;N;2023-08-01;2023;Uuraisten Urheilijat;;4 km;101;johanna.nieminen@example.com;kyllä;huoltaja
+Laura;Virtanen;N;2022-03-15;2022;;;4 km;102;;ei;
+Laura;Lehtonen;N;2021-02-10;2021;Uuraisten Urheilijat;;4 km;103;;ei;
+Sofia;Kauppinen;N;2020-01-27;2020;Uuraisten Urheilijat;;4 km;104;;kyllä;huoltaja
+Oona;Koskinen;N;2021-03-22;2021;;;4 km;105;oona.koskinen@example.com;ei;
+Elli;Heikkinen;N;2019-04-26;2019;;;4 km;106;;ei;
+Lilja;Hämäläinen;N;2018-01-27;2018;Hankasalmen Hanka;;4 km;107;;kyllä;huoltaja
+Iida;Halonen;N;2019-03-25;2019;SaPu;;4 km;108;;ei;
+Paula;Hiltunen;N;2017-01-06;2017;Uuraisten Urheilijat;;4 km;109;paula.hiltunen@example.com;ei;
+Tiina;Ahonen;N;2016-03-19;2016;Uuraisten Urheilijat;;4 km;110;;kyllä;huoltaja
+Satu;Mäkinen;N;2017-03-04;2017;UU;;4 km;111;;ei;
+Riikka;Järvinen;N;2015-04-18;2015;;;4 km;112;;ei;
+Minja;Kinnunen;N;2014-01-15;2014;;;4 km;113;minja.kinnunen@example.com;kyllä;huoltaja
+Satu;Koskinen;N;2015-01-03;2015;;;4 km;114;;ei;
+Satu;Manninen;N;2013-02-19;2013;;;4 km;115;;ei;
+Anu;Tikkanen;N;2012-04-07;2012;Muuramen Yritys;;4 km;116;;kyllä;huoltaja
+Kaisa;Virtanen;N;2011-02-13;2011;Vaajakosken Terä;VaTe;4 km;117;kaisa.virtanen@example.com;ei;
+Lauri;Hiltunen;M;2023-04-24;2023;Jyväskylän Kenttäurheilijat;;4 km;118;;ei;
+Oiva;Räsänen;M;2022-04-02;2022;Uuraisten Urh.;;4 km;119;;kyllä;huoltaja
+Lauri;Laine;M;2021-06-12;2021;Uuraisten Urheilijat;;4 km;120;;ei;
+Jarmo;Laine;M;2020-01-02;2020;;;4 km;121;jarmo.laine@example.com;ei;
+Elias;Mäkinen;M;2021-04-12;2021;JKU;;4 km;122;;kyllä;huoltaja
+Timo;Nieminen;M;2019-12-30;2019;UU;;4 km;123;;ei;
+Kari;Turunen;M;2018-05-10;2018;Jyväskylän Kenttäurh;;4 km;124;;ei;
+Joel;Korhonen;M;2019-03-13;2019;SaPu;;4 km;125;joel.korhonen@example.com;kyllä;huoltaja
+Veikko;Turunen;M;2017-01-11;2017;;;4 km;126;;ei;
+Kari;Halonen;M;2016-02-14;2016;;;4 km;127;;ei;
+Eino;Tikkanen;M;2017-03-27;2017;Uuraisten Urheilijat;;4 km;128;;kyllä;huoltaja
+Väinö;Virtanen;M;2015-02-18;2015;Hanka;;4 km;129;vaino.virtanen@example.com;ei;
+Veikko;Tikkanen;M;2014-03-24;2014;;;4 km;130;;ei;
+Sami;Heikkinen;M;2015-01-20;2015;Uuraisten Urh.;;4 km;131;;kyllä;huoltaja
+Petri;Kokkonen;M;2013-01-21;2013;Uuraisten Urheilijat;;4 km;132;;ei;
+Pekka;Mäkinen;M;2012-03-28;2012;Jyväskylän Kenttäurheilijat;;4 km;133;pekka.makinen@example.com;ei;
+Sami;Leppänen;M;2013-03-01;2013;Saarijärven Pullistus;;4 km;134;;kyllä;huoltaja
+Akseli;Hiltunen;M;2009-06-13;2009;;;4 km;135;;ei;
+Joel;Pitkänen;M;2010-03-12;2010;;;4 km;136;;ei;
+Venla;Kinnunen;N;2005-04-17;2005;Uuraisten Urheilijat;;8 km;201;venla.kinnunen@example.com;kyllä;
+Siiri;Mäkinen;N;1981-06-28;1981;;;8 km;202;siiri.makinen@example.com;ei;
+Pihla;Kettunen;N;1959-09-13;1959;Uuraisten Urheilijat;;8 km;203;pihla.kettunen@example.com;ei;
+Sofia;Kokkonen;N;1965-03-12;1965;;;8 km;204;sofia.kokkonen@example.com;kyllä;
+Kerttu;Mustonen;N;1966-05-17;1966;MuYr;;8 km;205;kerttu.mustonen@example.com;ei;
+Sofia;Mäkinen;N;2002-08-15;2002;Uuraisten Urheilijat;;8 km;206;sofia.makinen@example.com;ei;
+Aino;Peltonen;N;1998-07-02;1998;;;8 km;207;aino.peltonen@example.com;kyllä;
+Maija;Rantanen;N;1977-02-07;1977;;;8 km;208;maija.rantanen@example.com;ei;
+Kerttu;Kokkonen;N;1972-04-05;1972;Jyväskylän Kenttäurheilijat;;8 km;209;kerttu.kokkonen@example.com;ei;
+Aino;Kärkkäinen;N;1978-11-26;1978;;;8 km;210;aino.karkkainen@example.com;kyllä;
+Paula;Ahonen;N;2005-03-15;2005;Uuraisten Urheilijat;;8 km;211;paula.ahonen@example.com;ei;
+Emma;Hiltunen;N;1962-04-19;1962;;;8 km;212;emma.hiltunen@example.com;ei;
+Lilja;Manninen;N;1981-05-10;1981;PePe;;8 km;213;lilja.manninen@example.com;kyllä;
+Riikka;Kauppinen;N;2010-04-20;2010;;;8 km;214;riikka.kauppinen@example.com;ei;
+Satu;Järvinen;N;2002-11-10;2002;Jyväskylän Kenttäurheilijat;;8 km;215;satu.jarvinen@example.com;ei;
+Jussi;Ahonen;M;;1975;MuYr;;8 km;216;jussi.ahonen@example.com;kyllä;
+Janne;Leppänen;M;1985-01-17;1985;Uuraisten Urheilijat;;8 km;217;janne.leppanen@example.com;ei;
+Marko;Mustonen;M;1976-03-09;1976;uuraisten  urheilijat ;;8 km;218;marko.mustonen@example.com;ei;
+Juha;Halonen;M;1966-12-08;1966;Uuraisten Urheilijat;;8 km;219;juha.halonen@example.com;kyllä;
+Leo;Leppänen;M;1974-12-02;1974;PePe;;8 km;220;leo.leppanen@example.com;ei;
+Elias;Turunen;M;1982-06-07;1982;JKU;;8 km;221;elias.turunen@example.com;ei;
+Jussi;Väisänen;M;1969-03-01;1969;Hanka;;8 km;222;jussi.vaisanen@example.com;kyllä;
+Petri;Salonen;M;1964-10-19;1964;;;8 km;223;petri.salonen@example.com;ei;
+Juha;Kärkkäinen;M;1971-12-17;1971;;;8 km;224;juha.karkkainen@example.com;ei;
+Eino;Koskinen;M;1981-03-05;1981;Uuraisten Urheilijat;;8 km;225;eino.koskinen@example.com;kyllä;
+Niilo;Pitkänen;M;1982-03-14;1982;Vaajakosken Teräs;VaTe;8 km;226;niilo.pitkanen@example.com;ei;
+Mikko;Tikkanen;M;2000-09-23;2000;UU;;8 km;227;mikko.tikkanen@example.com;ei;
+Timo;Kettunen;M;1988-10-25;1988;Petäjäveden Petäjät;;8 km;228;timo.kettunen@example.com;kyllä;
+Antti;Turunen;M;1963-08-03;1963;;UU;8 km;229;antti.turunen@example.com;ei;
+Sami;Turunen;M;1966-04-22;1966;;;8 km;230;sami.turunen@example.com;ei;
+Niilo;Mäkinen;M;2000-12-13;2000;Saarijärven Pullistus;;8 km;231;niilo.makinen@example.com;kyllä;

@@ -1,0 +1,54 @@
+{
+  "description": "Seurarekisteri ennen Kuulan hölkkää (kertynyt aiemmista kisoista). CL_UU_DUP on kaksoiskappale.",
+  "clubs": [
+    {
+      "id": "CL_UU",
+      "abbreviation": "UU",
+      "name": "Uuraisten Urheilijat",
+      "municipality": "Uurainen",
+      "official_id": "TEST-0001"
+    },
+    {
+      "id": "CL_JKU",
+      "abbreviation": "JKU",
+      "name": "Jyväskylän Kenttäurheilijat",
+      "municipality": "Jyväskylä",
+      "official_id": "TEST-0002"
+    },
+    {
+      "id": "CL_SAPU",
+      "abbreviation": "SaPu",
+      "name": "Saarijärven Pullistus",
+      "municipality": "Saarijärvi",
+      "official_id": ""
+    },
+    {
+      "id": "CL_HANKA",
+      "abbreviation": "Hanka",
+      "name": "Hankasalmen Hanka",
+      "municipality": "Hankasalmi",
+      "official_id": ""
+    },
+    {
+      "id": "CL_PEPE",
+      "abbreviation": "PePe",
+      "name": "Petäjäveden Petäjät",
+      "municipality": "Petäjävesi",
+      "official_id": ""
+    },
+    {
+      "id": "CL_MUYR",
+      "abbreviation": "MuYr",
+      "name": "Muuramen Yritys",
+      "municipality": "Muurame",
+      "official_id": ""
+    },
+    {
+      "id": "CL_UU_DUP",
+      "abbreviation": null,
+      "name": "Uuraisten Urh.",
+      "municipality": "",
+      "official_id": ""
+    }
+  ]
+}

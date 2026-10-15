@@ -1,0 +1,346 @@
+{
+  "id": "EV_KUULAN_HOLKKA_2027",
+  "name": "Kuulan hölkkä 2027",
+  "organizer": "Uuraisten Urheilijat ry",
+  "location": "Uurainen",
+  "date": "2027-06-12",
+  "timezone": "Europe/Helsinki",
+  "sport": "run",
+  "locale_default": "fi",
+  "settings": {
+    "age_basis": "birth_date",
+    "age_reference_date": "2027-06-12",
+    "below_youngest_category": "assign_with_warning",
+    "rounding": "floor_1s",
+    "tie_resolution": "confirmed_order",
+    "offset_start_policy_default": "ranked",
+    "bib_ranges": {
+      "R4": [
+        101,
+        199
+      ],
+      "R8": [
+        201,
+        299
+      ]
+    }
+  },
+  "races": [
+    {
+      "id": "R4",
+      "name": {
+        "fi": "4 km",
+        "en": "4 km"
+      },
+      "distance_m": 4000,
+      "start_mode": "mass",
+      "scheduled_start": "2027-06-12T11:00:00+03:00",
+      "open_category_id": null
+    },
+    {
+      "id": "R8",
+      "name": {
+        "fi": "8 km",
+        "en": "8 km"
+      },
+      "distance_m": 8000,
+      "start_mode": "mass",
+      "scheduled_start": "2027-06-12T11:30:00+03:00",
+      "open_category_id": "K8"
+    }
+  ],
+  "categories": [
+    {
+      "id": "T4",
+      "race_id": "R4",
+      "gender": "F",
+      "min_age": 4,
+      "max_age": 5,
+      "ranked": true,
+      "name": {
+        "fi": "T4",
+        "en": "G4"
+      },
+      "description": {
+        "fi": "Tytöt 4–5 v",
+        "en": "Girls 4–5 y"
+      }
+    },
+    {
+      "id": "T6",
+      "race_id": "R4",
+      "gender": "F",
+      "min_age": 6,
+      "max_age": 7,
+      "ranked": true,
+      "name": {
+        "fi": "T6",
+        "en": "G6"
+      },
+      "description": {
+        "fi": "Tytöt 6–7 v",
+        "en": "Girls 6–7 y"
+      }
+    },
+    {
+      "id": "T8",
+      "race_id": "R4",
+      "gender": "F",
+      "min_age": 8,
+      "max_age": 9,
+      "ranked": true,
+      "name": {
+        "fi": "T8",
+        "en": "G8"
+      },
+      "description": {
+        "fi": "Tytöt 8–9 v",
+        "en": "Girls 8–9 y"
+      }
+    },
+    {
+      "id": "T10",
+      "race_id": "R4",
+      "gender": "F",
+      "min_age": 10,
+      "max_age": 11,
+      "ranked": true,
+      "name": {
+        "fi": "T10",
+        "en": "G10"
+      },
+      "description": {
+        "fi": "Tytöt 10–11 v",
+        "en": "Girls 10–11 y"
+      }
+    },
+    {
+      "id": "T12",
+      "race_id": "R4",
+      "gender": "F",
+      "min_age": 12,
+      "max_age": 13,
+      "ranked": true,
+      "name": {
+        "fi": "T12",
+        "en": "G12"
+      },
+      "description": {
+        "fi": "Tytöt 12–13 v",
+        "en": "Girls 12–13 y"
+      }
+    },
+    {
+      "id": "T14",
+      "race_id": "R4",
+      "gender": "F",
+      "min_age": 14,
+      "max_age": 15,
+      "ranked": true,
+      "name": {
+        "fi": "T14",
+        "en": "G14"
+      },
+      "description": {
+        "fi": "Tytöt 14–15 v",
+        "en": "Girls 14–15 y"
+      }
+    },
+    {
+      "id": "T16",
+      "race_id": "R4",
+      "gender": "F",
+      "min_age": 16,
+      "max_age": 17,
+      "ranked": true,
+      "name": {
+        "fi": "T16",
+        "en": "G16"
+      },
+      "description": {
+        "fi": "Tytöt 16–17 v",
+        "en": "Girls 16–17 y"
+      }
+    },
+    {
+      "id": "P4",
+      "race_id": "R4",
+      "gender": "M",
+      "min_age": 4,
+      "max_age": 5,
+      "ranked": true,
+      "name": {
+        "fi": "P4",
+        "en": "B4"
+      },
+      "description": {
+        "fi": "Pojat 4–5 v",
+        "en": "Boys 4–5 y"
+      }
+    },
+    {
+      "id": "P6",
+      "race_id": "R4",
+      "gender": "M",
+      "min_age": 6,
+      "max_age": 7,
+      "ranked": true,
+      "name": {
+        "fi": "P6",
+        "en": "B6"
+      },
+      "description": {
+        "fi": "Pojat 6–7 v",
+        "en": "Boys 6–7 y"
+      }
+    },
+    {
+      "id": "P8",
+      "race_id": "R4",
+      "gender": "M",
+      "min_age": 8,
+      "max_age": 9,
+      "ranked": true,
+      "name": {
+        "fi": "P8",
+        "en": "B8"
+      },
+      "description": {
+        "fi": "Pojat 8–9 v",
+        "en": "Boys 8–9 y"
+      }
+    },
+    {
+      "id": "P10",
+      "race_id": "R4",
+      "gender": "M",
+      "min_age": 10,
+      "max_age": 11,
+      "ranked": true,
+      "name": {
+        "fi": "P10",
+        "en": "B10"
+      },
+      "description": {
+        "fi": "Pojat 10–11 v",
+        "en": "Boys 10–11 y"
+      }
+    },
+    {
+      "id": "P12",
+      "race_id": "R4",
+      "gender": "M",
+      "min_age": 12,
+      "max_age": 13,
+      "ranked": true,
+      "name": {
+        "fi": "P12",
+        "en": "B12"
+      },
+      "description": {
+        "fi": "Pojat 12–13 v",
+        "en": "Boys 12–13 y"
+      }
+    },
+    {
+      "id": "P14",
+      "race_id": "R4",
+      "gender": "M",
+      "min_age": 14,
+      "max_age": 15,
+      "ranked": true,
+      "name": {
+        "fi": "P14",
+        "en": "B14"
+      },
+      "description": {
+        "fi": "Pojat 14–15 v",
+        "en": "Boys 14–15 y"
+      }
+    },
+    {
+      "id": "P16",
+      "race_id": "R4",
+      "gender": "M",
+      "min_age": 16,
+      "max_age": 17,
+      "ranked": true,
+      "name": {
+        "fi": "P16",
+        "en": "B16"
+      },
+      "description": {
+        "fi": "Pojat 16–17 v",
+        "en": "Boys 16–17 y"
+      }
+    },
+    {
+      "id": "N",
+      "race_id": "R8",
+      "gender": "F",
+      "min_age": 16,
+      "max_age": null,
+      "ranked": true,
+      "name": {
+        "fi": "N",
+        "en": "W"
+      },
+      "description": {
+        "fi": "Naiset (18 v; myös 16–17 v, jotka valitsevat 8 km)",
+        "en": "Women (18+; also 16–17 choosing 8 km)"
+      }
+    },
+    {
+      "id": "M",
+      "race_id": "R8",
+      "gender": "M",
+      "min_age": 16,
+      "max_age": null,
+      "ranked": true,
+      "name": {
+        "fi": "M",
+        "en": "M"
+      },
+      "description": {
+        "fi": "Miehet (18 v; myös 16–17 v, jotka valitsevat 8 km)",
+        "en": "Men (18+; also 16–17 choosing 8 km)"
+      }
+    },
+    {
+      "id": "K8",
+      "race_id": "R8",
+      "gender": null,
+      "min_age": null,
+      "max_age": null,
+      "ranked": false,
+      "auto_assign": false,
+      "name": {
+        "fi": "Kunto 8 km",
+        "en": "Open 8 km"
+      },
+      "description": {
+        "fi": "Sijoittamaton",
+        "en": "Unranked"
+      }
+    }
+  ],
+  "timing_points": [
+    {
+      "id": "TP_START",
+      "kind": "start",
+      "name": "Lähtö"
+    },
+    {
+      "id": "TP_FINISH",
+      "kind": "finish",
+      "name": "Maali"
+    }
+  ],
+  "devices": [
+    {
+      "id": "DEV_LAPTOP_1",
+      "name": "Läppäri 1 (lähtö + maali)",
+      "role": "primary"
+    }
+  ]
+}

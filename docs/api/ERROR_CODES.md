@@ -1,14 +1,28 @@
-# API Error Codes (Draft)
+# Virhekoodit
 
-| Code | HTTP | Meaning | Notes |
-|------|------|---------|-------|
-| ORG_HEADER_REQUIRED | 400 | Missing x-org-id header | Sent by requireOrgMiddleware |
-| VALIDATION_ERROR | 422 | Input validation failed | Includes Zod issues array |
-| ENTRY_EXISTS | 409 | Duplicate competition entry | Unique constraint violation |
-| NOT_FOUND | 404 | Resource not visible or missing | RLS may hide resources |
+Jokainen virhevastaus on JSON:
 
-## Conventions
+```json
+{ "error": { "code": "BIB_IN_USE", "message": "Bib 150 is already used", "details": {} } }
+```
 
-- `error.code` is stable for client logic.
-- Additional details in `error.details` when present (e.g., validation issues).
-- Future errors (auth, rate limiting) will be appended here.
+`details` puuttuu, jos sitä ei ole. Viesti on koneelle suunnattu englanninkielinen selite. Käyttöliittymä näyttää koodin.
+
+| Koodi | HTTP | Milloin |
+|---|---|---|
+| `VALIDATION_ERROR` | 422 | Runko, CSV-rivi tai puuttuva syy ei kelpaa. Myös toinen yhteislähtö ilman `confirm`. |
+| `NOT_FOUND` | 404 | Tapahtumaa, matkaa, lappua, seuraa tai yhdistämistä ei löydy. |
+| `ENTRY_EXISTS` | 409 | Sama nimi ja syntymävuosi on jo kannassa. |
+| `BIB_IN_USE` | 409 | Lappu on jo käytössä samalla matkalla. |
+| `RACE_NOT_STARTED` | 409 | Maali ennen lähtöä. |
+| `EVENT_LOCKED` | 423 | Matka on lukittu. |
+| `LOCK_BLOCKED` | 409 | Lukitus estyy. `details.blockers` luettelee syyt (`entry:<lappu>:no_result`, `tie:<matka>:<näyttöaika>`). |
+| `PIN_REQUIRED` | 401 | PIN puuttuu tai on väärä. |
+| `NO_MATCHING_CATEGORY` | 422 | Ikä ja sukupuoli eivät sovi millekään kohdematkan sarjalle. |
+| `TIE_UNCONFIRMED` | 409 | Tasatulosta ei ole vahvistettu. |
+| `CLUB_ABBREVIATION_TAKEN` | 409 | Aktiivisella seuralla on jo tämä lyhenne. |
+| `CLUB_ABBREVIATION_CONFLICT` | 409 | Lyhenne osuu seuraan, jonka nimi ei täsmää. |
+| `SYNC_CONFLICT` | 409 | Varattu v0.2:n ristiriidalle. |
+| `BACKUP_FAILED` | 500 | Varmuuskopio epäonnistui. Migraatio, lukitus, tuonti tai säilytysajo ei jatka. |
+
+`ORG_HEADER_REQUIRED` poistettiin. v0.1:ssä organisaatio on aina `'local'`, eikä otsikkoa vaadita.

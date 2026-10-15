@@ -1,51 +1,52 @@
 # Security Policy
 
-## Supported Status
+## Supported status
 
-At this early stage (pre-MVP) security updates are handled ad-hoc. As releases are tagged, a support window policy will be added (e.g., last 2 minor versions).
+v0.1 is a local race-day app. Security fixes are handled as they are reported. A support window for tagged releases will be added when releases exist.
 
-## Reporting a Vulnerability
+## Reporting a vulnerability
 
-Please email: [valtteri@vehvilainen.cc](mailto:valtteri@vehvilainen.cc)
+Email [valtteri@vehvilainen.cc](mailto:valtteri@vehvilainen.cc).
 
-Provide (if possible):
+Include, when you can:
 
-1. A clear description of the issue
-2. Steps to reproduce / proof-of-concept
-3. Impact assessment (data exposure, privilege escalation, integrity risk, DoS, etc.)
-4. Suggested remediation (optional)
+1. A clear description
+2. Steps to reproduce
+3. Impact (data exposure, integrity, denial of service)
+4. A suggested fix (optional)
 
 We aim to acknowledge within 5 business days.
 
-DO NOT open public GitHub issues for vulnerabilities.
+Do not open a public GitHub issue for a vulnerability.
 
 ## Scope
 
 In scope:
 
-- Backend API (authentication, authorization, multi-tenant isolation)
-- WebSocket real-time channels
-- Manual timing import integrity
-- Data export / anonymization workflows
+- The local Fastify API and the SQLite database on the race laptop
+- Finish-tap integrity (append-only events, idempotent ids, crash between taps)
+- CSV import, results export and the anonymization job
+- The PIN gate and the WebSocket channel on localhost
 
-Out of scope (for now):
+Out of scope for v0.1:
 
-- Third-party services (cloud provider managed layers)
-- Local environment misconfiguration
+- Multi-tenant isolation and hosted SaaS (not in this version)
+- Third-party cloud services
+- A laptop that is already compromised, or a database file copied off the machine
+- Paper and web copies of results published before anonymization
 
-## Handling Process
+## Handling
 
-1. Receive & triage report
-2. Reproduce and classify severity (LOW / MEDIUM / HIGH / CRITICAL)
-3. Develop fix in private branch if sensitive
-4. Release patch & security advisory (once public repo has code)
-5. Credit reporter (optional on request)
+1. Triage the report
+2. Reproduce and rate severity (LOW / MEDIUM / HIGH / CRITICAL)
+3. Fix on a private branch when the report is sensitive
+4. Ship the patch and credit the reporter if they want credit
 
-## Design Principles
+## Defaults
 
-- Defense in depth (RLS, app-layer auth, input validation)
-- Principle of least privilege (scoped roles, minimal tokens)
-- Secure by default (HTTPS/WSS, no default admin credentials)
-- Auditability (timing imports + admin actions logged)
+- The server binds to localhost. Opening it on a LAN is a later, explicit choice.
+- SQLite uses WAL and `synchronous=FULL`.
+- Admin actions require a reason and are stored in the correction log.
+- Wrong PIN attempts are rate-limited.
 
-Last updated: 9 Aug 2025
+Last updated: 14 Oct 2026

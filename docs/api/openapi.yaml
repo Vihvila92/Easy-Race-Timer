@@ -1,159 +1,804 @@
 openapi: 3.1.0
 info:
-  title: Easy Race Timer API
+  title: Easy Race Timer
   version: 0.1.0
   description: |
-    Early draft OpenAPI spec (partial). Covers competitions and entries endpoints.
+    Local race-day API. One laptop, organization id always `local`.
+    Clients create identifiers and finish times. Errors use the shape in ERROR_CODES.md.
+    Write routes, personal-data reads, `?view=internal`, and `/runtime` from a non-loopback address require a device token (`Authorization: Bearer` or the `ert_session` cookie). `POST /api/v1/settings/pin/check` issues that token.
+    HTML (`format=html`) is a print export, not an application page.
+    `Host` must be `localhost` or `127.0.0.1` on the listen port (421 otherwise).
+    A browser `Origin`, when sent, must be that same loopback origin (403 otherwise). WebSocket upgrades always require it.
+    State-changing requests require `Content-Type: application/json` (415 otherwise).
 servers:
-  - url: https://api.example.com
-    description: Production (placeholder)
-  - url: http://localhost:3000
-    description: Local development
+  - url: /
+    description: The window and the API share one origin. The process chooses a free local port at startup.
+tags:
+  - name: system
+  - name: setup
+  - name: clubs
+  - name: entries
+  - name: timing
+  - name: results
+  - name: privacy
+  - name: sync
 paths:
-  /competitions:
+  /api/v1/health:
     get:
-      summary: List competitions
-      parameters:
-        - in: header
-          name: x-org-id
-          required: true
-          schema: { type: string, format: uuid }
-        - in: query
-          name: limit
-          schema: { type: integer, minimum: 1, maximum: 200, default: 100 }
-        - in: query
-          name: offset
-          schema: { type: integer, minimum: 0, default: 0 }
+      tags: [system]
+      operationId: health
       responses:
         '200':
-          description: OK
+          description: Process is up
           content:
             application/json:
               schema:
                 type: object
+                required: [ok, version, pinConfigured]
                 properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/Competition'
-                  pagination:
-                    $ref: '#/components/schemas/Pagination'
-        '400': { $ref: '#/components/responses/OrgHeaderRequired' }
-    post:
-      summary: Create competition
-      parameters:
-        - in: header
-          name: x-org-id
-          required: true
-          schema: { type: string, format: uuid }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateCompetition'
-      responses:
-        '201':
-          description: Created
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data: { $ref: '#/components/schemas/Competition' }
-        '400': { $ref: '#/components/responses/OrgHeaderRequired' }
-        '422': { $ref: '#/components/responses/ValidationError' }
-  /entries:
-    post:
-      summary: Create competition entry
-      parameters:
-        - in: header
-          name: x-org-id
-          required: true
-          schema: { type: string, format: uuid }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateEntry'
-      responses:
-        '201':
-          description: Created
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data: { $ref: '#/components/schemas/Entry' }
-        '400': { $ref: '#/components/responses/OrgHeaderRequired' }
-        '404': { $ref: '#/components/responses/NotFound' }
-        '409': { $ref: '#/components/responses/EntryExists' }
-        '422': { $ref: '#/components/responses/ValidationError' }
-  /competitions/{id}/entries:
+                  ok: { type: boolean }
+                  version: { type: string }
+                  pinConfigured: { type: boolean }
+  /api/v1/runtime:
     get:
-      summary: List entries for a competition
-      parameters:
-        - in: header
-          name: x-org-id
-          required: true
-          schema: { type: string, format: uuid }
-        - in: path
-          name: id
-          required: true
-          schema: { type: string, format: uuid }
-        - in: query
-          name: limit
-          schema: { type: integer, minimum: 1, maximum: 1000, default: 500 }
-        - in: query
-          name: offset
-          schema: { type: integer, minimum: 0, default: 0 }
+      tags: [system]
+      operationId: runtime
+      description: Where this process is listening and where it stores the SQLite file. Loopback may read it; every other client needs a device token.
       responses:
-        '200': { description: OK }
-        '400': { $ref: '#/components/responses/OrgHeaderRequired' }
-        '404': { $ref: '#/components/responses/NotFound' }
+        '200':
+          description: Launch facts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url, dataDir, dbPath]
+                properties:
+                  url: { type: string }
+                  dataDir: { type: string }
+                  dbPath: { type: string }
+  /api/v1/time:
+    get:
+      tags: [system]
+      operationId: time
+      responses:
+        '200':
+          description: Server clock
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  time_ms: { type: integer }
+                  iso: { type: string }
+  /api/v1/test/clock:
+    post:
+      tags: [system]
+      operationId: setTestClock
+      description: Only when the server is started with ERT_TEST_MODE=1.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                at: { type: string, nullable: true }
+      responses:
+        '200': { description: Clock updated }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/bootstrap:
+    get:
+      tags: [setup]
+      operationId: bootstrap
+      responses:
+        '200':
+          description: Workspace for the local UI
+  /api/v1/events/import:
+    post:
+      tags: [setup]
+      operationId: importEvent
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, name, date, races, categories]
+              properties:
+                id: { type: string }
+                name: { type: string }
+                date: { type: string }
+                timezone: { type: string }
+                organizer: { type: string }
+                location: { type: string }
+                races: { type: array, items: { type: object } }
+                categories: { type: array, items: { type: object } }
+                settings: { type: object }
+      responses:
+        '200': { description: Event stored }
+        '422': { $ref: '#/components/responses/Error' }
+  /api/v1/clubs/import:
+    post:
+      tags: [clubs]
+      operationId: importClubs
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [clubs]
+              properties:
+                clubs:
+                  type: array
+                  items:
+                    type: object
+                    required: [id, name]
+                    properties:
+                      id: { type: string }
+                      abbreviation: { type: string, nullable: true }
+                      name: { type: string }
+                      municipality: { type: string }
+                      official_id: { type: string }
+      responses:
+        '200': { description: Clubs inserted }
+  /api/v1/clubs:
+    get:
+      tags: [clubs]
+      operationId: searchOrListClubs
+      parameters:
+        - in: query
+          name: q
+          schema: { type: string }
+          description: Present, including empty, runs search. Absent lists every club.
+      responses:
+        '200': { description: Clubs or search hits }
+    post:
+      tags: [clubs]
+      operationId: createClub
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [abbreviation, name]
+              properties:
+                abbreviation: { type: string }
+                name: { type: string }
+                municipality: { type: string }
+                raw: { type: string }
+      responses:
+        '200': { description: Created }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/v1/clubs/duplicates:
+    get:
+      tags: [clubs]
+      operationId: duplicateClubs
+      responses:
+        '200': { description: Suggested merge pairs }
+  /api/v1/clubs/{id}/merge:
+    post:
+      tags: [clubs]
+      operationId: mergeClubs
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetId, reason]
+              properties:
+                targetId: { type: string }
+                reason: { type: string }
+                addAlias: { type: boolean }
+      responses:
+        '200':
+          description: Entries moved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  moved: { type: integer }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/v1/clubs/{id}/unmerge:
+    post:
+      tags: [clubs]
+      operationId: unmergeClub
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        '200':
+          description: Previous entries restored
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  restored: { type: integer }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/entries/import/preview:
+    post:
+      tags: [entries]
+      operationId: previewEntries
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [csv]
+              properties:
+                csv: { type: string }
+      responses:
+        '200': { description: Row, category and club preview }
+  /api/v1/entries/import:
+    post:
+      tags: [entries]
+      operationId: importEntries
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [csv]
+              properties:
+                csv: { type: string }
+      responses:
+        '200': { description: Imported }
+        '422': { $ref: '#/components/responses/Error' }
+  /api/v1/entries/late:
+    post:
+      tags: [entries]
+      operationId: registerLate
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object }
+      responses:
+        '200': { description: Registered }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/v1/entries/change-bib:
+    post:
+      tags: [entries]
+      operationId: changeBib
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bibFrom, bibTo, reason]
+              properties:
+                bibFrom: { type: integer }
+                bibTo: { type: integer }
+                reason: { type: string }
+      responses:
+        '200': { description: Changed }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/v1/entries/status:
+    post:
+      tags: [entries]
+      operationId: setStatus
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bib, status, reason]
+              properties:
+                bib: { type: integer }
+                status: { type: string, enum: [registered, started, finished, dns, dnf, dsq] }
+                reason: { type: string }
+      responses:
+        '200': { description: Updated }
+        '423': { $ref: '#/components/responses/Error' }
+  /api/v1/entries/offset:
+    post:
+      tags: [entries]
+      operationId: setStartOffset
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bib, offsetMs, reason]
+              properties:
+                bib: { type: integer }
+                offsetMs: { type: integer }
+                reason: { type: string }
+      responses:
+        '200': { description: Offset stored }
+  /api/v1/entries/race:
+    post:
+      tags: [entries]
+      operationId: changeRace
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bib, race, reason]
+              properties:
+                bib: { type: integer }
+                race: { type: string }
+                bibTo: { type: integer }
+                reason: { type: string }
+      responses:
+        '200': { description: Moved }
+        '422': { $ref: '#/components/responses/Error' }
+  /api/v1/suggestions:
+    get:
+      tags: [entries]
+      operationId: suggestions
+      parameters:
+        - in: query
+          name: basis
+          schema: { type: string, enum: [birth_date, birth_year] }
+      responses:
+        '200': { description: Category suggestions, not applied }
+  /api/v1/settings/age-basis:
+    post:
+      tags: [setup]
+      operationId: setAgeBasis
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [basis]
+              properties:
+                basis: { type: string, enum: [birth_date, birth_year] }
+                apply: { type: boolean }
+      responses:
+        '200': { description: Suggestions, applied only when apply is true }
+  /api/v1/settings/offset-policy:
+    post:
+      tags: [setup]
+      operationId: setOffsetPolicy
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [policy]
+              properties:
+                policy: { type: string, enum: [ranked, unranked, open_category] }
+      responses:
+        '200': { description: Policy stored. Positive offsets stay ranked. }
+  /api/v1/settings/pin:
+    post:
+      tags: [setup]
+      operationId: setPin
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+                properties:
+                  pin: { type: string }
+                  currentPin:
+                    type: string
+                    description: Required when a PIN is already set.
+      responses:
+        '200': { description: PIN stored }
+        '401': { $ref: '#/components/responses/Error' }
+  /api/v1/settings/pin/check:
+    post:
+      tags: [setup]
+      operationId: checkPin
+      description: |
+        Checks the PIN and returns a device token. The same token is set as an HttpOnly SameSite=Strict cookie named ert_session (about 12 hours).
+        When no PIN is configured yet, a setup session is issued only to a loopback client. The process also refuses to listen on a non-loopback address until a PIN is set.
+      responses:
+        '200':
+          description: Device token
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, token]
+                properties:
+                  ok: { type: boolean }
+                  token: { type: string }
+        '401': { $ref: '#/components/responses/Error' }
+  /api/v1/club-actions/confirm:
+    post:
+      tags: [clubs]
+      operationId: confirmClub
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [raw, clubId, reason]
+              properties:
+                raw: { type: string }
+                clubId: { type: string }
+                addAlias: { type: boolean }
+                reason: { type: string }
+      responses:
+        '200': { description: Linked }
+  /api/v1/club-actions/conflict:
+    post:
+      tags: [clubs]
+      operationId: resolveAbbreviationConflict
+      responses:
+        '200': { description: Resolved }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/v1/races/{id}/start:
+    post:
+      tags: [timing]
+      operationId: startRace
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                timeMs: { type: integer }
+                confirm: { type: boolean }
+      responses:
+        '200': { description: Started, or confirmed no-op }
+        '422': { $ref: '#/components/responses/Error' }
+  /api/v1/races/{id}/lock:
+    post:
+      tags: [timing]
+      operationId: lockRace
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200': { description: Locked }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/v1/races/{id}/unlock:
+    post:
+      tags: [timing]
+      operationId: unlockRace
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties:
+                reason: { type: string }
+      responses:
+        '200': { description: Unlocked }
+  /api/v1/races/{id}/lock-blockers:
+    get:
+      tags: [timing]
+      operationId: lockBlockers
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200': { description: Blockers }
+  /api/v1/timing-events:
+    get:
+      tags: [timing]
+      operationId: listTimingEvents
+      responses:
+        '200': { description: Finish events }
+    post:
+      tags: [timing]
+      operationId: recordFinish
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [timeMs]
+              properties:
+                id: { type: string }
+                timeMs: { type: integer, description: Finish instant corrected by the device's stored server-clock offset. }
+                deviceTimeMs: { type: integer, description: Raw device clock at the tap. Stored separately from timeMs. }
+                bib: { type: integer, nullable: true }
+                mode: { type: string }
+                deviceId: { type: string }
+                label: { type: string, description: Display F-number. The stored id is a ULID scoped by device. }
+      responses:
+        '200': { description: Stored. Repeating the same id and payload is idempotent. }
+        '409': { description: The id already belongs to a different finish. The new tap is not stored. }
+  /api/v1/corrections/assign-bib:
+    post:
+      tags: [timing]
+      operationId: assignBib
+      responses:
+        '200': { description: Assigned }
+  /api/v1/corrections/void:
+    post:
+      tags: [timing]
+      operationId: voidTap
+      responses:
+        '200': { description: Voided }
+  /api/v1/corrections/restore:
+    post:
+      tags: [timing]
+      operationId: restoreTap
+      responses:
+        '200': { description: Restored }
+  /api/v1/corrections/copy-time:
+    post:
+      tags: [timing]
+      operationId: copyTime
+      responses:
+        '200': { description: New event with the same time }
+  /api/v1/ties:
+    get:
+      tags: [timing]
+      operationId: tieGroups
+      responses:
+        '200': { description: Groups sharing a floored second }
+  /api/v1/ties/confirm:
+    post:
+      tags: [timing]
+      operationId: confirmTie
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [raceId, displayTime, orderBibs, basis, reason]
+              properties:
+                raceId: { type: string }
+                displayTime: { type: string }
+                orderBibs:
+                  type: array
+                  items:
+                    type: array
+                    items: { type: integer }
+                basis: { type: string }
+                reason: { type: string }
+      responses:
+        '200': { description: Order stored }
+  /api/v1/ties/undo:
+    post:
+      tags: [timing]
+      operationId: undoTie
+      responses:
+        '200': { description: Confirmation reopened }
+  /api/v1/results:
+    get:
+      tags: [results]
+      operationId: results
+      parameters:
+        - in: query
+          name: format
+          schema: { type: string, enum: [json, csv, html] }
+        - in: query
+          name: view
+          schema: { type: string, enum: [public, internal] }
+        - in: query
+          name: locale
+          schema: { type: string, enum: [fi, en] }
+      description: >
+        Public results are a whitelist: place, bib, published name, club, category, time and status.
+        They omit entry ids, birth dates, email and guardian details. Names follow each person's
+        publication level (`full`, `initials`, `bib_only`, `hidden`). Under 15 the default is initials.
+        `view=internal` requires a device token and returns the organizer's unmasked rows.
+      responses:
+        '200':
+          description: Results. CSV is UTF-8 with BOM and semicolon separators.
+        '401': { $ref: '#/components/responses/Error' }
+  /api/v1/club-stats:
+    get:
+      tags: [results]
+      operationId: clubStats
+      responses:
+        '200': { description: Club statistics }
+  /api/v1/audit:
+    get:
+      tags: [results]
+      operationId: audit
+      responses:
+        '200': { description: Corrections }
+  /api/v1/retention/run:
+    post:
+      tags: [privacy]
+      operationId: runRetention
+      description: >
+        Without `confirm`, returns how many people would be anonymized and does not write.
+        `at` is accepted only when the server is in test mode; otherwise the request is rejected
+        with 400 and nobody is anonymized. A confirmed run requires every race to be locked,
+        the retention deadline to have passed, and an awaited backup.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                at: { type: string, description: Test mode only }
+                confirm: { type: boolean }
+      responses:
+        '200':
+          description: Preview, or the anonymization result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  preview: { type: boolean }
+                  anonymized: { type: integer }
+                  eligible: { type: integer }
+                  cutoff: { type: string }
+                  locked: { type: boolean }
+                  deadline_passed: { type: boolean }
+        '400': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
+  /api/v1/persons/{id}/publication:
+    post:
+      tags: [privacy]
+      operationId: setPublication
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [level]
+              properties:
+                level: { type: string, enum: [full, initials, bib_only, hidden] }
+      responses:
+        '200': { description: Publication level saved }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/persons/{id}/export:
+    get:
+      tags: [privacy]
+      operationId: exportPerson
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      responses:
+        '200': { description: Person, entries and consents }
+        '404': { $ref: '#/components/responses/Error' }
+  /api/v1/persons/{id}/consents:
+    post:
+      tags: [privacy]
+      operationId: recordConsent
+      description: >
+        Appends a consent row. Identifiers are ULIDs. givenBy is self or guardian.
+        A person under 15 on race day, and a person of unknown age, requires guardian
+        name, relation and contact. Revocation appends granted=false and anonymizes
+        that person. The previous row is kept.
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [granted, givenBy, channel]
+              properties:
+                purpose: { type: string, default: long_term_storage }
+                granted: { type: boolean }
+                givenBy: { type: string, enum: [self, guardian] }
+                guardian:
+                  type: object
+                  required: [name, relation, contact]
+                  properties:
+                    name: { type: string }
+                    relation: { type: string }
+                    contact: { type: string }
+                textVersion: { type: string }
+                channel: { type: string }
+                recordedBy: { type: string }
+      responses:
+        '200':
+          description: Consent appended
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, id]
+                properties:
+                  ok: { type: boolean }
+                  id: { type: string }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
+  /api/v1/sync/export:
+    get:
+      tags: [sync]
+      operationId: exportErtx
+      responses:
+        '200':
+          description: .ertx zip
+          content:
+            application/zip:
+              schema: { type: string, format: binary }
+  /api/v1/sync/import:
+    post:
+      tags: [sync]
+      operationId: importErtx
+      description: >
+        Without `confirm`, returns a preview and does not write. With `confirm: true`,
+        takes an awaited backup, then replaces allowlisted tables. The local PIN is kept.
+        Unknown tables, unknown columns, and a schema_version newer than this app are rejected.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [base64]
+              properties:
+                base64: { type: string }
+                confirm: { type: boolean }
+      responses:
+        '200':
+          description: Preview, or the database was replaced
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    required: [preview, format_version, schema_version, app_version, tables]
+                    properties:
+                      preview: { type: boolean, const: true }
+                      format_version: { type: integer }
+                      schema_version: { type: integer }
+                      app_version: { type: string }
+                      tables:
+                        type: object
+                        additionalProperties: { type: integer }
+                  - type: object
+                    required: [ok]
+                    properties:
+                      ok: { type: boolean }
+        '422': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
+  /ws:
+    get:
+      tags: [sync]
+      operationId: websocket
+      description: WebSocket protocol version 1. See docs/protocol/sync-v1.md.
+      responses:
+        '101': { description: Switching protocols }
 components:
+  parameters:
+    Id:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
   responses:
-    OrgHeaderRequired:
-      description: Missing x-org-id header
-    ValidationError:
-      description: Validation failure
-    NotFound:
-      description: Resource not found
-    EntryExists:
-      description: Competitor already entered in competition
-  schemas:
-    Pagination:
-      type: object
-      properties:
-        limit: { type: integer }
-        offset: { type: integer }
-        count: { type: integer }
-    Competition:
-      type: object
-      properties:
-        id: { type: string, format: uuid }
-        name: { type: string }
-        start_time: { type: string, format: date-time, nullable: true }
-        created_at: { type: string, format: date-time }
-    CreateCompetition:
-      type: object
-      required: [ name ]
-      properties:
-        name: { type: string, minLength: 1, maxLength: 200 }
-        start_time: { type: string, format: date-time }
-    CreateEntry:
-      type: object
-      required: [ competition_id, competitor_id ]
-      properties:
-        competition_id: { type: string, format: uuid }
-        competitor_id: { type: string, format: uuid }
-        bib_number: { type: integer, minimum: 1 }
-    Entry:
-      type: object
-      properties:
-        id: { type: string, format: uuid }
-        competition_id: { type: string, format: uuid }
-        competitor_id: { type: string, format: uuid }
-        bib_number: { type: integer, nullable: true }
-        created_at: { type: string, format: date-time }
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [error]
+            properties:
+              error:
+                type: object
+                required: [code, message]
+                properties:
+                  code:
+                    type: string
+                    enum:
+                      - VALIDATION_ERROR
+                      - NOT_FOUND
+                      - ENTRY_EXISTS
+                      - BIB_IN_USE
+                      - RACE_NOT_STARTED
+                      - EVENT_LOCKED
+                      - LOCK_BLOCKED
+                      - PIN_REQUIRED
+                      - NO_MATCHING_CATEGORY
+                      - TIE_UNCONFIRMED
+                      - CLUB_ABBREVIATION_TAKEN
+                      - CLUB_ABBREVIATION_CONFLICT
+                      - SYNC_CONFLICT
+                      - BACKUP_FAILED
+                  message: { type: string }
+                  details: {}

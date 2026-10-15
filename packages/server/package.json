@@ -1,0 +1,31 @@
+{
+  "name": "@ert/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@ert/core": "workspace:*",
+    "@ert/exporters": "workspace:*",
+    "@ert/i18n": "workspace:*",
+    "@ert/people": "workspace:*",
+    "@ert/race-formats": "workspace:*",
+    "@ert/sports": "workspace:*",
+    "@ert/storage": "workspace:*",
+    "@ert/sync": "workspace:*",
+    "@ert/timing-sources": "workspace:*",
+    "@fastify/rate-limit": "^11.2.1",
+    "@fastify/static": "^10.1.6",
+    "@fastify/websocket": "^11.3.4",
+    "fastify": "^5.12.7",
+    "pino": "^10.4.0",
+    "zod": "^4.6.7"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts"
+  }
+}
