@@ -1,4 +1,4 @@
-import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
+import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import {
   AppError,
   DomainBus,
@@ -80,18 +80,35 @@ interface TimingRow { id: string; race_id: string; timing_point_id: string; devi
 interface CorrectionRow { id: string; target_type: string; target_id: string; action: string; old_value_json: string | null; new_value_json: string | null; reason: string; by_device_id: string | null; hlc: string; created_at: number }
 interface TieRow { id: string; race_id: string; display_time: string; display_time_s: number; member_entry_ids_json: string; order_json: string | null; basis: string | null; reason: string | null; reopened: number; created_at: number; hlc: string }
 
+const SCRYPT_N = 2 ** 17
+const SCRYPT_R = 8
+const SCRYPT_P = 1
+const SCRYPT_MAXMEM = 256 * 1024 * 1024
+
 function hashPin(pin: string): string {
   const salt = randomBytes(16).toString('hex')
-  const hash = scryptSync(pin, salt, 32).toString('hex')
-  return `${salt}:${hash}`
+  const hash = scryptSync(pin, salt, 32, { N: SCRYPT_N, r: SCRYPT_R, p: SCRYPT_P, maxmem: SCRYPT_MAXMEM }).toString('hex')
+  return `scrypt$${SCRYPT_N}$${SCRYPT_R}$${SCRYPT_P}$${salt}$${hash}`
 }
 
-function verifyPin(pin: string, stored: string): boolean {
+function verifyPin(pin: string, stored: string): { ok: boolean; upgrade: boolean } {
+  if (stored.startsWith('scrypt$')) {
+    const [, nText, rText, pText, salt, hash] = stored.split('$')
+    const n = Number(nText)
+    const r = Number(rText)
+    const p = Number(pText)
+    if (!salt || !hash || !n || !r || !p) return { ok: false, upgrade: false }
+    const next = scryptSync(pin, salt, 32, { N: n, r, p, maxmem: SCRYPT_MAXMEM })
+    const prev = Buffer.from(hash, 'hex')
+    const ok = next.length === prev.length && timingSafeEqual(next, prev)
+    return { ok, upgrade: ok && (n < SCRYPT_N || r < SCRYPT_R || p < SCRYPT_P) }
+  }
   const [salt, hash] = stored.split(':')
-  if (!salt || !hash) return false
+  if (!salt || !hash || salt.includes('$')) return { ok: false, upgrade: false }
   const next = scryptSync(pin, salt, 32)
   const prev = Buffer.from(hash, 'hex')
-  return next.length === prev.length && timingSafeEqual(next, prev)
+  const ok = next.length === prev.length && timingSafeEqual(next, prev)
+  return { ok, upgrade: ok }
 }
 
 export class RaceService {
@@ -133,12 +150,16 @@ export class RaceService {
     if (!row?.pin_hash) return
     if (!required) return
     if (this.pinLockedUntil > this.now()) throw new AppError('PIN_REQUIRED', 'Too many PIN attempts')
-    if (!pin || !verifyPin(pin, row.pin_hash)) {
+    const result = pin ? verifyPin(pin, row.pin_hash) : { ok: false, upgrade: false }
+    if (!result.ok) {
       this.pinFailures += 1
       if (this.pinFailures >= 5) this.pinLockedUntil = this.now() + 60_000
       throw new AppError('PIN_REQUIRED', 'PIN required')
     }
     this.pinFailures = 0
+    if (result.upgrade) {
+      this.db.run('UPDATE event SET pin_hash = ?, updated_at = ? WHERE id = ?', hashPin(pin!), this.now(), row.id)
+    }
   }
 
   setPin(pin: string) {
@@ -1217,6 +1238,7 @@ export class RaceService {
   }
 
   importErtx(bytes: Uint8Array) {
+    const savedPin = this.db.get<{ pin_hash: string | null }>('SELECT pin_hash FROM event LIMIT 1')?.pin_hash ?? null
     const unpacked = unpackErtx(bytes)
     const data = unpacked.data as Record<string, Row[]>
     this.db.tx(() => {
@@ -1226,10 +1248,12 @@ export class RaceService {
       for (const [table, rows] of Object.entries(data)) {
         if (table === 'schema_meta') continue
         for (const row of rows) {
+          if (table === 'event') delete row.pin_hash
           const keys = Object.keys(row)
           this.db.run(`INSERT INTO ${table} (${keys.join(',')}) VALUES (${keys.map(() => '?').join(',')})`, ...keys.map((key) => row[key]))
         }
       }
+      this.db.run('UPDATE event SET pin_hash = ?', savedPin)
     })
   }
 
@@ -1407,8 +1431,4 @@ function validateRow(row: CsvEntry, referenceYear: string): string[] {
   if (!bib || bib <= 0) errors.push('bib')
   if (!row.matka) errors.push('race')
   return errors
-}
-
-export function pinDigest(pin: string): string {
-  return createHash('sha256').update(pin).digest('hex')
 }

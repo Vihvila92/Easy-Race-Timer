@@ -32,6 +32,11 @@ export class AppDb {
     const tables = ['event', 'race', 'category', 'person', 'club', 'club_alias', 'consent', 'entry', 'timing_point', 'device', 'timing_event', 'correction', 'tie_resolution', 'schema_meta']
     const data: Record<string, Row[]> = {}
     for (const table of tables) data[table] = this.all<Row>(`SELECT * FROM ${table}`)
+    data.event = data.event.map((row) => {
+      const copy = { ...row }
+      delete copy.pin_hash
+      return copy
+    })
     return data
   }
 }
