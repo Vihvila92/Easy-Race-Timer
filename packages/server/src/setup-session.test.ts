@@ -80,13 +80,16 @@ function startHost(host: string, dbFile: string): Promise<{ code: number | null;
     })
     let output = ''
     let settled = false
-    let timer: ReturnType<typeof setTimeout> | undefined
     const finish = (code: number | null) => {
       if (settled) return
       settled = true
       clearTimeout(timer)
       resolve({ code, output })
     }
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL')
+      finish(null)
+    }, 15_000)
     const keep = (chunk: Buffer) => {
       output += chunk.toString()
       if (output.includes('ERT_READY')) {
@@ -96,10 +99,6 @@ function startHost(host: string, dbFile: string): Promise<{ code: number | null;
     }
     child.stdout?.on('data', keep)
     child.stderr?.on('data', keep)
-    timer = setTimeout(() => {
-      child.kill('SIGKILL')
-      finish(null)
-    }, 15_000)
     child.on('exit', (code) => finish(code))
   })
 }

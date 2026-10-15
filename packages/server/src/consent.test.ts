@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { openDatabase } from '@ert/storage'
 import { createApp } from './app.js'
-import { RaceService, Clock } from './service.js'
 
 const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/
 
