@@ -366,9 +366,11 @@ export function Finish() {
     const timeMs = await clockMs()
     const numeric = bib.trim() ? Number(bib) : null
     setLastId(id)
-    await recordTap({ id, timeMs, bib: numeric, mode })
+    const flags = await recordTap({ id, timeMs, bib: numeric, mode })
     setQueued(await pendingCount())
-    setToast(t('finish.recorded'))
+    if (numeric != null && flags.includes('duplicate')) setToast(t('finish.duplicate', { bib: numeric }))
+    else if (numeric != null && flags.includes('unknown_bib')) setToast(t('finish.unknown', { bib: numeric }))
+    else setToast(t('finish.recorded'))
     setBib('')
     await reload()
   }
@@ -387,6 +389,16 @@ export function Finish() {
       <p className="muted">{t('finish.hint')}</p>
       <p className="queue-note" data-testid="queue-count">{t('common.offline')}: {queued}</p>
       {lastId && <p data-testid="finish-last">{lastId}</p>}
+      <h2>{t('finish.review')}</h2>
+      <ul data-testid="finish-review">
+        {(data?.timing ?? []).filter((event) => event.flags.includes('duplicate') || event.flags.includes('unknown_bib')).map((event) => (
+          <li key={event.id} data-testid={`finish-review-${event.id}`}>
+            {event.flags.includes('unknown_bib')
+              ? t('finish.unknown', { bib: event.bib ?? '' })
+              : t('finish.duplicate', { bib: event.bib ?? '' })}
+          </li>
+        ))}
+      </ul>
       <ul data-testid="finish-log">
         {(data?.timing ?? []).filter((event) => event.id.startsWith('F')).slice(-8).reverse().map((event) => (
           <li key={event.id} data-testid={`finish-row-${event.id}`} data-sync="ok">{event.id} · {event.bib ?? '—'} · {event.voided ? t('corrections.void') : t('finish.synced')}</li>

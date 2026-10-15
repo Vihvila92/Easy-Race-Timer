@@ -42,21 +42,24 @@ export async function pendingCount(): Promise<number> {
   return rows.filter((row) => !row.synced).length
 }
 
-export async function recordTap(item: Omit<QueuedTap, 'synced'>): Promise<void> {
+export async function recordTap(item: Omit<QueuedTap, 'synced'>): Promise<string[]> {
   await put({ ...item, synced: false })
-  await flush()
+  return flush(item.id)
 }
 
-export async function flush(): Promise<void> {
+export async function flush(focusId?: string): Promise<string[]> {
   const db = await openDb()
   const rows = await requestToPromise(db.transaction(STORE).objectStore(STORE).getAll()) as QueuedTap[]
   db.close()
+  let flags: string[] = []
   for (const item of rows) {
     if (item.synced) continue
-    await api('/api/v1/timing-events', {
+    const saved = await api<{ flags?: string[] }>('/api/v1/timing-events', {
       method: 'POST',
       body: JSON.stringify({ id: item.id, timeMs: item.timeMs, bib: item.bib, mode: item.mode }),
     })
+    if (item.id === focusId) flags = saved.flags ?? []
     await put({ ...item, synced: true })
   }
+  return flags
 }
