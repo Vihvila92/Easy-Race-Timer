@@ -94,6 +94,28 @@ describe('openDatabase', () => {
     expect(backups).toHaveLength(1)
     expect(() => assertBackupIntegrity(path.join(dir, backups[0]!))).not.toThrow()
   })
+
+  it('sets initials for a person whose age is unknown when migrating from schema 2', async () => {
+    const dir = tempDir()
+    const file = path.join(dir, 'ert.sqlite')
+    const db = await openDatabase(file)
+    db.raw.close()
+    const raw = new Database(file)
+    raw.prepare('UPDATE schema_meta SET schema_version = 2').run()
+    raw.prepare(`INSERT INTO event (id, org_id, name, date_start, timezone, sport, settings_json, created_at, updated_at, hlc)
+      VALUES ('EV', 'local', 'Test', '2027-06-12', 'Europe/Helsinki', 'run', ?, 1, 1, '1')`).run(JSON.stringify({ age_basis: 'birth_date', age_reference_date: '2027-06-12' }))
+    const insert = raw.prepare(`INSERT INTO person (id, first_name, last_name, gender, birth_date, birth_year, publication, created_at, updated_at, hlc)
+      VALUES (?, ?, ?, 'M', ?, ?, 'full', 1, 1, '1')`)
+    insert.run('unknown', 'Tuntematon', 'Ika', null, null)
+    insert.run('adult', 'Aikuinen', 'Aiku', '1990-01-01', 1990)
+    raw.close()
+    const reopened = await openDatabase(file)
+    const unknown = reopened.get<{ publication: string }>('SELECT publication FROM person WHERE id = ?', 'unknown')
+    const adult = reopened.get<{ publication: string }>('SELECT publication FROM person WHERE id = ?', 'adult')
+    reopened.raw.close()
+    expect(unknown?.publication).toBe('initials')
+    expect(adult?.publication).toBe('full')
+  })
 })
 
 describe('pruneBackups', () => {

@@ -695,7 +695,9 @@ export class RaceService {
     const race = this.raceByLabel(input.raceId)
     this.assertUnlocked(race.id)
     const birthYear = input.birthDate ? Number(input.birthDate.slice(0, 4)) : null
-    const suggestion = this.suggestFor({ gender: input.gender, birthDate: input.birthDate, birthYear }, race.id)
+    const suggestion = input.birthDate || birthYear != null
+      ? this.suggestFor({ gender: input.gender, birthDate: input.birthDate, birthYear }, race.id)
+      : { categoryId: '', age: 0, warnings: [] as CategoryWarning[] }
     const clubHits = input.clubQuery ? this.searchClubs(input.clubQuery) : []
     const { now, hlc } = this.stamp()
     const entryId = this.db.tx(() => this.insertParticipant({

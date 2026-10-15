@@ -1,6 +1,6 @@
 import { ageOnReference } from '@ert/core'
 
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 export interface Migration {
   version: number
@@ -39,7 +39,37 @@ export const MIGRATIONS: Migration[] = [
           )
           if (age < 15) update.run(person.id)
         } catch {
-          // A person without a birth date stays on the explicit level.
+          update.run(person.id)
+        }
+      }
+    },
+  },
+  {
+    version: 3,
+    up(raw) {
+      const event = raw.prepare('SELECT date_start, settings_json FROM event LIMIT 1').get() as { date_start: string; settings_json: string } | undefined
+      if (!event) return
+      let basis: 'birth_date' | 'birth_year' = 'birth_date'
+      let reference = event.date_start
+      try {
+        const settings = JSON.parse(event.settings_json) as { age_basis?: string; age_reference_date?: string }
+        if (settings.age_basis === 'birth_year') basis = 'birth_year'
+        if (settings.age_reference_date) reference = settings.age_reference_date
+      } catch {
+        reference = event.date_start
+      }
+      const people = raw.prepare('SELECT id, gender, birth_date, birth_year, publication FROM person').all() as { id: string; gender: 'F' | 'M' | 'X'; birth_date: string | null; birth_year: number | null; publication: string }[]
+      const update = raw.prepare(`UPDATE person SET publication = 'initials' WHERE id = ? AND publication = 'full'`)
+      for (const person of people) {
+        if (person.publication !== 'full') continue
+        try {
+          ageOnReference(
+            { gender: person.gender, birthDate: person.birth_date, birthYear: person.birth_year },
+            basis,
+            reference,
+          )
+        } catch {
+          update.run(person.id)
         }
       }
     },

@@ -133,13 +133,13 @@ export function isPublicationLevel(value: string | undefined | null): value is P
   return PUBLICATION_LEVELS.includes(value as PublicationLevel)
 }
 
-/** Under 15 the public default is initials. Everyone else starts at full. */
+/** Under 15, and when age is unknown, the public default is initials. */
 export function defaultPublication(person: AgeInput, referenceDate: string, basis: AgeBasis = 'birth_date'): PublicationLevel {
   try {
     const { age } = ageOnReference(person, basis, referenceDate)
     return age < 15 ? 'initials' : 'full'
   } catch {
-    return 'full'
+    return 'initials'
   }
 }
 
