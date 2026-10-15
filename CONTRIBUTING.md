@@ -64,7 +64,7 @@ Changes to authentication (PIN, tokens), consent, publication levels, anonymizat
 
 ## License
 
-The root `LICENSE` stays as it is until the copyright holder decides otherwise. Do not add SPDX headers that claim AGPL. A contributor license agreement is not in use yet; it belongs with that license decision.
+The project is licensed under `AGPL-3.0-only` (see `LICENSE`). External contributors must sign the Contributor License Agreement ([CLA.md](CLA.md)) before their pull request can be merged; the CLA assistant bot guides you in the PR by asking you to comment `I have read the CLA Document and I hereby sign the CLA`. Do not submit code you cannot license under these terms.
 
 ## Security
 
