@@ -29,7 +29,7 @@ describe('PIN hash', () => {
     expect(stored?.pin_hash.startsWith('scrypt$131072$8$1$')).toBe(true)
     expect(JSON.stringify(db.snapshot())).not.toContain('pin_hash')
     expect(JSON.stringify(db.snapshot())).not.toContain(stored?.pin_hash)
-    const exported = JSON.stringify(unpackErtx(service.exportErtx()).data)
+    const exported = JSON.stringify((await unpackErtx(service.exportErtx())).data)
     expect(exported).not.toContain('pin_hash')
     expect(exported).not.toContain(stored?.pin_hash ?? 'missing')
     db.raw.close()
@@ -39,10 +39,10 @@ describe('PIN hash', () => {
     const { db, service } = await serviceWithEvent()
     service.setPin('1234')
     const before = db.get<{ pin_hash: string }>('SELECT pin_hash FROM event')?.pin_hash
-    const unpacked = unpackErtx(service.exportErtx())
+    const unpacked = await unpackErtx(service.exportErtx())
     const data = unpacked.data as { event: Record<string, unknown>[] }
     data.event[0].pin_hash = 'stolen-hash'
-    service.importErtx(packErtx(data, unpacked.manifest))
+    await service.importErtx(packErtx(data, unpacked.manifest))
     const after = db.get<{ pin_hash: string }>('SELECT pin_hash FROM event')?.pin_hash
     expect(after).toBe(before)
     expect(after).not.toBe('stolen-hash')

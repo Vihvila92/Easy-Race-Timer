@@ -30,7 +30,7 @@ import {
 } from '@ert/people'
 import { massStart } from '@ert/race-formats'
 import { AppDb, ORG_ID, type Row } from '@ert/storage'
-import { ERTX_FORMAT_VERSION, packErtx, unpackErtx } from '@ert/sync'
+import { ERTX_FORMAT_VERSION, ErtxError, packErtx, unpackErtx } from '@ert/sync'
 import { touchButton } from '@ert/timing-sources'
 
 export interface Settings {
@@ -1237,9 +1237,11 @@ export class RaceService {
     return Buffer.from(bytes)
   }
 
-  importErtx(bytes: Uint8Array) {
+  async importErtx(bytes: Uint8Array) {
     const savedPin = this.db.get<{ pin_hash: string | null }>('SELECT pin_hash FROM event LIMIT 1')?.pin_hash ?? null
-    const unpacked = unpackErtx(bytes)
+    const unpacked = await unpackErtx(bytes).catch((error: unknown) => {
+      throw new AppError('VALIDATION_ERROR', error instanceof ErtxError ? error.message : 'Could not read archive')
+    })
     const data = unpacked.data as Record<string, Row[]>
     this.db.tx(() => {
       for (const table of ['tie_resolution', 'correction', 'timing_event', 'consent', 'entry', 'club_alias', 'person', 'club', 'category', 'timing_point', 'device', 'race', 'event']) {

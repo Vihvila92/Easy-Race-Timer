@@ -209,7 +209,7 @@ export function createApp(options: AppOptions): { app: FastifyInstance; service:
   })
   app.post('/api/v1/sync/import', async (request) => {
     const body = request.body as { base64: string }
-    service.importErtx(Buffer.from(body.base64, 'base64'))
+    await service.importErtx(Buffer.from(body.base64, 'base64'))
     return { ok: true }
   })
 
