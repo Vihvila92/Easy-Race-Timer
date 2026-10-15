@@ -1,6 +1,6 @@
 import { z } from 'zod'
-import { AppError, createId } from '@ert/core'
-import { CONSENT_TEXT_VERSION, consentAge, validateConsentActor, type AgeInput } from '@ert/people'
+import { AppError, createId, type AgeInput } from '@ert/core'
+import { CONSENT_TEXT_VERSION, consentAge, validateConsentActor } from '@ert/people'
 import type { AppDb } from '@ert/storage'
 
 const ULID = /^[0-9A-HJKMNP-TV-Z]{26}$/
