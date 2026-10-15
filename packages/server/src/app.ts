@@ -285,8 +285,15 @@ export function createApp(options: AppOptions): { app: FastifyInstance; service:
     return service.exportErtx()
   })
   app.post('/api/v1/sync/import', async (request) => {
-    const body = request.body as { base64: string }
-    await service.importErtx(Buffer.from(body.base64, 'base64'))
+    const body = (request.body ?? {}) as { base64?: string; confirm?: boolean }
+    if (typeof body.base64 !== 'string' || body.base64.length === 0) {
+      throw new AppError('VALIDATION_ERROR', 'base64 is required')
+    }
+    const bytes = Buffer.from(body.base64, 'base64')
+    const preview = await service.previewErtx(bytes)
+    if (!body.confirm) return preview
+    await requireBackup('import')
+    await service.importErtx(bytes)
     return { ok: true }
   })
 

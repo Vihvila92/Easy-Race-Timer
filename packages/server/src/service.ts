@@ -29,8 +29,9 @@ import {
   type PrivacyEntrant,
 } from '@ert/people'
 import { massStart } from '@ert/race-formats'
-import { AppDb, ORG_ID, type Row } from '@ert/storage'
-import { ERTX_FORMAT_VERSION, ErtxError, packErtx, unpackErtx } from '@ert/sync'
+import { AppDb, ORG_ID, SCHEMA_VERSION, type Row } from '@ert/storage'
+import { ERTX_FORMAT_VERSION, packErtx } from '@ert/sync'
+import { previewErtx, readErtx, replaceFromErtx } from './ertx-import.js'
 import { touchButton } from '@ert/timing-sources'
 
 export interface Settings {
@@ -1242,29 +1243,25 @@ export class RaceService {
   }
 
   exportErtx() {
-    const bytes = packErtx(this.db.snapshot(), { format_version: ERTX_FORMAT_VERSION, app_version: '0.1.0', schema_version: 1 })
+    const bytes = packErtx(this.db.snapshot(), { format_version: ERTX_FORMAT_VERSION, app_version: '0.1.0', schema_version: SCHEMA_VERSION })
     return Buffer.from(bytes)
   }
 
+  async previewErtx(bytes: Uint8Array) {
+    return previewErtx(await readErtx(this.db, bytes))
+  }
+
   async importErtx(bytes: Uint8Array) {
+    const parsed = await readErtx(this.db, bytes)
     const savedPin = this.db.get<{ pin_hash: string | null }>('SELECT pin_hash FROM event LIMIT 1')?.pin_hash ?? null
-    const unpacked = await unpackErtx(bytes).catch((error: unknown) => {
-      throw new AppError('VALIDATION_ERROR', error instanceof ErtxError ? error.message : 'Could not read archive')
-    })
-    const data = unpacked.data as Record<string, Row[]>
     this.db.tx(() => {
-      for (const table of ['tie_resolution', 'correction', 'timing_event', 'consent', 'entry', 'club_alias', 'person', 'club', 'category', 'timing_point', 'device', 'race', 'event']) {
-        this.db.run(`DELETE FROM ${table}`)
-      }
-      for (const [table, rows] of Object.entries(data)) {
-        if (table === 'schema_meta') continue
-        for (const row of rows) {
-          if (table === 'event') delete row.pin_hash
-          const keys = Object.keys(row)
-          this.db.run(`INSERT INTO ${table} (${keys.join(',')}) VALUES (${keys.map(() => '?').join(',')})`, ...keys.map((key) => row[key]))
-        }
-      }
+      replaceFromErtx(this.db, parsed)
       this.db.run('UPDATE event SET pin_hash = ?', savedPin)
+      const eventId = this.db.get<{ id: string }>('SELECT id FROM event LIMIT 1')?.id ?? 'import'
+      this.correct('event', eventId, 'import_ertx', 'ertx import', null, {
+        schema_version: parsed.manifest.schema_version,
+        app_version: parsed.manifest.app_version,
+      })
     })
   }
 

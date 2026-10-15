@@ -647,6 +647,10 @@ paths:
     post:
       tags: [sync]
       operationId: importErtx
+      description: >
+        Without `confirm`, returns a preview and does not write. With `confirm: true`,
+        takes an awaited backup, then replaces allowlisted tables. The local PIN is kept.
+        Unknown tables, unknown columns, and a schema_version newer than this app are rejected.
       requestBody:
         content:
           application/json:
@@ -655,8 +659,30 @@ paths:
               required: [base64]
               properties:
                 base64: { type: string }
+                confirm: { type: boolean }
       responses:
-        '200': { description: Database replaced }
+        '200':
+          description: Preview, or the database was replaced
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    required: [preview, format_version, schema_version, app_version, tables]
+                    properties:
+                      preview: { type: boolean, const: true }
+                      format_version: { type: integer }
+                      schema_version: { type: integer }
+                      app_version: { type: string }
+                      tables:
+                        type: object
+                        additionalProperties: { type: integer }
+                  - type: object
+                    required: [ok]
+                    properties:
+                      ok: { type: boolean }
+        '422': { $ref: '#/components/responses/Error' }
+        '500': { $ref: '#/components/responses/Error' }
   /ws:
     get:
       tags: [sync]

@@ -58,9 +58,9 @@ Zip-paketti:
 - `manifest.json`: `{ "format_version": 1, "app_version": "0.1.0", "schema_version": 1 }`
 - `data.json`: taulujen rivit (`event`, `race`, `category`, `person`, `club`, `club_alias`, `consent`, `entry`, `timing_point`, `device`, `timing_event`, `correction`, `tie_resolution`, `schema_meta`)
 
-Tuonti korvaa paikallisen kannan sisällön. Tuntematon `format_version` hylätään.
+Tuonti korvaa sallittujen taulujen sisällön vasta vahvistuksen jälkeen. `format_version` on 1, `schema_version` on enintään sovelluksen skeema, ja `app_version` on pakollinen. Tuntematon taulu tai sarake hylkää koko tuonnin. `pin_hash` ei kulje arkistossa eikä korvaa paikallista PINiä. Purku sallii vain `manifest.json` ja `data.json`, yhteensä enintään 50 MiB.
 
-HTTP: `GET /api/v1/sync/export` palauttaa zipin. `POST /api/v1/sync/import` ottaa `{ "base64": "..." }`.
+HTTP: `GET /api/v1/sync/export` palauttaa zipin. `POST /api/v1/sync/import` ottaa `{ "base64": "..." }`. Ilman `confirm: true` vastaus on esikatselu eikä kirjoita. Vahvistettu tuonti tekee ensin varmuuskopion ja kirjaa auditiin `import_ertx`.
 
 ## Mitä v0.2 lisää
 

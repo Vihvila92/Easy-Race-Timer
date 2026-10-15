@@ -42,7 +42,7 @@ describe('PIN hash', () => {
     const unpacked = await unpackErtx(service.exportErtx())
     const data = unpacked.data as { event: Record<string, unknown>[] }
     data.event[0].pin_hash = 'stolen-hash'
-    await service.importErtx(packErtx(data, unpacked.manifest))
+    await expect(service.importErtx(packErtx(data, unpacked.manifest))).rejects.toThrow(/pin_hash/)
     const after = db.get<{ pin_hash: string }>('SELECT pin_hash FROM event')?.pin_hash
     expect(after).toBe(before)
     expect(after).not.toBe('stolen-hash')
