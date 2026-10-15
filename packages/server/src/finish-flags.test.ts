@@ -35,7 +35,7 @@ describe('finish review flags', () => {
 describe('finish review route', () => {
   it('returns the flags from the timing endpoint', async () => {
     const db = await openDatabase(':memory:')
-    const { app, service } = createApp({ db, testMode: true })
+    const { app, service } = await createApp({ db, testMode: true })
     service.importEvent({
       id: 'EV', name: 'Finish', date: '2027-06-12', timezone: 'Europe/Helsinki', sport: 'run',
       races: [{ id: 'R1', name: { fi: '1 km', en: '1 km' }, distance_m: 1000 }],
@@ -130,6 +130,55 @@ describe('finish before the runner start', () => {
     expect(Number(after[0]?.time_ms)).toBeGreaterThanOrEqual(0)
     service.voidTap(early.id, 'väärä aika')
     expect(service.lockBlockers('R1').some((blocker) => blocker.endsWith(':before_start'))).toBe(false)
+    db.raw.close()
+  })
+
+  it('flags a finish exactly at the runner start, including a handicap, and ranks one millisecond later', async () => {
+    const db = await openDatabase(':memory:')
+    const service = new RaceService(db, new Clock())
+    service.importEvent({
+      id: 'EV',
+      name: 'Finish',
+      date: '2027-06-12',
+      timezone: 'Europe/Helsinki',
+      sport: 'run',
+      races: [{ id: 'R1', name: { fi: '1 km', en: '1 km' }, distance_m: 1000, start_mode: 'mass' }],
+      categories: [{ id: 'M', race_id: 'R1', name: { fi: 'M', en: 'M' }, gender: 'M', min_age: 0 }],
+    })
+    for (const bib of [11, 12, 13, 14, 15]) {
+      service.registerLate({ firstName: 'A', lastName: `B${bib}`, gender: 'M', birthDate: '1990-01-01', raceId: 'R1', bib, consent: false })
+    }
+    service.setStartOffset(14, 60_000, 'tasoitus')
+    service.setStartOffset(15, 60_000, 'tasoitus')
+    const start = Date.parse('2027-06-12T10:00:00Z')
+    service.startRace('R1', start)
+
+    const before = service.recordFinish({ id: createId(), timeMs: start - 1, bib: 11 })
+    const exact = service.recordFinish({ id: createId(), timeMs: start, bib: 12 })
+    const handicap = service.recordFinish({ id: createId(), timeMs: start + 60_000, bib: 14 })
+    expect(before.flags).toContain('before_start')
+    expect(exact.flags).toContain('before_start')
+    expect(handicap.flags).toContain('before_start')
+
+    const hidden = service.results('public')
+    expect(hidden.some((row) => ['11', '12', '14'].includes(row.bib))).toBe(false)
+    expect(hidden.some((row) => row.time_ms === '0' || row.time === '0:00')).toBe(false)
+    expect(service.resultsCsv()).not.toContain('0:00')
+    expect(service.resultsHtml()).not.toContain('0:00')
+    expect(service.lockBlockers('R1').filter((blocker) => blocker.endsWith(':before_start'))).toHaveLength(3)
+
+    const next = service.recordFinish({ id: createId(), timeMs: start + 1, deviceTimeMs: start + 90_000, bib: 13 })
+    const afterHandicap = service.recordFinish({ id: createId(), timeMs: start + 60_001, bib: 15 })
+    expect(next.flags).not.toContain('before_start')
+    expect(afterHandicap.flags).not.toContain('before_start')
+    const ranked = service.results('public').filter((row) => row.scope === 'overall' && row.rank !== '')
+    expect(ranked.map((row) => row.bib).sort()).toEqual(['13', '15'])
+    expect(ranked.every((row) => row.time_ms !== '0')).toBe(true)
+    expect(ranked.find((row) => row.bib === '13')?.time_ms).toBe('1')
+    expect(ranked.find((row) => row.bib === '15')?.time_ms).toBe('1')
+    const stored = service.timingEvents().find((event) => event.id === next.id)
+    expect(stored?.time_ms).toBe(start + 1)
+    expect(stored?.device_time_ms).toBe(start + 90_000)
     db.raw.close()
   })
 })

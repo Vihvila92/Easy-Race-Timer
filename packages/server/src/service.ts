@@ -819,7 +819,7 @@ export class RaceService {
       if (previous.length) flags.push('duplicate')
     }
     const start = entry ? this.runnerStartMs(entry, race) : race.actual_start_ms
-    if (start != null && input.timeMs < start) flags.push('before_start')
+    if (start != null && input.timeMs <= start) flags.push('before_start')
     const { now } = this.stamp()
     const event = this.db.tx(() => this.insertTiming({
       id: input.id,
@@ -862,12 +862,12 @@ export class RaceService {
     })
   }
 
-  /** Earliest finish that is not earlier than the runner's own start. */
+  /** Earliest finish strictly after the runner's own start. An exact start is 0:00 and does not score. */
   private scoringFinish(entry: EntryRow, race: RaceRow): TimingRow | undefined {
     const start = this.runnerStartMs(entry, race)
     return this.activeFinishes()
       .filter((event) => event.entry_id === entry.id)
-      .filter((event) => start == null || event.time_ms >= start)
+      .filter((event) => start == null || event.time_ms > start)
       .sort((a, b) => a.time_ms - b.time_ms || a.created_at - b.created_at)[0]
   }
 
@@ -953,7 +953,7 @@ export class RaceService {
       if (!event.entry_id) blockers.push(`time:${event.id}:unassigned`)
       const entry = event.entry_id ? this.db.get<EntryRow>('SELECT * FROM entry WHERE id = ?', event.entry_id) : undefined
       const start = entry && race ? this.runnerStartMs(entry, race) : race?.actual_start_ms ?? null
-      if (start != null && event.time_ms < start) blockers.push(`time:${event.id}:before_start`)
+      if (start != null && event.time_ms <= start) blockers.push(`time:${event.id}:before_start`)
     }
     for (const group of this.tieGroups().filter((group) => group.raceId === raceId && group.status === 'unconfirmed')) {
       blockers.push(`tie:${raceId}:${group.displayTime}`)
