@@ -55,7 +55,11 @@ describe('lock backup', () => {
       firstName: 'A', lastName: 'B', gender: 'M', birthDate: '1990-01-01', raceId: 'R1', bib: 1, consent: false,
     })
     const reasons: string[] = []
-    const blocked = await setup.inject({ method: 'POST', url: '/api/v1/races/R1/lock' })
+    const blocked = await setup.inject({
+      method: 'POST',
+      url: '/api/v1/races/R1/lock',
+      payload: {},
+    })
     expect(blocked.statusCode).toBe(409)
     expect(reasons).toEqual([])
 
@@ -64,7 +68,11 @@ describe('lock backup', () => {
       db,
       backup: async (reason) => { reasons.push(reason) },
     })
-    const locked = await ok.inject({ method: 'POST', url: '/api/v1/races/R1/lock' })
+    const locked = await ok.inject({
+      method: 'POST',
+      url: '/api/v1/races/R1/lock',
+      payload: {},
+    })
     expect(locked.statusCode).toBe(200)
     expect(reasons).toEqual(['lock'])
 
@@ -73,7 +81,11 @@ describe('lock backup', () => {
       db,
       backup: async () => { throw new Error('disk full') },
     })
-    const failed = await failing.inject({ method: 'POST', url: '/api/v1/races/R1/lock' })
+    const failed = await failing.inject({
+      method: 'POST',
+      url: '/api/v1/races/R1/lock',
+      payload: {},
+    })
     expect(failed.statusCode).toBe(500)
     expect(failed.json()).toMatchObject({ error: { code: 'BACKUP_FAILED', message: 'disk full' } })
     db.raw.close()

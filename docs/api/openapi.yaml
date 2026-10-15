@@ -6,6 +6,9 @@ info:
     Local race-day API. One laptop, organization id always `local`.
     Clients create identifiers and finish times. Errors use the shape in ERROR_CODES.md.
     HTML (`format=html`) is a print export, not an application page.
+    `Host` must be `localhost` or `127.0.0.1` on the listen port (421 otherwise).
+    A browser `Origin`, when sent, must be that same loopback origin (403 otherwise). WebSocket upgrades always require it.
+    State-changing requests require `Content-Type: application/json` (415 otherwise).
 servers:
   - url: /
     description: The window and the API share one origin. The process chooses a free local port at startup.

@@ -6,6 +6,7 @@ import fastifyStatic from '@fastify/static'
 import websocket from '@fastify/websocket'
 import { AppError, errorBody } from '@ert/core'
 import { AppDb } from '@ert/storage'
+import { allowedOriginsFromEnv, hostAllowed, jsonContentType, originAllowed } from './guard.js'
 import { Clock, RaceService } from './service.js'
 
 export interface AppOptions {
@@ -31,14 +32,42 @@ export function createApp(options: AppOptions): { app: FastifyInstance; service:
     for (const socket of sockets) socket.send(message)
   }
 
+  app.addHook('onRequest', async (request, reply) => {
+    const address = app.server.address()
+    const listenPort = typeof address === 'object' && address ? address.port : null
+    if (!hostAllowed(request.headers.host, listenPort)) {
+      return reply.status(421).send({ error: { code: 'VALIDATION_ERROR', message: 'Host not allowed' } })
+    }
+    const extras = allowedOriginsFromEnv()
+    const origin = typeof request.headers.origin === 'string' ? request.headers.origin : undefined
+    const websocket = request.headers.upgrade?.toLowerCase() === 'websocket' || request.url.split('?')[0] === '/ws'
+    if (websocket) {
+      if (!originAllowed(origin, listenPort, extras)) {
+        return reply.status(403).send({ error: { code: 'VALIDATION_ERROR', message: 'Origin not allowed' } })
+      }
+      return
+    }
+    if (request.method === 'GET' || request.method === 'HEAD' || request.method === 'OPTIONS') return
+    if (origin && !originAllowed(origin, listenPort, extras)) {
+      return reply.status(403).send({ error: { code: 'VALIDATION_ERROR', message: 'Origin not allowed' } })
+    }
+    if (!jsonContentType(request.headers['content-type'])) {
+      return reply.status(415).send({ error: { code: 'VALIDATION_ERROR', message: 'Content-Type must be application/json' } })
+    }
+  })
+
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof AppError) {
       reply.status(error.status).send(errorBody(error))
       return
     }
-    const validation = error as { validation?: unknown; message?: string }
+    const validation = error as { validation?: unknown; message?: string; statusCode?: number }
     if (validation.validation) {
       reply.status(422).send({ error: { code: 'VALIDATION_ERROR', message: validation.message, details: validation.validation } })
+      return
+    }
+    if (validation.statusCode && validation.statusCode < 500) {
+      reply.status(validation.statusCode).send({ error: { code: 'VALIDATION_ERROR', message: validation.message } })
       return
     }
     app.log.error(error)
