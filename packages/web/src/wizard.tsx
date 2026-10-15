@@ -1,4 +1,5 @@
 import { createId } from '@ert/core'
+import { formatDate } from '@ert/i18n'
 import { kidsAndAdultsTemplate } from '@ert/sports'
 import { useState } from 'react'
 import { api } from './api.js'
@@ -110,7 +111,7 @@ export function Wizard() {
       {step === 3 && (
         <div className="card stack">
           <p>{t('wizard.reviewLead')}</p>
-          <p data-testid="wizard-summary"><strong>{name.trim()}</strong> · {date} · {place}</p>
+          <p data-testid="wizard-summary"><strong>{name.trim()}</strong> · <span data-testid="wizard-date-display">{formatDate(date, locale)}</span> · {place}</p>
           <ul>
             {template.races.map((race) => (
               <li key={race.id}>{locale === 'en' ? race.nameEn : race.nameFi} · {starts[race.id]}</li>

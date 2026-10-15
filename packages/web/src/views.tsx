@@ -1,3 +1,4 @@
+import { formatDate } from '@ert/i18n'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ApiError, api, clientNow, clockMs, createTapId, deviceNow, localDeviceId, nextTapLabel, readClockOffset, syncServerClock } from './api.js'
 import { useApp } from './context.js'
@@ -26,7 +27,7 @@ export function Office() {
       {event ? (
         <div className="card">
           <h2>{event.name}</h2>
-          <p>{event.organizer} · {event.location} · {event.date_start}</p>
+          <p data-testid="office-date">{event.organizer} · {event.location} · {formatDate(event.date_start, locale)}</p>
           <p data-testid="consent-count">{data.counts.consents}</p>
           <ul>
             {data.races.map((race) => (

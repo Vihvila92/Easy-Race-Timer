@@ -34,7 +34,17 @@ pnpm e2e
 
 Module boundaries are enforced by dependency-cruiser. `core` and `i18n` do not import other workspace packages. The web app does not import the server or SQLite.
 
-Add Finnish and English strings together. `pnpm check:i18n` fails if a key is missing.
+See [Strings and guided-mode hints](#strings-and-guided-mode-hints).
+
+## Strings and guided-mode hints
+
+Add every new user-visible string to both [`packages/i18n/locales/fi.json`](packages/i18n/locales/fi.json) and [`packages/i18n/locales/en.json`](packages/i18n/locales/en.json) in the same change. Keys are dotted and typed, for example `finish.tap`. Placeholders use `{name}`. `pnpm check:i18n` fails when a key exists in one file but not the other. Do not hard-code user-visible copy in a view.
+
+The language switch lives in settings. Finnish is the default. The choice is stored in local storage and applies immediately.
+
+Guided-mode hints use the key `<view>.hint.<id>`, for example `finish.hint.queue`. Write the Finnish and English hint next to the other strings for that view. That key is what the guided-mode hint frame reads, and only while guided mode is on. Do not put the hint sentence in the component.
+
+Format dates and times with `formatDate`, `formatTime` and `formatDateTime` from `@ert/i18n` (`fi-FI` and `en-GB`). A Finnish date looks like `15.10.2026`. Store a calendar date as `YYYY-MM-DD`.
 
 ## Data and timing
 

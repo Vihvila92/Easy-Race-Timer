@@ -25,6 +25,65 @@ export function missingKeys(locale: Locale): string[] {
   return catalogKeys().filter((key) => !catalogs[locale][key])
 }
 
+/** Keys present in only one catalog. Names are the side that is missing the key. */
+export function mismatchedKeys(left: object, right: object, leftName = 'fi', rightName = 'en'): string[] {
+  const leftRecord = left as Record<string, unknown>
+  const rightRecord = right as Record<string, unknown>
+  const missing: string[] = []
+  for (const key of Object.keys(leftRecord)) if (!(key in rightRecord)) missing.push(`${rightName}:${key}`)
+  for (const key of Object.keys(rightRecord)) if (!(key in leftRecord)) missing.push(`${leftName}:${key}`)
+  return missing
+}
+
+const intlLocale: Record<Locale, string> = { fi: 'fi-FI', en: 'en-GB' }
+
+function toDate(value: Date | string | number): Date | null {
+  if (value instanceof Date) return Number.isNaN(value.getTime()) ? null : value
+  if (typeof value === 'number') {
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? null : date
+  }
+  const dateOnly = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim())
+  if (dateOnly) {
+    const year = Number(dateOnly[1])
+    const month = Number(dateOnly[2])
+    const day = Number(dateOnly[3])
+    const date = new Date(year, month - 1, day)
+    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null
+    return date
+  }
+  const date = new Date(value)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+function formatWith(value: Date | string | number, locale: Locale, options: Intl.DateTimeFormatOptions): string {
+  const date = toDate(value)
+  if (!date) return typeof value === 'string' ? value : ''
+  return new Intl.DateTimeFormat(intlLocale[locale], options).format(date)
+}
+
+/** Calendar date. Finnish `15.10.2026`, English (en-GB) `15/10/2026`. Date-only strings stay on that civil day. */
+export function formatDate(value: Date | string | number, locale: Locale): string {
+  return formatWith(value, locale, { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+/** Time of day in 24-hour clock. Finnish `09.05`, English `09:05`. */
+export function formatTime(value: Date | string | number, locale: Locale): string {
+  return formatWith(value, locale, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+}
+
+/** Date and time. Finnish `15.10.2026 klo 14.30`, English `15/10/2026, 14:30`. */
+export function formatDateTime(value: Date | string | number, locale: Locale): string {
+  return formatWith(value, locale, {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  })
+}
+
 export function formatCategoryWarning(warning: CategoryWarning, locale: Locale = 'fi'): string {
   if (warning.code === 'birth_year_only') {
     return locale === 'en' ? 'only birth year → year age' : 'vain syntymävuosi -> vuosi-ikä'

@@ -22,7 +22,8 @@ const VIEWS = [
 function Preferences() {
   const { t, theme, setTheme, locale, setLocale } = useApp()
   return (
-    <>
+    <div className="stack settings" data-testid="settings">
+      <span className="muted settings-label">{t('settings.title')}</span>
       <div className="segment" role="group" aria-label={t('a11y.language')}>
         <button type="button" className={locale === 'fi' ? '' : 'secondary'} data-testid="lang-fi" onClick={() => setLocale('fi')}>{t('lang.fi')}</button>
         <button type="button" className={locale === 'en' ? '' : 'secondary'} data-testid="lang-en" onClick={() => setLocale('en')}>{t('lang.en')}</button>
@@ -33,7 +34,7 @@ function Preferences() {
         <button type="button" className="secondary" data-testid="theme-system" onClick={() => setTheme('system')}>{t('theme.system')}</button>
       </div>
       <p className="muted" data-testid="theme-value">{theme}</p>
-    </>
+    </div>
   )
 }
 

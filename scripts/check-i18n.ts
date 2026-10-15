@@ -1,9 +1,6 @@
-import { missingKeys } from '@ert/i18n'
+import { en, fi, mismatchedKeys } from '@ert/i18n'
 
-const missing = [
-  ...missingKeys('fi').map((key) => `fi:${key}`),
-  ...missingKeys('en').map((key) => `en:${key}`),
-]
+const missing = mismatchedKeys(fi, en)
 if (missing.length) {
   console.error(`Missing translations: ${missing.join(', ')}`)
   process.exit(1)
