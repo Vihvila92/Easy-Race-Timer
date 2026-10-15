@@ -29,6 +29,18 @@ export function resolveDbPath(env: NodeJS.ProcessEnv, dataDir: string): string {
  * Port to bind. An empty value or 0 asks the OS for a free local port.
  * A desktop shell leaves PORT unset and reads the chosen port from the ERT_READY line.
  */
+const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1', '[::1]'])
+
+/**
+ * A process with no PIN may listen only on loopback.
+ * A configured PIN is what allows a wider bind.
+ */
+export function assertCanListen(host: string, pinConfigured: boolean): void {
+  const name = host.trim().toLowerCase()
+  if (pinConfigured || LOOPBACK_HOSTS.has(name)) return
+  throw new Error(`Refusing to listen on ${host} until a PIN is set`)
+}
+
 export function resolveListenPort(env: NodeJS.ProcessEnv): number {
   const raw = env.PORT?.trim()
   if (!raw || raw === '0') return 0

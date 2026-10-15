@@ -1,6 +1,6 @@
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
-import { resolveDataDir, resolveDbPath, resolveListenPort } from './config.js'
+import { assertCanListen, resolveDataDir, resolveDbPath, resolveListenPort } from './config.js'
 
 describe('desktop launch config', () => {
   it('uses the operating system data directory when none is configured', () => {
@@ -15,6 +15,15 @@ describe('desktop launch config', () => {
     expect(dir).toBe(path.resolve('race-data'))
     expect(resolveDbPath({}, dir)).toBe(path.join(dir, 'ert.sqlite'))
     expect(resolveDbPath({ ERT_DB: '/tmp/ert.sqlite' }, dir)).toBe(path.resolve('/tmp/ert.sqlite'))
+  })
+
+  it('refuses a public bind until a PIN is set', () => {
+    expect(() => assertCanListen('0.0.0.0', false)).toThrow(/PIN/)
+    expect(() => assertCanListen('192.168.1.20', false)).toThrow(/PIN/)
+    expect(() => assertCanListen('127.0.0.1', false)).not.toThrow()
+    expect(() => assertCanListen('localhost', false)).not.toThrow()
+    expect(() => assertCanListen('::1', false)).not.toThrow()
+    expect(() => assertCanListen('0.0.0.0', true)).not.toThrow()
   })
 
   it('asks for a free port unless one was requested', () => {

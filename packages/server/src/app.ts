@@ -166,6 +166,9 @@ export function createApp(options: AppOptions): { app: FastifyInstance; service:
   })
   app.post('/api/v1/settings/pin/check', async (request, reply) => {
     const body = (request.body as { pin?: string } | undefined) ?? {}
+    if (!service.pinConfigured() && !isLoopbackAddress(request.ip)) {
+      throw new AppError('PIN_REQUIRED', 'PIN required')
+    }
     service.checkPin(body.pin)
     const token = issueToken(secret)
     reply.header('set-cookie', sessionCookie(token))

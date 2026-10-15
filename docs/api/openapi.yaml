@@ -395,7 +395,7 @@ paths:
       operationId: checkPin
       description: |
         Checks the PIN and returns a device token. The same token is set as an HttpOnly SameSite=Strict cookie named ert_session (about 12 hours).
-        When no PIN is configured yet, this opens a setup session so the first run can set one.
+        When no PIN is configured yet, a setup session is issued only to a loopback client. The process also refuses to listen on a non-loopback address until a PIN is set.
       responses:
         '200':
           description: Device token
