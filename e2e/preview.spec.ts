@@ -81,6 +81,21 @@ test.describe('component preview', () => {
     }
   })
 
+  test('keeps a long clock on one line when the screen is narrow or zoomed', async ({ page, request }) => {
+    await authorize(request)
+    await page.goto('/#/preview')
+    await page.locator('.ui-clock-value').evaluate((el) => {
+      el.textContent = '10:59:59,9'
+    })
+    for (const width of [320, 240]) {
+      await page.setViewportSize({ width, height: 700 })
+      expect(await clockLine(page), `width ${width}`).toMatchObject({ lines: 1, nowrap: true, tabular: true })
+    }
+    await page.setViewportSize({ width: 375, height: 800 })
+    await page.evaluate(() => { document.documentElement.style.zoom = '200%' })
+    expect(await clockLine(page), '200% zoom').toMatchObject({ lines: 1, nowrap: true, tabular: true })
+  })
+
   test('follows the system appearance until the user overrides it', async ({ page, request }) => {
     await authorize(request)
     await page.goto('/#/preview')
@@ -95,6 +110,19 @@ test.describe('component preview', () => {
     await expect(page.getByTestId('preview-name')).toHaveValue('')
   })
 })
+
+async function clockLine(page: Page): Promise<{ lines: number; nowrap: boolean; tabular: boolean }> {
+  return page.locator('.ui-clock-value').evaluate((el) => {
+    const style = getComputedStyle(el)
+    const range = document.createRange()
+    range.selectNodeContents(el)
+    return {
+      lines: range.getClientRects().length,
+      nowrap: style.whiteSpace === 'nowrap',
+      tabular: style.fontVariantNumeric.includes('tabular-nums'),
+    }
+  })
+}
 
 async function violations(page: Page): Promise<string[]> {
   const result = await new AxeBuilder({ page }).analyze()

@@ -164,7 +164,7 @@ button.ui-row,
   letter-spacing: -0.04em;
   line-height: 1.05;
   font-variant-numeric: tabular-nums;
-  overflow-wrap: anywhere;
+  white-space: nowrap;
 }
 
 .ui-button:focus-visible,
