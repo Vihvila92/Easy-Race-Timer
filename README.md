@@ -1,32 +1,32 @@
 # Easy Race Timer
 
-Yhden kannettavan ajanotto juoksukilpailuun. v0.1 kattaa valmistelun, yhteislähdön, maalikirjauksen, tulokset ja säilytysajan anonymisoinnin. Verkkoa ei tarvita.
+Race timing for one laptop. v0.1 covers preparation, a mass start, finish recording, results and anonymization after the retention period. No network is required.
 
-Määrittely on [`docs/MAARITTELY.md`](docs/MAARITTELY.md). English: [`README_EN.md`](README_EN.md). Dokumentaation kartta: [`docs/README.md`](docs/README.md).
+The specification (Finnish) is [`docs/MAARITTELY.md`](docs/MAARITTELY.md). Suomeksi: [`README.fi.md`](README.fi.md). Doc map: [`docs/README.md`](docs/README.md).
 
-## Repo
+## Repository
 
 ```
-packages/core            tuloslaskenta, sarjat, virheet
-packages/people          seurat, suostumus, anonymisointi
-packages/i18n            suomi ja englanti
-packages/sports          juoksuprofiili
-packages/timing-sources  kosketusmaali
-packages/race-formats    yhteislähtö
-packages/exporters       CSV ja A4-tuloste
+packages/core            results, categories, errors
+packages/people          clubs, consent, anonymization
+packages/i18n            Finnish and English
+packages/sports          running profile
+packages/timing-sources  touch finish
+packages/race-formats    mass start
+packages/exporters       CSV and A4 print
 packages/storage         SQLite
 packages/sync            .ertx
 packages/server          Fastify, composition root
-packages/web             React-PWA
+packages/web             React PWA
 e2e/                     Playwright, Kuulan hölkkä
-testdata/kuulan-holkka/  oraakkeli
+testdata/kuulan-holkka/  oracle
 ```
 
-Vuoden 2025 Postgres-luonnos on vain tagissa `legacy-2025`.
+The 2025 Postgres draft exists only on the tag `legacy-2025`.
 
-## Pikakäynnistys kehittäjälle
+## Quick start for developers
 
-Tarvitaan Node.js 22 ja pnpm 10.33. Nämä komennot ovat kehittäjälle. Seuralaisen polku on myöhempi asennuspaketti, ei komentorivi. Katso [docs/roadmap.md](docs/roadmap.md).
+You need Node.js 22 and pnpm 10.33. These commands are for developers. The club volunteer's path is a later installer, not a terminal. See [docs/roadmap.md](docs/roadmap.md).
 
 ```bash
 pnpm install
@@ -35,13 +35,13 @@ pnpm build
 pnpm dev:server
 ```
 
-Avaa osoite, jonka prosessi tulostaa rivillä `ERT_READY`. Kehittäjän palvelin käyttää porttia 8080 ja kansiota `./data`. Käyttöliittymä on suomeksi ja englanniksi, vaaleana ja tummana. Ilman kisaa ensimmäinen näkymä on ohjattu luonti.
+Open the address printed on the `ERT_READY` line. The developer server uses port 8080 and the `./data` folder. The UI is in Finnish and English, light and dark. With no race yet, the first screen is a three-step wizard.
 
-`pnpm dev` käynnistää Vite-käyttöliittymän välityspalvelimella. Se on vain kehitysapu, eikä osoite ole mukana rakennetussa käyttöliittymässä.
+`pnpm dev` starts the Vite UI with a proxy. That proxy is a development aid. The built UI does not contain a host or a port.
 
-`pnpm start` ilman muuttujia käyttäytyy kuin tuleva työpöytäkuori: vapaa paikallinen portti ja käyttöjärjestelmän käyttäjähakemisto.
+`pnpm start` with no variables behaves like the future desktop shell: a free local port and the operating system user-data directory.
 
-## Testit
+## Tests
 
 ```bash
 pnpm lint
@@ -50,14 +50,18 @@ pnpm test
 pnpm e2e
 ```
 
-`pnpm e2e` rakentaa käyttöliittymän ja ajaa Playwrightin. Hyväksymisskenaario on Kuulan hölkkä, [`testdata/kuulan-holkka/`](testdata/kuulan-holkka/).
+`pnpm e2e` builds the UI and runs Playwright. The acceptance scenario is Kuulan hölkkä in [`testdata/kuulan-holkka/`](testdata/kuulan-holkka/).
 
-## Tiekartta
+## Roadmap
 
-v0.1 on tässä repossa. Seuraava seuralaiselle näkyvä julkaisu on allekirjoitettu yhden napsautuksen asennin. Sitä ei ole vielä tehty. [docs/roadmap.md](docs/roadmap.md). Päätökset: [`docs/adr/`](docs/adr/).
+v0.1 is this repository. The next release a volunteer will see is a signed one-click installer. That installer is not built yet. [docs/roadmap.md](docs/roadmap.md). Decisions: [`docs/adr/`](docs/adr/).
 
-## Lisenssi ja SaaS
+## Contributing
 
-Lisenssi on juuritiedosto `LICENSE` (vuoden 2025 urheilulisenssi). Määrittelyn AGPL-3.0-only-suositus odottaa tekijänoikeuden haltijan päätöstä, eikä sitä ole otettu käyttöön. Paikallisessa versiossa ei ole lisenssiavaimia eikä ominaisuusrajoituksia. Laskutus, pilvivälitys ja juoksijaportaali eivät kuulu tähän repoon.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). Report security issues privately as described in [`SECURITY.md`](SECURITY.md).
 
-Lähdekoodi: <https://github.com/Vihvila92/Easy-Race-Timer>
+## License and SaaS
+
+The license is the root `LICENSE` file (the 2025 sports license). The specification recommends AGPL-3.0-only; that change waits for the copyright holder and is not applied here. The local app has no license keys and no feature limits. Billing, cloud relay and the runner portal are not in this repository.
+
+Source: <https://github.com/Vihvila92/Easy-Race-Timer>
