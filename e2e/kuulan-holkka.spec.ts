@@ -171,7 +171,9 @@ test.describe('Kuulan hölkkä', () => {
 
     await setClock(page, request, '2028-06-13T12:00:00+03:00')
     await open(page, 'office')
+    const retention = page.waitForResponse((response) => response.url().includes('/api/v1/retention/run'))
     await page.getByTestId('retention-run').click()
+    expect((await retention).ok()).toBeTruthy()
     await noError(page)
     const anonymized = await request.get('/api/v1/results?format=csv')
     expect(project(await anonymized.text())).toEqual(project(read('expected-results.anonymized.csv')))
