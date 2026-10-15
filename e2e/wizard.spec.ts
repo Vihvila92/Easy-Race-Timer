@@ -2,6 +2,7 @@ import { expect, test } from '@playwright/test'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { screenshotDir } from './screenshot-dir.ts'
 import { killServer, startServer, type RunningServer } from './server.ts'
 
 test.describe('first run', () => {
@@ -19,9 +20,10 @@ test.describe('first run', () => {
     await page.goto(`http://127.0.0.1:${server.port}/`)
     await expect(page.getByTestId('wizard')).toBeVisible()
     await page.getByTestId('theme-light').click()
-    await page.screenshot({ path: '/opt/cursor/artifacts/screenshots/wizard-light.png', fullPage: true })
+    const shots = screenshotDir()
+    await page.screenshot({ path: path.join(shots, 'wizard-light.png'), fullPage: true })
     await page.getByTestId('theme-dark').click()
-    await page.screenshot({ path: '/opt/cursor/artifacts/screenshots/wizard-dark.png', fullPage: true })
+    await page.screenshot({ path: path.join(shots, 'wizard-dark.png'), fullPage: true })
     await page.getByTestId('theme-light').click()
     await expect(page.getByTestId('nav-finish')).toHaveCount(0)
     await page.getByTestId('wizard-name').fill('Kuulan hölkkä')

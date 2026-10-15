@@ -1,17 +1,17 @@
 import { expect, test } from '@playwright/test'
-import { mkdirSync, mkdtempSync } from 'node:fs'
+import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
+import { screenshotDir } from './screenshot-dir.ts'
 import { authorize, killServer, startServer, type RunningServer } from './server.ts'
 
-const out = '/opt/cursor/artifacts/screenshots'
+const out = screenshotDir()
 const dir = path.resolve('testdata/kuulan-holkka')
 
 test.describe('screenshots', () => {
   let server: RunningServer
 
   test.beforeAll(async () => {
-    mkdirSync(out, { recursive: true })
     server = await startServer(8099, path.join(mkdtempSync(path.join(tmpdir(), 'ert-shot-')), 'ert.sqlite'))
   })
 
