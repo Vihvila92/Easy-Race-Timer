@@ -9,7 +9,7 @@ Määrittely on [`docs/MAARITTELY.md`](docs/MAARITTELY.md). English: [`README.md
 ```
 packages/core            tuloslaskenta, sarjat, virheet
 packages/people          seurat, suostumus, anonymisointi
-packages/i18n            suomi ja englanti
+packages/i18n            suomi ja englanti (`locales/fi.json`, `locales/en.json`)
 packages/sports          juoksuprofiili
 packages/timing-sources  kosketusmaali
 packages/race-formats    yhteislähtö

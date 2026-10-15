@@ -9,7 +9,7 @@ The specification (Finnish) is [`docs/MAARITTELY.md`](docs/MAARITTELY.md). Suome
 ```
 packages/core            results, categories, errors
 packages/people          clubs, consent, anonymization
-packages/i18n            Finnish and English
+packages/i18n            Finnish and English (`locales/fi.json`, `locales/en.json`)
 packages/sports          running profile
 packages/timing-sources  touch finish
 packages/race-formats    mass start

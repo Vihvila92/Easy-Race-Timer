@@ -99,6 +99,8 @@ p.lead { color: var(--secondary); margin-top: 0; max-width: 42rem; }
   min-height: 44px;
 }
 .nav-link[aria-current="page"] { background: var(--card); box-shadow: var(--shadow); }
+.settings { margin-top: 8px; }
+.settings-label { font-size: 0.85rem; margin: 4px 8px; }
 .badge {
   min-width: 1.4rem;
   text-align: center;
