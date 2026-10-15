@@ -262,9 +262,21 @@ export function createApp(options: AppOptions): { app: FastifyInstance; service:
   })
   app.get('/api/v1/club-stats', async () => service.clubStatistics())
   app.get('/api/v1/audit', async () => service.audit())
-  app.post('/api/v1/retention/run', async (request) => {
-    const body = (request.body as { at?: string } | undefined) ?? {}
-    const now = body.at ? Date.parse(body.at) : clock.now()
+  app.post('/api/v1/retention/run', async (request, reply) => {
+    const body = (request.body as { at?: unknown; confirm?: boolean } | undefined) ?? {}
+    if (body.at !== undefined && !options.testMode) {
+      return reply.status(400).send({ error: { code: 'VALIDATION_ERROR', message: 'at is only available in test mode' } })
+    }
+    if (body.at !== undefined && typeof body.at !== 'string') {
+      throw new AppError('VALIDATION_ERROR', 'at must be a time')
+    }
+    const now = typeof body.at === 'string' ? Date.parse(body.at) : clock.now()
+    if (Number.isNaN(now)) throw new AppError('VALIDATION_ERROR', 'at is not a valid time')
+    const preview = service.previewRetention(now)
+    if (!body.confirm) return preview
+    if (!preview.locked) throw new AppError('LOCK_BLOCKED', 'Retention requires every race to be locked')
+    if (!preview.deadline_passed) throw new AppError('VALIDATION_ERROR', 'Retention deadline has not passed')
+    await requireBackup('retention')
     return service.runRetention(now)
   })
   app.get('/api/v1/persons/:id/export', async (request) => service.exportPerson((request.params as { id: string }).id))

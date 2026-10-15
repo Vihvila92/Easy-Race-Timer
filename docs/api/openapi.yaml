@@ -598,15 +598,35 @@ paths:
     post:
       tags: [privacy]
       operationId: runRetention
+      description: >
+        Without `confirm`, returns how many people would be anonymized and does not write.
+        `at` is accepted only when the server is in test mode; otherwise the request is rejected
+        with 400 and nobody is anonymized. A confirmed run requires every race to be locked,
+        the retention deadline to have passed, and an awaited backup.
       requestBody:
         content:
           application/json:
             schema:
               type: object
               properties:
-                at: { type: string }
+                at: { type: string, description: Test mode only }
+                confirm: { type: boolean }
       responses:
-        '200': { description: Anonymization result }
+        '200':
+          description: Preview, or the anonymization result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  preview: { type: boolean }
+                  anonymized: { type: integer }
+                  eligible: { type: integer }
+                  cutoff: { type: string }
+                  locked: { type: boolean }
+                  deadline_passed: { type: boolean }
+        '400': { $ref: '#/components/responses/Error' }
+        '409': { $ref: '#/components/responses/Error' }
   /api/v1/persons/{id}/export:
     get:
       tags: [privacy]

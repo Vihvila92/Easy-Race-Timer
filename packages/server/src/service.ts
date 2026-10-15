@@ -1165,12 +1165,45 @@ export class RaceService {
     return this.db.all<Row>('SELECT * FROM consent ORDER BY recorded_at')
   }
 
-  runRetention(nowMs = this.now()) {
+  previewRetention(nowMs = this.now()) {
+    const plan = this.retentionPlan(nowMs)
+    return {
+      preview: true as const,
+      anonymized: plan.locked && plan.deadlinePassed ? plan.eligible : 0,
+      eligible: plan.eligible,
+      cutoff: plan.cutoff,
+      locked: plan.locked,
+      deadline_passed: plan.deadlinePassed,
+    }
+  }
+
+  private retentionPlan(nowMs: number) {
     const event = this.event()
     const settings = this.settings()
     const cutoff = addMonths(event.date_start, settings.retention_months)
     const today = new Date(nowMs).toISOString().slice(0, 10)
-    if (today <= cutoff) return { anonymized: 0, cutoff }
+    const races = this.races()
+    const people = this.db.all<PersonRow>('SELECT id FROM person')
+    let eligible = 0
+    for (const person of people) {
+      const consent = this.db.get<{ granted: number }>("SELECT granted FROM consent WHERE person_id = ? AND purpose = 'long_term_storage' ORDER BY recorded_at DESC LIMIT 1", person.id)
+      if (consent?.granted) continue
+      eligible += 1
+    }
+    return {
+      eventId: event.id,
+      cutoff,
+      locked: races.length > 0 && races.every((race) => race.locked_at != null),
+      deadlinePassed: today > cutoff,
+      eligible,
+    }
+  }
+
+  runRetention(nowMs = this.now()) {
+    const plan = this.retentionPlan(nowMs)
+    if (!plan.locked) throw new AppError('LOCK_BLOCKED', 'Retention requires every race to be locked')
+    if (!plan.deadlinePassed) throw new AppError('VALIDATION_ERROR', 'Retention deadline has not passed')
+    const cutoff = plan.cutoff
     const removedNames: string[] = []
     const removedEmails: string[] = []
     const removedDates: string[] = []
@@ -1205,6 +1238,7 @@ export class RaceService {
         n += 1
       }
       if (removedBibs.length || removedNames.length) this.scrubText(removedNames, removedEmails, removedDates, removedBibs)
+      this.correct('event', plan.eventId, 'retention', 'retention run', null, { anonymized: n, cutoff })
       return n
     })
     return { anonymized: count, cutoff }
