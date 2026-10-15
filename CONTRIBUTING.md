@@ -54,6 +54,10 @@ Shared controls live in [`packages/web/src/ui`](packages/web/src/ui). Use them f
 
 `HintFrame` renders a `<view>.hint.<id>` string in the page flow only while guided mode is on. It is not a dialog. A dev build reviews the set at `#/preview`. That route is not part of the production build.
 
+## UI modularity
+
+Build each view from the shared components and design tokens of the [design foundation](docs/adr/0011-design-foundation.md): components in [`packages/web/src/ui`](packages/web/src/ui), tokens in [`packages/web/src/styles.css`](packages/web/src/styles.css). Do not add a view-local style or component that duplicates an existing one. Do not hard-code a color, spacing value or font size where a token exists. When the same pattern appears in two or more places, extract it into a shared component.
+
 ## Data and timing
 
 Finish taps are append-only. Corrections carry a reason. Do not update a stored `device_time_ms`.
