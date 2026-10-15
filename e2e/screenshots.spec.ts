@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { mkdirSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { killServer, startServer, type RunningServer } from './server.ts'
+import { authorize, killServer, startServer, type RunningServer } from './server.ts'
 
 const out = '/opt/cursor/artifacts/screenshots'
 const dir = path.resolve('testdata/kuulan-holkka')
@@ -20,6 +20,7 @@ test.describe('screenshots', () => {
   })
 
   test('captures the main screens in light and dark', async ({ page, request }) => {
+    await authorize(request)
     const event = JSON.parse(await (await import('node:fs')).promises.readFile(path.join(dir, 'event.json'), 'utf8'))
     const clubs = JSON.parse(await (await import('node:fs')).promises.readFile(path.join(dir, 'clubs-registry.json'), 'utf8'))
     const csv = await (await import('node:fs')).promises.readFile(path.join(dir, 'entries.csv'), 'utf8')

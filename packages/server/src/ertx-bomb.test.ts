@@ -8,6 +8,7 @@ describe('.ertx zip bomb', () => {
   it('rejects the archive with a clear error and keeps serving', async () => {
     const db = await openDatabase(':memory:')
     const { app } = createApp({ db, testMode: true })
+    const session = await app.inject({ method: 'POST', url: '/api/v1/settings/pin/check', payload: {} })
     const bytes = zipSync({
       'manifest.json': strToU8('{"format_version":1,"app_version":"0.1.0","schema_version":1}'),
       'data.json': new Uint8Array(ERTX_MAX_UNCOMPRESSED_BYTES + 1),
@@ -15,6 +16,7 @@ describe('.ertx zip bomb', () => {
     const response = await app.inject({
       method: 'POST',
       url: '/api/v1/sync/import',
+      headers: { authorization: `Bearer ${session.json().token as string}` },
       payload: { base64: Buffer.from(bytes).toString('base64') },
     })
     expect(response.statusCode).toBe(422)

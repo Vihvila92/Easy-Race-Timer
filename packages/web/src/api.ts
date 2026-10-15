@@ -11,6 +11,7 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const method = (init?.method ?? 'GET').toUpperCase()
   const response = await fetch(path, {
     ...init,
+    credentials: 'same-origin',
     headers: {
       ...(method !== 'GET' && method !== 'HEAD' ? { 'content-type': 'application/json' } : {}),
       ...(init?.headers ?? {}),

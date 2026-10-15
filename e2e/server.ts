@@ -1,5 +1,6 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import path from 'node:path'
+import type { APIRequestContext } from '@playwright/test'
 
 const root = path.resolve(import.meta.dirname, '..')
 
@@ -40,6 +41,12 @@ export async function startServer(port: number, dbFile: string): Promise<Running
   }
   child.kill('SIGKILL')
   throw new Error(`server did not start\n${log}`)
+}
+
+/** Store the device-token cookie on this API client. A PIN is required once one is set. */
+export async function authorize(request: APIRequestContext, pin?: string): Promise<void> {
+  const response = await request.post('/api/v1/settings/pin/check', { data: pin ? { pin } : {} })
+  if (!response.ok()) throw new Error(`PIN check failed ${response.status()} ${await response.text()}`)
 }
 
 export async function killServer(server: RunningServer): Promise<void> {

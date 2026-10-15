@@ -55,9 +55,12 @@ describe('lock backup', () => {
       firstName: 'A', lastName: 'B', gender: 'M', birthDate: '1990-01-01', raceId: 'R1', bib: 1, consent: false,
     })
     const reasons: string[] = []
+    const session = await setup.inject({ method: 'POST', url: '/api/v1/settings/pin/check', payload: {} })
+    const auth = { authorization: `Bearer ${session.json().token as string}` }
     const blocked = await setup.inject({
       method: 'POST',
       url: '/api/v1/races/R1/lock',
+      headers: auth,
       payload: {},
     })
     expect(blocked.statusCode).toBe(409)
@@ -71,6 +74,7 @@ describe('lock backup', () => {
     const locked = await ok.inject({
       method: 'POST',
       url: '/api/v1/races/R1/lock',
+      headers: auth,
       payload: {},
     })
     expect(locked.statusCode).toBe(200)
@@ -84,6 +88,7 @@ describe('lock backup', () => {
     const failed = await failing.inject({
       method: 'POST',
       url: '/api/v1/races/R1/lock',
+      headers: auth,
       payload: {},
     })
     expect(failed.statusCode).toBe(500)

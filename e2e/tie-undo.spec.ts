@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { killServer, startServer, type RunningServer } from './server.ts'
+import { authorize, killServer, startServer, type RunningServer } from './server.ts'
 
 test.describe('tie undo', () => {
   let server: RunningServer
@@ -16,6 +16,7 @@ test.describe('tie undo', () => {
   })
 
   test('keyboard reorder, confirm, and undo', async ({ page, request }) => {
+    await authorize(request)
     const date = '2027-06-12T11:00:00.000+03:00'
     await request.post('/api/v1/events/import', {
       data: {

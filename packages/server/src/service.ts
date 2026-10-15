@@ -162,9 +162,18 @@ export class RaceService {
     }
   }
 
-  setPin(pin: string) {
+  pinConfigured(): boolean {
+    const row = this.db.get<{ pin_hash: string | null }>('SELECT pin_hash FROM event LIMIT 1')
+    return Boolean(row?.pin_hash)
+  }
+
+  setPin(pin: string, currentPin?: string) {
     if (!/^\d{4,8}$/.test(pin)) throw new AppError('VALIDATION_ERROR', 'PIN must be 4–8 digits')
     const event = this.event()
+    if (event.pin_hash) {
+      const result = currentPin ? verifyPin(currentPin, event.pin_hash) : { ok: false, upgrade: false }
+      if (!result.ok) throw new AppError('PIN_REQUIRED', 'Current PIN required')
+    }
     this.db.run('UPDATE event SET pin_hash = ?, updated_at = ?, rev = rev + 1, hlc = ? WHERE id = ?', hashPin(pin), this.now(), this.hlc.tick(), event.id)
   }
 

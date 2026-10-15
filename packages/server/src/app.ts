@@ -6,8 +6,15 @@ import fastifyStatic from '@fastify/static'
 import websocket from '@fastify/websocket'
 import { AppError, errorBody } from '@ert/core'
 import { AppDb } from '@ert/storage'
+import { isLoopbackAddress, routeAccess } from './access.js'
 import { allowedOriginsFromEnv, hostAllowed, jsonContentType, originAllowed } from './guard.js'
+import { issueToken, sessionCookie, sessionSecret, tokenFromRequest, verifyToken } from './session.js'
 import { Clock, RaceService } from './service.js'
+
+export interface DiscoveredRoute {
+  method: string
+  url: string
+}
 
 export interface AppOptions {
   db: AppDb
@@ -18,10 +25,17 @@ export interface AppOptions {
   backup?: (reason: string) => Promise<unknown>
 }
 
-export function createApp(options: AppOptions): { app: FastifyInstance; service: RaceService; clock: Clock } {
+export function createApp(options: AppOptions): { app: FastifyInstance; service: RaceService; clock: Clock; discovered: DiscoveredRoute[] } {
   const clock = new Clock()
   const service = new RaceService(options.db, clock)
+  const secret = sessionSecret(options.db)
+  const discovered: DiscoveredRoute[] = []
   const app = Fastify({ logger: options.testMode ? false : { level: 'info' } })
+  const authenticated = (request: { headers: { authorization?: string | string[]; cookie?: string | string[] }; ip: string }) => {
+    const header = Array.isArray(request.headers.authorization) ? request.headers.authorization[0] : request.headers.authorization
+    const cookie = Array.isArray(request.headers.cookie) ? request.headers.cookie[0] : request.headers.cookie
+    return verifyToken(secret, tokenFromRequest({ authorization: header, cookie }))
+  }
   const sockets = new Set<{ send: (data: string) => void }>()
   service.bus.on('TimingEventRecorded', (payload) => broadcast('timing_event.created', payload))
   service.bus.on('CorrectionApplied', (payload) => broadcast('correction.created', payload))
@@ -31,6 +45,14 @@ export function createApp(options: AppOptions): { app: FastifyInstance; service:
     const message = JSON.stringify({ type, payload })
     for (const socket of sockets) socket.send(message)
   }
+
+  app.addHook('onRoute', (opts) => {
+    const methods = Array.isArray(opts.method) ? opts.method : [opts.method]
+    for (const method of methods) {
+      if (method === 'HEAD') continue
+      discovered.push({ method, url: opts.url })
+    }
+  })
 
   app.addHook('onRequest', async (request, reply) => {
     const address = app.server.address()
@@ -74,7 +96,23 @@ export function createApp(options: AppOptions): { app: FastifyInstance; service:
     reply.status(500).send({ error: { code: 'VALIDATION_ERROR', message: 'Internal error' } })
   })
 
-  app.get('/api/v1/health', async () => ({ ok: true, version: '0.1.0' }))
+  app.addHook('preHandler', async (request, reply) => {
+    if (reply.sent) return
+    const url = request.routeOptions.url
+    if (!url || (!url.startsWith('/api/') && url !== '/ws')) return
+    const method = request.method === 'HEAD' ? 'GET' : request.method
+    const access = routeAccess(method, url)
+    if (!access) {
+      return reply.status(401).send(errorBody(new AppError('PIN_REQUIRED', 'PIN required')))
+    }
+    if (access === 'public') return
+    if (access === 'local' && isLoopbackAddress(request.ip)) return
+    if (!authenticated(request)) {
+      return reply.status(401).send(errorBody(new AppError('PIN_REQUIRED', 'PIN required')))
+    }
+  })
+
+  app.get('/api/v1/health', async () => ({ ok: true, version: '0.1.0', pinConfigured: service.pinConfigured() }))
   app.get('/api/v1/runtime', async () => ({
     url: options.runtime?.url ?? '',
     dataDir: options.runtime?.dataDir ?? '',
@@ -122,10 +160,17 @@ export function createApp(options: AppOptions): { app: FastifyInstance; service:
     return { ok: true }
   })
   app.post('/api/v1/settings/pin', async (request) => {
-    service.setPin((request.body as { pin: string }).pin)
+    const body = request.body as { pin: string; currentPin?: string }
+    service.setPin(body.pin, body.currentPin)
     return { ok: true }
   })
-  app.post('/api/v1/settings/pin/check', async (request) => service.checkPin((request.body as { pin?: string }).pin))
+  app.post('/api/v1/settings/pin/check', async (request, reply) => {
+    const body = (request.body as { pin?: string } | undefined) ?? {}
+    service.checkPin(body.pin)
+    const token = issueToken(secret)
+    reply.header('set-cookie', sessionCookie(token))
+    return { ok: true, token }
+  })
   app.post('/api/v1/entries/late', async (request) => service.registerLate(request.body as Parameters<RaceService['registerLate']>[0]))
   app.post('/api/v1/entries/change-bib', async (request) => {
     const body = request.body as { bibFrom: number; bibTo: number; reason: string }
@@ -201,6 +246,9 @@ export function createApp(options: AppOptions): { app: FastifyInstance; service:
   app.get('/api/v1/results', async (request, reply) => {
     const query = request.query as { format?: string; view?: 'public' | 'internal' }
     const view = query.view ?? 'public'
+    if (view === 'internal' && !authenticated(request)) {
+      throw new AppError('PIN_REQUIRED', 'PIN required')
+    }
     if (query.format === 'csv') {
       reply.header('content-type', 'text/csv; charset=utf-8')
       return service.resultsCsv(view)
@@ -273,7 +321,7 @@ export function createApp(options: AppOptions): { app: FastifyInstance; service:
     }
   }
 
-  return { app, service, clock }
+  return { app, service, clock, discovered }
 }
 
 const clockBody = z.object({ at: z.string().nullable().optional() })

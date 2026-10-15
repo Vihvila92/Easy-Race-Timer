@@ -4,7 +4,7 @@ import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { parseCsv, RESULT_FIELDS } from '../packages/core/src/index.ts'
-import { killServer, startServer, type RunningServer } from './server.ts'
+import { authorize, killServer, startServer, type RunningServer } from './server.ts'
 
 const dir = path.resolve('testdata/kuulan-holkka')
 const read = (name: string) => readFileSync(path.join(dir, name), 'utf8')
@@ -47,12 +47,15 @@ test.describe('Kuulan hölkkä', () => {
     await page.goto('/')
     await page.evaluate(() => sessionStorage.setItem('ert-next-tap', '1'))
     await expect.poll(() => page.evaluate(async () => Boolean(await navigator.serviceWorker.getRegistration()))).toBe(true)
+    await expect(page.getByTestId('nav-import')).toBeVisible()
+    await authorize(request)
 
     await open(page, 'import')
     await Promise.all([
       page.waitForResponse((response) => response.url().includes('/api/v1/events/import') && response.ok()),
       page.getByTestId('event-file').setInputFiles(path.join(dir, 'event.json')),
     ])
+    expect((await request.post('/api/v1/settings/pin', { data: { pin: '2468' } })).ok()).toBeTruthy()
     await Promise.all([
       page.waitForResponse((response) => response.url().includes('/api/v1/clubs/import') && response.ok()),
       page.getByTestId('clubs-file').setInputFiles(path.join(dir, 'clubs-registry.json')),

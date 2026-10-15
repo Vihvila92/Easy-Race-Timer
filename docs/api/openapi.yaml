@@ -5,6 +5,7 @@ info:
   description: |
     Local race-day API. One laptop, organization id always `local`.
     Clients create identifiers and finish times. Errors use the shape in ERROR_CODES.md.
+    Write routes, personal-data reads, `?view=internal`, and `/runtime` from a non-loopback address require a device token (`Authorization: Bearer` or the `ert_session` cookie). `POST /api/v1/settings/pin/check` issues that token.
     HTML (`format=html`) is a print export, not an application page.
     `Host` must be `localhost` or `127.0.0.1` on the listen port (421 otherwise).
     A browser `Origin`, when sent, must be that same loopback origin (403 otherwise). WebSocket upgrades always require it.
@@ -33,10 +34,11 @@ paths:
             application/json:
               schema:
                 type: object
-                required: [ok, version]
+                required: [ok, version, pinConfigured]
                 properties:
                   ok: { type: boolean }
                   version: { type: string }
+                  pinConfigured: { type: boolean }
   /api/v1/runtime:
     get:
       tags: [system]
@@ -379,16 +381,32 @@ paths:
           application/json:
             schema:
               type: object
-              properties:
-                pin: { type: string }
+                properties:
+                  pin: { type: string }
+                  currentPin:
+                    type: string
+                    description: Required when a PIN is already set.
       responses:
         '200': { description: PIN stored }
+        '401': { $ref: '#/components/responses/Error' }
   /api/v1/settings/pin/check:
     post:
       tags: [setup]
       operationId: checkPin
+      description: |
+        Checks the PIN and returns a device token. The same token is set as an HttpOnly SameSite=Strict cookie named ert_session (about 12 hours).
+        When no PIN is configured yet, this opens a setup session so the first run can set one.
       responses:
-        '200': { description: Check result }
+        '200':
+          description: Device token
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, token]
+                properties:
+                  ok: { type: boolean }
+                  token: { type: string }
         '401': { $ref: '#/components/responses/Error' }
   /api/v1/club-actions/confirm:
     post:

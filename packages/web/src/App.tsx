@@ -36,8 +36,26 @@ function Preferences() {
   )
 }
 
+function PinGate() {
+  const { t, error, login } = useApp()
+  const [pin, setPin] = useState('')
+  return (
+    <div className="shell wizard-shell">
+      <main className="main">
+        <section data-testid="pin-gate">
+          <h1>{t('pin.title')}</h1>
+          <p className="lead">{t('pin.lead')}</p>
+          {error && <p className="error" role="alert" data-testid="form-error">{t('common.error')}: {error}</p>}
+          <input aria-label={t('office.pin')} data-testid="pin-input" inputMode="numeric" value={pin} onChange={(event) => setPin(event.target.value)} />
+          <button type="button" data-testid="pin-submit" onClick={() => { void login(pin) }}>{t('pin.open')}</button>
+        </section>
+      </main>
+    </div>
+  )
+}
+
 export function App() {
-  const { t, data, error } = useApp()
+  const { t, data, needsPin, error } = useApp()
   const [hash, setHash] = useState(() => window.location.hash.replace('#', '') || '/office')
   useEffect(() => {
     const onHash = () => setHash(window.location.hash.replace('#', '') || '/office')
@@ -48,6 +66,7 @@ export function App() {
   const current = VIEWS.find(([path]) => path === hash) ?? VIEWS[0]
   const View = current[2]
   const waiting = data?.ties.filter((group) => group.status === 'unconfirmed').length ?? 0
+  if (needsPin) return <PinGate />
   if (!data) {
     return <div className="shell wizard-shell"><main className="main"><p>{t('common.loading')}</p></main></div>
   }

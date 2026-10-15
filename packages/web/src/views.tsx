@@ -16,6 +16,7 @@ function Field({ id, label, children }: { id: string; label: string; children: R
 export function Office() {
   const { t, data, run, locale } = useApp()
   const [pin, setPin] = useState('')
+  const [currentPin, setCurrentPin] = useState('')
   if (!data) return <p>{t('common.loading')}</p>
   const event = data.event
   return (
@@ -48,8 +49,9 @@ export function Office() {
         </div>
         <p>{t('office.pin')}</p>
         <div className="row">
-          <input id="pin" aria-label={t('office.pin')} value={pin} onChange={(event) => setPin(event.target.value)} inputMode="numeric" />
-          <button type="button" className="secondary" onClick={() => run(() => api('/api/v1/settings/pin', { method: 'POST', body: JSON.stringify({ pin }) }))}>{t('office.pinSet')}</button>
+          {event?.has_pin ? <input aria-label={t('pin.current')} data-testid="office-pin-current" value={currentPin} onChange={(event) => setCurrentPin(event.target.value)} inputMode="numeric" /> : null}
+          <input id="pin" aria-label={t('office.pin')} data-testid="office-pin" value={pin} onChange={(event) => setPin(event.target.value)} inputMode="numeric" />
+          <button type="button" className="secondary" data-testid="office-pin-save" onClick={() => run(() => api('/api/v1/settings/pin', { method: 'POST', body: JSON.stringify(event?.has_pin ? { pin, currentPin } : { pin }) }))}>{t('office.pinSet')}</button>
           <button type="button" data-testid="retention-run" onClick={() => run(() => api('/api/v1/retention/run', { method: 'POST', body: '{}' }))}>{t('office.retention')}</button>
         </div>
       </div>
