@@ -18,8 +18,12 @@ import { exportPrintHtml, exportResultsCsv } from '@ert/exporters'
 import { formatWarnings, type Locale } from '@ert/i18n'
 import {
   CONSENT_TEXT_VERSION,
+  applyPublication,
   applyPublicPrivacy,
   clubStats,
+  defaultPublication,
+  isPublicationLevel,
+  type PublicationLevel,
   findDuplicatePairs,
   newClubId,
   norm,
@@ -383,12 +387,20 @@ export class RaceService {
     const personId = createId()
     const entryId = createId()
     const reg = (this.db.get<{ m: number }>('SELECT COALESCE(MAX(reg_seq), 0) AS m FROM entry')?.m ?? 0) + 1
-    this.db.run(
-      `INSERT INTO person (id, org_id, first_name, last_name, gender, birth_date, birth_year, email, default_club_id, created_at, updated_at, hlc)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      personId, ORG_ID, input.firstName, input.lastName, input.gender, input.birthDate, input.birthYear, input.email, input.clubId, input.now, input.now, input.hlc,
+    const reference = this.settings().age_reference_date || this.event().date_start
+    const age = input.birthDate || input.birthYear != null
+      ? suggestCategory({ gender: input.gender, birthDate: input.birthDate, birthYear: input.birthYear }, this.settings().age_basis, input.raceId, this.categoryDefs(), reference).age
+      : null
+    const publication = defaultPublication(
+      { gender: input.gender, birthDate: input.birthDate, birthYear: input.birthYear },
+      reference,
+      this.settings().age_basis,
     )
-    const age = input.birthDate ? suggestCategory({ gender: input.gender, birthDate: input.birthDate, birthYear: input.birthYear }, this.settings().age_basis, input.raceId, this.categoryDefs(), this.settings().age_reference_date).age : null
+    this.db.run(
+      `INSERT INTO person (id, org_id, first_name, last_name, gender, birth_date, birth_year, email, default_club_id, created_at, updated_at, hlc, publication)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      personId, ORG_ID, input.firstName, input.lastName, input.gender, input.birthDate, input.birthYear, input.email, input.clubId, input.now, input.now, input.hlc, publication,
+    )
     const givenBy = input.givenBy ?? ((age != null && age < 13) ? 'guardian' : 'self')
     this.db.run(
       `INSERT INTO consent (id, person_id, purpose, granted, given_by, text_version, channel, recorded_by, recorded_at)
@@ -1108,12 +1120,13 @@ export class RaceService {
     const categories = this.categories()
     const categoryIdsByRace: Record<string, string[]> = {}
     for (const race of races) categoryIdsByRace[race.id] = categories.filter((category) => category.race_id === race.id).map((category) => category.id)
-    const rows = computeResults({
+    let rows = computeResults({
       raceIds: races.map((race) => race.id),
       categoryIdsByRace,
       entrants: this.buildEntrants(locale),
     })
     if (view === 'internal') return rows
+    rows = applyPublication(rows, this.publicationLevels())
     const privacy: PrivacyEntrant[] = this.entries().map((entry) => ({
       entryId: entry.id,
       raceId: entry.race_id,
@@ -1123,6 +1136,27 @@ export class RaceService {
       anonymized: entry.anonymized_at != null,
     }))
     return applyPublicPrivacy(rows, privacy, this.settings().privacy_min_group_size, locale)
+  }
+
+  private publicationLevels(): Map<string, PublicationLevel> {
+    const levels = new Map<string, PublicationLevel>()
+    const rows = this.db.all<{ id: string; publication: string | null }>(`
+      SELECT entry.id AS id, person.publication AS publication
+      FROM entry LEFT JOIN person ON person.id = entry.person_id
+    `)
+    for (const row of rows) levels.set(row.id, isPublicationLevel(row.publication) ? row.publication : 'full')
+    return levels
+  }
+
+  setPublication(personId: string, level: string) {
+    if (!isPublicationLevel(level)) throw new AppError('VALIDATION_ERROR', 'Unknown publication level')
+    const person = this.db.get('SELECT id FROM person WHERE id = ?', personId)
+    if (!person) throw new AppError('NOT_FOUND', 'Person not found')
+    const { now, hlc } = this.stamp()
+    this.db.tx(() => {
+      this.db.run('UPDATE person SET publication = ?, updated_at = ?, rev = rev + 1, hlc = ? WHERE id = ?', level, now, hlc, personId)
+      this.correct('person', personId, 'set_publication', 'publication level', null, { level })
+    })
   }
 
   resultsCsv(view: 'public' | 'internal' = 'public') {
@@ -1244,6 +1278,25 @@ export class RaceService {
     return { anonymized: count, cutoff }
   }
 
+  private applyPublicationDefaults() {
+    const event = this.db.get<EventRow>('SELECT * FROM event LIMIT 1')
+    if (!event) return
+    const settings = this.settings()
+    const reference = settings.age_reference_date || event.date_start
+    const people = this.db.all<{ id: string; gender: 'F' | 'M' | 'X'; birth_date: string | null; birth_year: number | null; publication: string }>(
+      'SELECT id, gender, birth_date, birth_year, publication FROM person',
+    )
+    for (const person of people) {
+      if (person.publication !== 'full') continue
+      const level = defaultPublication(
+        { gender: person.gender, birthDate: person.birth_date, birthYear: person.birth_year },
+        reference,
+        settings.age_basis,
+      )
+      if (level === 'initials') this.db.run('UPDATE person SET publication = ? WHERE id = ?', level, person.id)
+    }
+  }
+
   private scrubText(names: string[], emails: string[], dates: string[], bibs: number[]) {
     const corrections = this.db.all<CorrectionRow>('SELECT * FROM correction')
     for (const row of corrections) {
@@ -1291,6 +1344,7 @@ export class RaceService {
     this.db.tx(() => {
       replaceFromErtx(this.db, parsed)
       this.db.run('UPDATE event SET pin_hash = ?', savedPin)
+      if (parsed.manifest.schema_version < 2) this.applyPublicationDefaults()
       const eventId = this.db.get<{ id: string }>('SELECT id FROM event LIMIT 1')?.id ?? 'import'
       this.correct('event', eventId, 'import_ertx', 'ertx import', null, {
         schema_version: parsed.manifest.schema_version,

@@ -1,4 +1,6 @@
-export const SCHEMA_VERSION = 1
+import { ageOnReference } from '@ert/core'
+
+export const SCHEMA_VERSION = 2
 
 export interface Migration {
   version: number
@@ -6,7 +8,43 @@ export interface Migration {
 }
 
 /** Applied in order when schema_meta.schema_version is behind SCHEMA_VERSION. */
-export const MIGRATIONS: Migration[] = []
+export const MIGRATIONS: Migration[] = [
+  {
+    version: 2,
+    up(raw) {
+      const columns = raw.prepare('PRAGMA table_info(person)').all() as { name: string }[]
+      if (!columns.some((column) => column.name === 'publication')) {
+        raw.exec(`ALTER TABLE person ADD COLUMN publication TEXT NOT NULL DEFAULT 'full' CHECK (publication IN ('full', 'initials', 'bib_only', 'hidden'))`)
+      }
+      const event = raw.prepare('SELECT date_start, settings_json FROM event LIMIT 1').get() as { date_start: string; settings_json: string } | undefined
+      if (!event) return
+      let basis: 'birth_date' | 'birth_year' = 'birth_date'
+      let reference = event.date_start
+      try {
+        const settings = JSON.parse(event.settings_json) as { age_basis?: string; age_reference_date?: string }
+        if (settings.age_basis === 'birth_year') basis = 'birth_year'
+        if (settings.age_reference_date) reference = settings.age_reference_date
+      } catch {
+        reference = event.date_start
+      }
+      const people = raw.prepare('SELECT id, gender, birth_date, birth_year, publication FROM person').all() as { id: string; gender: 'F' | 'M' | 'X'; birth_date: string | null; birth_year: number | null; publication: string }[]
+      const update = raw.prepare(`UPDATE person SET publication = 'initials' WHERE id = ? AND publication = 'full'`)
+      for (const person of people) {
+        if (person.publication !== 'full') continue
+        try {
+          const { age } = ageOnReference(
+            { gender: person.gender, birthDate: person.birth_date, birthYear: person.birth_year },
+            basis,
+            reference,
+          )
+          if (age < 15) update.run(person.id)
+        } catch {
+          // A person without a birth date stays on the explicit level.
+        }
+      }
+    },
+  },
+]
 
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -92,7 +130,8 @@ CREATE TABLE IF NOT EXISTS person (
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
   rev INTEGER NOT NULL DEFAULT 1,
-  hlc TEXT NOT NULL
+  hlc TEXT NOT NULL,
+  publication TEXT NOT NULL DEFAULT 'full' CHECK (publication IN ('full', 'initials', 'bib_only', 'hidden'))
 );
 
 CREATE TABLE IF NOT EXISTS club (

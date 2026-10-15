@@ -4,7 +4,7 @@ import Fastify, { type FastifyInstance } from 'fastify'
 import { z } from 'zod'
 import fastifyStatic from '@fastify/static'
 import websocket from '@fastify/websocket'
-import { AppError, errorBody } from '@ert/core'
+import { AppError, errorBody, resultProjection } from '@ert/core'
 import { AppDb } from '@ert/storage'
 import { isLoopbackAddress, routeAccess } from './access.js'
 import { allowedOriginsFromEnv, hostAllowed, jsonContentType, originAllowed } from './guard.js'
@@ -258,7 +258,8 @@ export function createApp(options: AppOptions): { app: FastifyInstance; service:
       const locale = (request.query as { locale?: string }).locale
       return service.resultsHtml(locale === 'en' || locale === 'fi' ? locale : undefined)
     }
-    return service.results(view)
+    const rows = service.results(view)
+    return view === 'internal' ? rows : rows.map(resultProjection)
   })
   app.get('/api/v1/club-stats', async () => service.clubStatistics())
   app.get('/api/v1/audit', async () => service.audit())
@@ -280,6 +281,11 @@ export function createApp(options: AppOptions): { app: FastifyInstance; service:
     return service.runRetention(now)
   })
   app.get('/api/v1/persons/:id/export', async (request) => service.exportPerson((request.params as { id: string }).id))
+  app.post('/api/v1/persons/:id/publication', async (request) => {
+    const body = request.body as { level?: string }
+    service.setPublication((request.params as { id: string }).id, String(body.level ?? ''))
+    return { ok: true }
+  })
   app.post('/api/v1/persons/:id/consents', async (request) => {
     const body = request.body as { granted: boolean; channel?: string }
     const personId = (request.params as { id: string }).id

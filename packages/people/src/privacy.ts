@@ -1,4 +1,4 @@
-import type { ResultRow } from '@ert/core'
+import { ageOnReference, type AgeBasis, type AgeInput, type ResultRow } from '@ert/core'
 
 export interface PrivacyEntrant {
   entryId: string
@@ -124,6 +124,41 @@ export function clubStats(entrants: ClubStatEntrant[], k = 3, locale: 'fi' | 'en
     })
   }
   return rows
+}
+
+export const PUBLICATION_LEVELS = ['full', 'initials', 'bib_only', 'hidden'] as const
+export type PublicationLevel = (typeof PUBLICATION_LEVELS)[number]
+
+export function isPublicationLevel(value: string | undefined | null): value is PublicationLevel {
+  return PUBLICATION_LEVELS.includes(value as PublicationLevel)
+}
+
+/** Under 15 the public default is initials. Everyone else starts at full. */
+export function defaultPublication(person: AgeInput, referenceDate: string, basis: AgeBasis = 'birth_date'): PublicationLevel {
+  try {
+    const { age } = ageOnReference(person, basis, referenceDate)
+    return age < 15 ? 'initials' : 'full'
+  } catch {
+    return 'full'
+  }
+}
+
+/** Last name plus the first initial. Hidden and bib-only publish no name. */
+export function publishedName(displayName: string, level: PublicationLevel): string {
+  if (level === 'hidden' || level === 'bib_only') return ''
+  if (level === 'full') return displayName
+  const parts = displayName.trim().split(/\s+/).filter(Boolean)
+  if (!parts.length) return ''
+  if (parts.length === 1) return `${parts[0]!.charAt(0)}.`
+  return `${parts[0]} ${parts[1]!.charAt(0)}.`
+}
+
+export function applyPublication(rows: ResultRow[], levels: ReadonlyMap<string, PublicationLevel>): ResultRow[] {
+  return rows.map((row) => {
+    const level = levels.get(row.entryId) ?? 'full'
+    if (level === 'full') return row
+    return { ...row, name: publishedName(row.name, level) }
+  })
 }
 
 export const CONSENT_TEXT_VERSION = 'retention-v1'

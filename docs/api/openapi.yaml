@@ -43,7 +43,7 @@ paths:
     get:
       tags: [system]
       operationId: runtime
-      description: Where this process is listening and where it stores the SQLite file. The UI does not need this to call the API.
+      description: Where this process is listening and where it stores the SQLite file. Loopback may read it; every other client needs a device token.
       responses:
         '200':
           description: Launch facts
@@ -579,9 +579,15 @@ paths:
         - in: query
           name: locale
           schema: { type: string, enum: [fi, en] }
+      description: >
+        Public results are a whitelist: place, bib, published name, club, category, time and status.
+        They omit entry ids, birth dates, email and guardian details. Names follow each person's
+        publication level (`full`, `initials`, `bib_only`, `hidden`). Under 15 the default is initials.
+        `view=internal` requires a device token and returns the organizer's unmasked rows.
       responses:
         '200':
           description: Results. CSV is UTF-8 with BOM and semicolon separators.
+        '401': { $ref: '#/components/responses/Error' }
   /api/v1/club-stats:
     get:
       tags: [results]
@@ -627,6 +633,24 @@ paths:
                   deadline_passed: { type: boolean }
         '400': { $ref: '#/components/responses/Error' }
         '409': { $ref: '#/components/responses/Error' }
+  /api/v1/persons/{id}/publication:
+    post:
+      tags: [privacy]
+      operationId: setPublication
+      parameters:
+        - $ref: '#/components/parameters/Id'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [level]
+              properties:
+                level: { type: string, enum: [full, initials, bib_only, hidden] }
+      responses:
+        '200': { description: Publication level saved }
+        '401': { $ref: '#/components/responses/Error' }
+        '404': { $ref: '#/components/responses/Error' }
   /api/v1/persons/{id}/export:
     get:
       tags: [privacy]

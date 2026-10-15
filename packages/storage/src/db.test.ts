@@ -4,6 +4,7 @@ import path from 'node:path'
 import Database from 'better-sqlite3'
 import { afterEach, describe, expect, it } from 'vitest'
 import { assertBackupIntegrity, backupDatabase, openDatabase, pruneBackups } from './db.js'
+import { SCHEMA_VERSION } from './schema.js'
 
 const files: string[] = []
 
@@ -88,7 +89,7 @@ describe('openDatabase', () => {
     const reopened = await openDatabase(file)
     const version = reopened.get<{ schema_version: number }>('SELECT schema_version FROM schema_meta WHERE id = 1')
     reopened.raw.close()
-    expect(version?.schema_version).toBe(1)
+    expect(version?.schema_version).toBe(SCHEMA_VERSION)
     const backups = fs.readdirSync(dir).filter((name) => name.includes('.premigrate-') && name.endsWith('.sqlite'))
     expect(backups).toHaveLength(1)
     expect(() => assertBackupIntegrity(path.join(dir, backups[0]!))).not.toThrow()

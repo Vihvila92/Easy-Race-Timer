@@ -54,6 +54,7 @@ export const PROTECTED_ROUTES = [
   'GET /api/v1/audit',
   'POST /api/v1/retention/run',
   'GET /api/v1/persons/:id/export',
+  'POST /api/v1/persons/:id/publication',
   'POST /api/v1/persons/:id/consents',
   'GET /api/v1/sync/export',
   'POST /api/v1/sync/import',
