@@ -1,19 +1,46 @@
+# Dependabot configuration.
+# Actions are pinned to full commit SHAs with a version comment
+# (e.g. `uses: actions/checkout@<sha> # v7.0.1`); Dependabot keeps the
+# pin format and updates both SHA and comment.
 version: 2
 updates:
-  - package-ecosystem: "npm"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
-    labels: ["dependencies"]
-    commit-message:
-      prefix: "chore(deps)"
-      include: "scope"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Helsinki"
+    open-pull-requests-limit: 5
     labels: ["dependencies", "ci"]
     commit-message:
-      prefix: "chore(deps)"
-      include: "scope"
+      prefix: "ci"
+      include: "scope"   # -> "ci(deps): bump ..."
+    groups:
+      actions:
+        patterns: ["*"]  # all action updates (incl. majors) in one PR
+
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Europe/Helsinki"
+    open-pull-requests-limit: 5
+    versioning-strategy: increase
+    labels: ["dependencies"]
+    commit-message:
+      prefix: "chore"
+      prefix-development: "chore"
+      include: "scope"   # -> "chore(deps): ..." / "chore(deps-dev): ..."
+    groups:
+      npm-minor-patch:
+        update-types: ["minor", "patch"]
+      vitest:
+        patterns: ["vitest", "@vitest/*"]
+        update-types: ["major"]
+      npm-security:
+        applies-to: security-updates
+        patterns: ["*"]
+    # Majors (other than grouped ones) come as separate PRs.
