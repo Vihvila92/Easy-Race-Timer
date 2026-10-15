@@ -2,9 +2,10 @@ import { parseLocale, translate, type Locale, type MessageKey } from '@ert/i18n'
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ApiError, api, loadWorkspace } from './api.js'
 import type { Workspace } from './types.js'
+import { parseGuidance, parseThemeChoice, resolveColorScheme, type Guidance, type ThemeChoice } from './ui/preferences.js'
 
-export type Theme = 'light' | 'dark' | 'system'
-export type Guidance = 'guided' | 'expert'
+export type Theme = ThemeChoice
+export type { Guidance }
 
 interface AppContextValue {
   locale: Locale
@@ -33,17 +34,11 @@ function storedLocale(): Locale {
 }
 
 function storedGuidance(): Guidance {
-  return localStorage.getItem('ert-guidance') === 'expert' ? 'expert' : 'guided'
+  return parseGuidance(localStorage.getItem('ert-guidance'))
 }
 
 function storedTheme(): Theme {
-  const value = localStorage.getItem('ert-theme')
-  return value === 'light' || value === 'dark' || value === 'system' ? value : 'system'
-}
-
-function resolveTheme(theme: Theme): 'light' | 'dark' {
-  if (theme !== 'system') return theme
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+  return parseThemeChoice(localStorage.getItem('ert-theme'))
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
@@ -72,12 +67,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    const resolved = resolveTheme(theme)
-    document.documentElement.dataset.theme = resolved
-    document.documentElement.lang = locale
-    document.documentElement.style.colorScheme = resolved
-    const themeColor = document.querySelector('meta[name="theme-color"]')
-    themeColor?.setAttribute('content', resolved === 'dark' ? '#000000' : '#f2f2f7')
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const apply = () => {
+      const resolved = resolveColorScheme(theme, media.matches)
+      document.documentElement.dataset.theme = resolved
+      document.documentElement.lang = locale
+      document.documentElement.style.colorScheme = resolved
+      const themeColor = document.querySelector('meta[name="theme-color"]')
+      themeColor?.setAttribute('content', resolved === 'dark' ? '#000000' : '#f2f2f7')
+    }
+    apply()
+    media.addEventListener('change', apply)
+    return () => media.removeEventListener('change', apply)
   }, [theme, locale])
 
   const reload = useCallback(async () => {
