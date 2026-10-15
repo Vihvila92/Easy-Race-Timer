@@ -38,11 +38,13 @@ See [Strings and guided-mode hints](#strings-and-guided-mode-hints).
 
 ## Strings and guided-mode hints
 
-Add every new user-visible string to both [`packages/i18n/locales/fi.json`](packages/i18n/locales/fi.json) and [`packages/i18n/locales/en.json`](packages/i18n/locales/en.json) in the same change. Keys are dotted and typed, for example `finish.tap`. Placeholders use `{name}`. `pnpm check:i18n` fails when a key exists in one file but not the other. Do not hard-code user-visible copy in a view.
+Add every new user-visible string to both [`packages/i18n/locales/fi.json`](packages/i18n/locales/fi.json) and [`packages/i18n/locales/en.json`](packages/i18n/locales/en.json) in the same change. Placeholders use `{name}`. `pnpm check:i18n` fails when a key exists in one file but not the other, and when a key is both a leaf and a prefix of another key. Do not hard-code user-visible copy in a view.
 
-The language switch lives in settings. Finnish is the default. The choice is stored in local storage and applies immediately.
+Name keys `<view>.<element>` in camelCase, for example `finish.tap`. Shared, view-independent keys stay at the top level (`action.*`, `theme.*`, `lang.*`, `nav.*`). One extra level is only for an option set (`office.offset.ranked`, `entries.consent.yes`) or a guided-mode hint (`<view>.hint.<id>`, for example `finish.hint.keys`). A group label uses its own element name (`office.ageBasisTitle`) so it is not also the prefix of those options. A key ending in `Label` is an accessible name (`finish.tapLabel`), not the visible text.
 
-Guided-mode hints use the key `<view>.hint.<id>`, for example `finish.hint.queue`. Write the Finnish and English hint next to the other strings for that view. That key is what the guided-mode hint frame reads, and only while guided mode is on. Do not put the hint sentence in the component.
+The language switch lives in settings. Finnish is the default. The choice is stored in local storage and applies immediately. Only `fi` and `en` are accepted; any other stored value falls back to Finnish.
+
+Guided mode is the default. A `<view>.hint.<id>` string is shown only while guided mode is on. Write the Finnish and English hint next to the other strings for that view. Do not put the hint sentence in the component.
 
 Format dates and times with `formatDate`, `formatTime` and `formatDateTime` from `@ert/i18n` (`fi-FI` and `en-GB`). A Finnish date looks like `15.10.2026`. Store a calendar date as `YYYY-MM-DD`.
 

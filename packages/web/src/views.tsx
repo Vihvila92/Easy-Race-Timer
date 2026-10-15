@@ -43,7 +43,7 @@ export function Office() {
         <p><a href="#/import" data-testid="wizard-next-import">{t('wizard.importNext')}</a></p>
       )}
       <div className="card">
-        <h2>{t('office.ageBasis')}</h2>
+        <h2>{t('office.ageBasisTitle')}</h2>
         <div className="segment">
           <button type="button" className="secondary" data-testid="office-age-birth_date" onClick={() => run(() => api('/api/v1/settings/age-basis', { method: 'POST', body: JSON.stringify({ basis: 'birth_date', apply: false }) }))}>{t('office.ageBasis.birth_date')}</button>
           <button type="button" className="secondary" data-testid="office-age-birth_year" onClick={() => run(() => api('/api/v1/settings/age-basis', { method: 'POST', body: JSON.stringify({ basis: 'birth_year', apply: false }) }))}>{t('office.ageBasis.birth_year')}</button>
@@ -272,7 +272,7 @@ export function Entries() {
           <span data-testid="late-club-hit">{clubHit}</span>
           <input aria-label={t('entries.changeRace')} data-testid="late-race" value={late.race} onChange={(event) => setLate({ ...late, race: event.target.value })} />
           <input aria-label={t('entries.bib')} data-testid="late-bib" value={late.bib} onChange={(event) => setLate({ ...late, bib: event.target.value })} />
-          <label><input data-testid="late-consent" type="checkbox" checked={late.consent} onChange={(event) => setLate({ ...late, consent: event.target.checked })} /> {t('entries.consent')}</label>
+          <label><input data-testid="late-consent" type="checkbox" checked={late.consent} onChange={(event) => setLate({ ...late, consent: event.target.checked })} /> {t('entries.consentText')}</label>
           <button type="button" data-testid="late-save" onClick={() => run(() => api('/api/v1/entries/late', { method: 'POST', body: JSON.stringify({ firstName: late.first, lastName: late.last, gender: late.gender, birthDate: late.birth, email: late.email, clubQuery: late.club, raceId: late.race, bib: Number(late.bib), consent: late.consent }) }))}>{t('action.save')}</button>
         </div>
       </div>
@@ -340,7 +340,7 @@ export function Start() {
 }
 
 export function Finish() {
-  const { t, data, reload } = useApp()
+  const { t, data, reload, guidance } = useApp()
   const [mode, setMode] = useState<'time_first' | 'bib_first'>('time_first')
   const [bib, setBib] = useState('')
   const [toast, setToast] = useState('')
@@ -409,7 +409,7 @@ export function Finish() {
       </div>
       <input aria-label={t('finish.bib')} data-testid="finish-bib" inputMode="numeric" value={bib} onChange={(event) => setBib(event.target.value)} />
       <button type="button" className="finish-tap" data-testid="finish-tap" aria-label={t('finish.tapLabel')} onClick={() => { tap().catch(() => setToast(t('common.offline'))) }}>{t('finish.tap')}</button>
-      <p className="muted">{t('finish.hint')}</p>
+      {guidance === 'guided' && <p className="muted" data-testid="finish-hint">{t('finish.hint.keys')}</p>}
       <p className="queue-note" data-testid="queue-count">{t('common.offline')}: {queued}</p>
       {lastLabel && <p data-testid="finish-last">{lastLabel}</p>}
       <h2>{t('finish.review')}</h2>
@@ -534,7 +534,7 @@ function TieCard({ group }: { group: TieGroup }) {
           </li>
         ))}
       </ol>
-      <div className="segment" role="radiogroup" aria-label={t('ties.basis')}>
+      <div className="segment" role="radiogroup" aria-label={t('ties.basisTitle')}>
         {(['finish_judge', 'organizer', 'photo', 'video'] as const).map((item) => (
           <button key={item} type="button" role="radio" aria-checked={basis === item} className={basis === item ? '' : 'secondary'} data-testid={`tie-basis-${item}`} onClick={() => setBasis(item)}>
             {t(`ties.basis.${item}`)}

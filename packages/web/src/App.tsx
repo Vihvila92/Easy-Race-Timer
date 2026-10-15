@@ -20,13 +20,17 @@ const VIEWS = [
 ] as const
 
 function Preferences() {
-  const { t, theme, setTheme, locale, setLocale } = useApp()
+  const { t, theme, setTheme, locale, setLocale, guidance, setGuidance } = useApp()
   return (
     <div className="stack settings" data-testid="settings">
       <span className="muted settings-label">{t('settings.title')}</span>
       <div className="segment" role="group" aria-label={t('a11y.language')}>
         <button type="button" className={locale === 'fi' ? '' : 'secondary'} data-testid="lang-fi" onClick={() => setLocale('fi')}>{t('lang.fi')}</button>
         <button type="button" className={locale === 'en' ? '' : 'secondary'} data-testid="lang-en" onClick={() => setLocale('en')}>{t('lang.en')}</button>
+      </div>
+      <div className="segment" role="group" aria-label={t('a11y.guidance')}>
+        <button type="button" className={guidance === 'guided' ? '' : 'secondary'} data-testid="guidance-guided" onClick={() => setGuidance('guided')}>{t('settings.guided')}</button>
+        <button type="button" className={guidance === 'expert' ? '' : 'secondary'} data-testid="guidance-expert" onClick={() => setGuidance('expert')}>{t('settings.expert')}</button>
       </div>
       <div className="segment" role="group" aria-label={t('a11y.theme')}>
         <button type="button" className="secondary" data-testid="theme-light" onClick={() => setTheme('light')}>{t('theme.light')}</button>

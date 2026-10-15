@@ -9,6 +9,12 @@ export type CategoryWarning =
 export type Locale = 'fi' | 'en'
 export type { MessageKey }
 
+/** Stored language must be one of the supported locales. Anything else is Finnish. */
+export function parseLocale(value: string | null | undefined): Locale {
+  if (value === 'fi' || value === 'en') return value
+  return 'fi'
+}
+
 const catalogs: Record<Locale, Record<MessageKey, string>> = { fi, en }
 
 export function translate(locale: Locale, key: MessageKey, vars?: Record<string, string | number>): string {
@@ -23,6 +29,12 @@ export function catalogKeys(): MessageKey[] {
 
 export function missingKeys(locale: Locale): string[] {
   return catalogKeys().filter((key) => !catalogs[locale][key])
+}
+
+/** A leaf that is also a prefix of another key, such as `finish.hint` next to `finish.hint.keys`. */
+export function ambiguousKeys(catalog: object): string[] {
+  const keys = Object.keys(catalog as Record<string, unknown>)
+  return keys.filter((key) => keys.some((other) => other.startsWith(`${key}.`))).sort()
 }
 
 /** Keys present in only one catalog. Names are the side that is missing the key. */
