@@ -62,6 +62,6 @@ Katso [`CONTRIBUTING.md`](CONTRIBUTING.md) ja [toimintaperiaatteet](CODE_OF_COND
 
 ## Lisenssi ja SaaS
 
-Lisenssi on juuritiedosto `LICENSE` (vuoden 2025 urheilulisenssi). Määrittelyn AGPL-3.0-only-suositus odottaa tekijänoikeuden haltijan päätöstä, eikä sitä ole otettu käyttöön. Paikallisessa versiossa ei ole lisenssiavaimia eikä ominaisuusrajoituksia. Laskutus, pilvivälitys ja juoksijaportaali eivät kuulu tähän repoon.
+Ohjelmisto on lisensoitu GNU Affero General Public License v3.0 -lisenssillä (SPDX `AGPL-3.0-only`, ks. `LICENSE`). Ulkopuolisilta kontribuuttoreilta pyydetään CLA (ks. [CLA.md](CLA.md)). Kaupalliset lisenssit: valtteri@vehvilainen.cc. Paikallisessa versiossa ei ole lisenssiavaimia eikä ominaisuusrajoituksia. Laskutus, pilvivälitys ja juoksijaportaali eivät kuulu tähän repoon.
 
 Lähdekoodi: <https://github.com/Vihvila92/Easy-Race-Timer>

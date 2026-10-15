@@ -62,6 +62,6 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDU
 
 ## License and SaaS
 
-The license is the root `LICENSE` file (the 2025 sports license). The specification recommends AGPL-3.0-only; that change waits for the copyright holder and is not applied here. The local app has no license keys and no feature limits. Billing, cloud relay and the runner portal are not in this repository.
+The software is licensed under the GNU Affero General Public License v3.0 (SPDX `AGPL-3.0-only`, see `LICENSE`). External contributors are asked to sign a CLA (see [CLA.md](CLA.md)). Commercial licensing: valtteri@vehvilainen.cc. The local app has no license keys and no feature limits. Billing, cloud relay and the runner portal are not in this repository.
 
 Source: <https://github.com/Vihvila92/Easy-Race-Timer>
