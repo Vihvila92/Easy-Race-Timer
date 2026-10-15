@@ -287,16 +287,8 @@ export function createApp(options: AppOptions): { app: FastifyInstance; service:
     return { ok: true }
   })
   app.post('/api/v1/persons/:id/consents', async (request) => {
-    const body = request.body as { granted: boolean; channel?: string }
-    const personId = (request.params as { id: string }).id
-    const { CONSENT_TEXT_VERSION } = await import('@ert/people')
-    const now = clock.now()
-    options.db.run(
-      `INSERT INTO consent (id, person_id, purpose, granted, given_by, text_version, channel, recorded_at) VALUES (?, ?, 'long_term_storage', ?, 'self', ?, ?, ?)`,
-      `c_${now}`, personId, body.granted ? 1 : 0, CONSENT_TEXT_VERSION, body.channel ?? 'kiosk', now,
-    )
-    service.bus.emit('ConsentChanged', { personId, granted: body.granted })
-    return { ok: true }
+    const recorded = service.recordConsent((request.params as { id: string }).id, request.body)
+    return { ok: true, id: recorded.id }
   })
   app.get('/api/v1/sync/export', async (_request, reply) => {
     reply.header('content-type', 'application/zip')

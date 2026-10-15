@@ -664,6 +664,11 @@ paths:
     post:
       tags: [privacy]
       operationId: recordConsent
+      description: >
+        Appends a consent row. Identifiers are ULIDs. givenBy is self or guardian.
+        A person under 15 on race day, and a person of unknown age, requires guardian
+        name, relation and contact. Revocation appends granted=false and anonymizes
+        that person. The previous row is kept.
       parameters:
         - $ref: '#/components/parameters/Id'
       requestBody:
@@ -671,12 +676,34 @@ paths:
           application/json:
             schema:
               type: object
-              required: [granted]
+              required: [granted, givenBy, channel]
               properties:
+                purpose: { type: string, default: long_term_storage }
                 granted: { type: boolean }
+                givenBy: { type: string, enum: [self, guardian] }
+                guardian:
+                  type: object
+                  required: [name, relation, contact]
+                  properties:
+                    name: { type: string }
+                    relation: { type: string }
+                    contact: { type: string }
+                textVersion: { type: string }
                 channel: { type: string }
+                recordedBy: { type: string }
       responses:
-        '200': { description: Consent appended }
+        '200':
+          description: Consent appended
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok, id]
+                properties:
+                  ok: { type: boolean }
+                  id: { type: string }
+        '404': { $ref: '#/components/responses/Error' }
+        '422': { $ref: '#/components/responses/Error' }
   /api/v1/sync/export:
     get:
       tags: [sync]

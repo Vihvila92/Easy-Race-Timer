@@ -37,6 +37,7 @@ import { AppDb, ORG_ID, SCHEMA_VERSION, type Row } from '@ert/storage'
 import { ERTX_FORMAT_VERSION, packErtx } from '@ert/sync'
 import { previewErtx, readErtx, replaceFromErtx } from './ertx-import.js'
 import { touchButton } from '@ert/timing-sources'
+import { ConsentService } from './consent.js'
 
 export interface Settings {
   age_basis: 'birth_date' | 'birth_year'
@@ -120,10 +121,21 @@ export class RaceService {
   private readonly hlc: HlcClock
   private pinFailures = 0
   private pinLockedUntil = 0
+  private readonly consentLog: ConsentService
   readonly bus = new DomainBus()
 
   constructor(private readonly db: AppDb, readonly clock: Clock, private readonly deviceId = 'DEV_LAPTOP_1') {
     this.hlc = new HlcClock(deviceId, () => this.clock.now())
+    this.consentLog = new ConsentService({
+      db,
+      now: () => this.now(),
+      deviceId,
+      audit: (personId, granted) => {
+        this.correct('person', personId, 'record_consent', granted ? 'consent granted' : 'consent revoked', null, { granted })
+      },
+      emit: (payload) => this.bus.emit('ConsentChanged', payload),
+      anonymize: (personId, nowMs) => this.anonymizePerson(personId, nowMs),
+    })
   }
 
   now() { return this.clock.now() }
@@ -1254,21 +1266,11 @@ export class RaceService {
       for (const person of people) {
         const consent = this.db.get<{ granted: number }>('SELECT granted FROM consent WHERE person_id = ? AND purpose = \'long_term_storage\' ORDER BY recorded_at DESC LIMIT 1', person.id)
         if (consent?.granted) continue
-        const entries = this.db.all<EntryRow>('SELECT * FROM entry WHERE person_id = ?', person.id)
-        const fullName = `${person.last_name} ${person.first_name}`
-        removedNames.push(fullName, `${person.first_name} ${person.last_name}`)
-        if (person.email) removedEmails.push(person.email)
-        if (person.birth_date) removedDates.push(person.birth_date)
-        for (const entry of entries) {
-          if (entry.bib != null) removedBibs.push(entry.bib)
-          this.db.run(
-            `UPDATE entry SET person_id = NULL, display_name = NULL, birth_year_at_entry = NULL, bib = NULL, club_raw = NULL, club_abbr_raw = NULL,
-             anonymized_at = ?, status_reason = CASE WHEN status_reason IS NULL THEN NULL ELSE '[poistettu]' END, updated_at = ? WHERE id = ?`,
-            nowMs, nowMs, entry.id,
-          )
-          this.db.run('UPDATE timing_event SET bib = NULL WHERE entry_id = ?', entry.id)
-        }
-        this.db.run('DELETE FROM person WHERE id = ?', person.id)
+        const removed = this.clearPerson(person, nowMs)
+        removedNames.push(...removed.names)
+        removedEmails.push(...removed.emails)
+        removedDates.push(...removed.dates)
+        removedBibs.push(...removed.bibs)
         n += 1
       }
       if (removedBibs.length || removedNames.length) this.scrubText(removedNames, removedEmails, removedDates, removedBibs)
@@ -1276,6 +1278,37 @@ export class RaceService {
       return n
     })
     return { anonymized: count, cutoff }
+  }
+
+  recordConsent(personId: string, body: unknown) {
+    return this.consentLog.record(personId, body)
+  }
+
+  /** Drop one person's identity. Consent rows stay; revocation adds a new one first. */
+  private anonymizePerson(personId: string, nowMs: number) {
+    const person = this.db.get<PersonRow>('SELECT * FROM person WHERE id = ?', personId)
+    if (!person) return
+    const removed = this.clearPerson(person, nowMs)
+    this.scrubText(removed.names, removed.emails, removed.dates, removed.bibs)
+  }
+
+  private clearPerson(person: PersonRow, nowMs: number) {
+    const names = [`${person.last_name} ${person.first_name}`, `${person.first_name} ${person.last_name}`]
+    const emails = person.email ? [person.email] : []
+    const dates = person.birth_date ? [person.birth_date] : []
+    const bibs: number[] = []
+    const entries = this.db.all<EntryRow>('SELECT * FROM entry WHERE person_id = ?', person.id)
+    for (const entry of entries) {
+      if (entry.bib != null) bibs.push(entry.bib)
+      this.db.run(
+        `UPDATE entry SET person_id = NULL, display_name = NULL, birth_year_at_entry = NULL, bib = NULL, club_raw = NULL, club_abbr_raw = NULL,
+         anonymized_at = ?, status_reason = CASE WHEN status_reason IS NULL THEN NULL ELSE '[poistettu]' END, updated_at = ? WHERE id = ?`,
+        nowMs, nowMs, entry.id,
+      )
+      this.db.run('UPDATE timing_event SET bib = NULL WHERE entry_id = ?', entry.id)
+    }
+    this.db.run('DELETE FROM person WHERE id = ?', person.id)
+    return { names, emails, dates, bibs }
   }
 
   private applyPublicationDefaults() {
