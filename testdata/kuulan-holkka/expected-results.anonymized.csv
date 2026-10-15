@@ -1,75 +1,75 @@
 race;scope;rank;bib;name;club_abbr;club_name;category;time;time_ms;behind;status;note
 R4;overall;1;116;Tikkanen Anu;MuYr;Muuramen Yritys;T14;15:58;958040;;OK;
 R4;overall;2;;Anonyymi;;;T;16:38;998955;+0:40;OK;"anonymisoitu; seura piilotettu (pieni ryhmä); sarja yleistetty (pieni sarja)"
-R4;overall;3;134;Leppänen S.;SaPu;Saarijärven Pullistus;P14;17:00;1020836;+1:02;OK;
+R4;overall;3;134;S. L.;SaPu;Saarijärven Pullistus;P14;17:00;1020836;+1:02;OK;
 R4;overall;4;;Anonyymi;;;P14;17:06;1026519;+1:08;OK;"anonymisoitu; seura piilotettu (pieni ryhmä)"
-R4;overall;5;113;Kinnunen M.;;;T12;18:34;1114157;+2:36;OK;
+R4;overall;5;113;M. K.;;;T12;18:34;1114157;+2:36;OK;
 R4;overall;6;;Anonyymi;;;P;18:40;1120763;+2:42;OK;"anonymisoitu; sarja yleistetty (pieni sarja)"
-R4;overall;7;131;Heikkinen S.;UU;Uuraisten Urheilijat;P12;19:14;1154059;+3:16;OK;
+R4;overall;7;131;S. H.;UU;Uuraisten Urheilijat;P12;19:14;1154059;+3:16;OK;
 R4;overall;8;;Anonyymi;;;T12;19:30;1170811;+3:32;OK;anonymisoitu
 R4;overall;9;;Anonyymi;;;P14;20:44;1244661;+4:46;OK;"anonymisoitu; seura piilotettu (pieni ryhmä)"
 R4;overall;10;;Anonyymi;;;T12;21:19;1279077;+5:21;OK;anonymisoitu
 R4;overall;11;;Anonyymi;;;P10;21:32;1292064;+5:34;OK;anonymisoitu
 R4;overall;12;;Anonyymi;;;P10;21:32;1292396;+5:34;OK;anonymisoitu
 R4;overall;13;;Anonyymi;;;T;21:58;1318471;+6:00;OK;"anonymisoitu; sarja yleistetty (pieni sarja)"
-R4;overall;14;128;Tikkanen E.;UU;Uuraisten Urheilijat;P10;22:03;1323651;+6:05;OK;
+R4;overall;14;128;E. T.;UU;Uuraisten Urheilijat;P10;22:03;1323651;+6:05;OK;
 R4;overall;15;;Anonyymi;;;P12;22:13;1333780;+6:15;OK;anonymisoitu
 R4;overall;16;;Anonyymi;;;P12;22:13;1333240;+6:15;OK;"anonymisoitu; seura piilotettu (pieni ryhmä)"
 R4;overall;17;;Anonyymi (UU);UU;Uuraisten Urheilijat;T10;22:49;1369480;+6:51;OK;"Siirretty lähtö; anonymisoitu"
 R4;overall;18;;Anonyymi (UU);UU;Uuraisten Urheilijat;T10;23:59;1439433;+8:01;OK;anonymisoitu
-R4;overall;19;110;Ahonen T.;UU;Uuraisten Urheilijat;T10;24:55;1495001;+8:57;OK;
+R4;overall;19;110;T. A.;UU;Uuraisten Urheilijat;T10;24:55;1495001;+8:57;OK;
 R4;overall;20;;Anonyymi (UU);UU;Uuraisten Urheilijat;T10;26:21;1581447;+10:23;OK;anonymisoitu
-R4;overall;21;125;Korhonen J.;SaPu;Saarijärven Pullistus;P8;27:00;1620645;+11:02;OK;
+R4;overall;21;125;J. K.;SaPu;Saarijärven Pullistus;P8;27:00;1620645;+11:02;OK;
 R4;overall;22;;Anonyymi;;;T8;27:55;1675255;+11:57;OK;anonymisoitu
-R4;overall;23;107;Hämäläinen L.;Hanka;Hankasalmen Hanka;T8;28:17;1697222;+12:19;OK;
+R4;overall;23;107;L. H.;Hanka;Hankasalmen Hanka;T8;28:17;1697222;+12:19;OK;
 R4;overall;24;;Anonyymi;;;P8;28:24;1704809;+12:26;OK;"anonymisoitu; seura piilotettu (pieni ryhmä)"
 R4;overall;25;;Anonyymi;;;P8;28:39;1719271;+12:41;OK;anonymisoitu
 R4;overall;26;;Anonyymi;;;P6;30:46;1846305;+14:48;OK;"anonymisoitu; seura piilotettu (pieni ryhmä)"
-R4;overall;27;104;Kauppinen S.;UU;Uuraisten Urheilijat;T6;30:47;1847926;+14:49;OK;
+R4;overall;27;104;S. K.;UU;Uuraisten Urheilijat;T6;30:47;1847926;+14:49;OK;
 R4;overall;28;;Anonyymi;;;T6;31:57;1917359;+15:59;OK;"anonymisoitu; seura piilotettu (pieni ryhmä)"
-R4;overall;29;122;Mäkinen E.;JKU;Jyväskylän Kenttäurheilijat;P6;32:06;1926805;+16:08;OK;
+R4;overall;29;122;E. M.;JKU;Jyväskylän Kenttäurheilijat;P6;32:06;1926805;+16:08;OK;
 R4;overall;30;;Anonyymi;;;P6;32:13;1933734;+16:15;OK;anonymisoitu
 R4;overall;31;;Anonyymi;;;P6;34:17;2057181;+18:19;OK;"anonymisoitu; seura piilotettu (pieni ryhmä)"
 R4;overall;32;;Anonyymi;;;T6;35:04;2104787;+19:06;OK;anonymisoitu
-R4;overall;33;119;Räsänen O.;UU;Uuraisten Urheilijat;P4;37:40;2260802;+21:42;OK;
+R4;overall;33;119;O. R.;UU;Uuraisten Urheilijat;P4;37:40;2260802;+21:42;OK;
 R4;overall;34;;Anonyymi;;;T;39:10;2350843;+23:12;OK;"anonymisoitu; sarja yleistetty (pieni sarja)"
 R4;overall;35;;Anonyymi;;;P;43:49;2629583;+27:51;OK;"anonymisoitu; seura piilotettu (pieni ryhmä); sarja yleistetty (pieni sarja)"
-R4;overall;36;101;Nieminen J.;UU;Uuraisten Urheilijat;T4;45:26;2726714;+29:28;OK;
+R4;overall;36;101;J. N.;UU;Uuraisten Urheilijat;T4;45:26;2726714;+29:28;OK;
 R4;overall;;;Anonyymi;;;T8;;;;DNS;"anonymisoitu; seura piilotettu (pieni ryhmä)"
 R4;T4;1;;Anonyymi;;;T;;;;OK;"anonymisoitu; sarja yleistetty (pieni sarja); aika piilotettu (pieni sarja)"
-R4;T4;2;101;Nieminen J.;UU;Uuraisten Urheilijat;T4;45:26;2726714;+6:16;OK;
-R4;T6;1;104;Kauppinen S.;UU;Uuraisten Urheilijat;T6;30:47;1847926;;OK;
+R4;T4;2;101;J. N.;UU;Uuraisten Urheilijat;T4;45:26;2726714;+6:16;OK;
+R4;T6;1;104;S. K.;UU;Uuraisten Urheilijat;T6;30:47;1847926;;OK;
 R4;T6;2;;Anonyymi;;;T6;31:57;1917359;+1:10;OK;"anonymisoitu; seura piilotettu (pieni ryhmä)"
 R4;T6;3;;Anonyymi;;;T6;35:04;2104787;+4:17;OK;anonymisoitu
 R4;T8;1;;Anonyymi;;;T8;27:55;1675255;;OK;anonymisoitu
-R4;T8;2;107;Hämäläinen L.;Hanka;Hankasalmen Hanka;T8;28:17;1697222;+0:22;OK;
+R4;T8;2;107;L. H.;Hanka;Hankasalmen Hanka;T8;28:17;1697222;+0:22;OK;
 R4;T8;;;Anonyymi;;;T8;;;;DNS;"anonymisoitu; seura piilotettu (pieni ryhmä)"
 R4;T10;1;;Anonyymi (UU);UU;Uuraisten Urheilijat;T10;22:49;1369480;;OK;"Siirretty lähtö; anonymisoitu"
 R4;T10;2;;Anonyymi (UU);UU;Uuraisten Urheilijat;T10;23:59;1439433;+1:10;OK;anonymisoitu
-R4;T10;3;110;Ahonen T.;UU;Uuraisten Urheilijat;T10;24:55;1495001;+2:06;OK;
+R4;T10;3;110;T. A.;UU;Uuraisten Urheilijat;T10;24:55;1495001;+2:06;OK;
 R4;T10;4;;Anonyymi (UU);UU;Uuraisten Urheilijat;T10;26:21;1581447;+3:32;OK;anonymisoitu
-R4;T12;1;113;Kinnunen M.;;;T12;18:34;1114157;;OK;
+R4;T12;1;113;M. K.;;;T12;18:34;1114157;;OK;
 R4;T12;2;;Anonyymi;;;T12;19:30;1170811;+0:56;OK;anonymisoitu
 R4;T12;3;;Anonyymi;;;T12;21:19;1279077;+2:45;OK;anonymisoitu
 R4;T14;1;116;Tikkanen Anu;MuYr;Muuramen Yritys;T14;15:58;958040;;OK;
 R4;T14;2;;Anonyymi;;;T;;;;OK;"anonymisoitu; sarja yleistetty (pieni sarja); aika piilotettu (pieni sarja)"
 R4;T16;1;;Anonyymi;;;T;;;;OK;"anonymisoitu; seura piilotettu (pieni ryhmä); sarja yleistetty (pieni sarja); aika piilotettu (pieni sarja)"
-R4;P4;1;119;Räsänen O.;UU;Uuraisten Urheilijat;P4;37:40;2260802;;OK;
+R4;P4;1;119;O. R.;UU;Uuraisten Urheilijat;P4;37:40;2260802;;OK;
 R4;P4;2;;Anonyymi;;;P;;;;OK;"anonymisoitu; seura piilotettu (pieni ryhmä); sarja yleistetty (pieni sarja); aika piilotettu (pieni sarja)"
 R4;P6;1;;Anonyymi;;;P6;30:46;1846305;;OK;"anonymisoitu; seura piilotettu (pieni ryhmä)"
-R4;P6;2;122;Mäkinen E.;JKU;Jyväskylän Kenttäurheilijat;P6;32:06;1926805;+1:20;OK;
+R4;P6;2;122;E. M.;JKU;Jyväskylän Kenttäurheilijat;P6;32:06;1926805;+1:20;OK;
 R4;P6;3;;Anonyymi;;;P6;32:13;1933734;+1:27;OK;anonymisoitu
 R4;P6;4;;Anonyymi;;;P6;34:17;2057181;+3:31;OK;"anonymisoitu; seura piilotettu (pieni ryhmä)"
-R4;P8;1;125;Korhonen J.;SaPu;Saarijärven Pullistus;P8;27:00;1620645;;OK;
+R4;P8;1;125;J. K.;SaPu;Saarijärven Pullistus;P8;27:00;1620645;;OK;
 R4;P8;2;;Anonyymi;;;P8;28:24;1704809;+1:24;OK;"anonymisoitu; seura piilotettu (pieni ryhmä)"
 R4;P8;3;;Anonyymi;;;P8;28:39;1719271;+1:39;OK;anonymisoitu
 R4;P10;1;;Anonyymi;;;P10;21:32;1292064;;OK;anonymisoitu
 R4;P10;2;;Anonyymi;;;P10;21:32;1292396;+0:00;OK;anonymisoitu
-R4;P10;3;128;Tikkanen E.;UU;Uuraisten Urheilijat;P10;22:03;1323651;+0:31;OK;
-R4;P12;1;131;Heikkinen S.;UU;Uuraisten Urheilijat;P12;19:14;1154059;;OK;
+R4;P10;3;128;E. T.;UU;Uuraisten Urheilijat;P10;22:03;1323651;+0:31;OK;
+R4;P12;1;131;S. H.;UU;Uuraisten Urheilijat;P12;19:14;1154059;;OK;
 R4;P12;2;;Anonyymi;;;P12;22:13;1333780;+2:59;OK;anonymisoitu
 R4;P12;3;;Anonyymi;;;P12;22:13;1333240;+2:59;OK;"anonymisoitu; seura piilotettu (pieni ryhmä)"
-R4;P14;1;134;Leppänen S.;SaPu;Saarijärven Pullistus;P14;17:00;1020836;;OK;
+R4;P14;1;134;S. L.;SaPu;Saarijärven Pullistus;P14;17:00;1020836;;OK;
 R4;P14;2;;Anonyymi;;;P14;17:06;1026519;+0:06;OK;"anonymisoitu; seura piilotettu (pieni ryhmä)"
 R4;P14;3;;Anonyymi;;;P14;20:44;1244661;+3:44;OK;"anonymisoitu; seura piilotettu (pieni ryhmä)"
 R4;P16;1;;Anonyymi;;;P;;;;OK;"anonymisoitu; sarja yleistetty (pieni sarja); aika piilotettu (pieni sarja)"

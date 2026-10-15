@@ -143,14 +143,19 @@ export function defaultPublication(person: AgeInput, referenceDate: string, basi
   }
 }
 
-/** Last name plus the first initial. Hidden and bib-only publish no name. */
+/**
+ * Given-name initials, then the surname initial. "Hämäläinen Lotta" becomes "L. H."
+ * The surname itself is never published. Hidden and bib-only publish no name.
+ */
 export function publishedName(displayName: string, level: PublicationLevel): string {
   if (level === 'hidden' || level === 'bib_only') return ''
   if (level === 'full') return displayName
   const parts = displayName.trim().split(/\s+/).filter(Boolean)
   if (!parts.length) return ''
   if (parts.length === 1) return `${parts[0]!.charAt(0)}.`
-  return `${parts[0]} ${parts[1]!.charAt(0)}.`
+  const surname = parts[0]!
+  const given = parts.slice(1).map((part) => `${part.charAt(0)}.`)
+  return `${given.join(' ')} ${surname.charAt(0)}.`
 }
 
 export function applyPublication(rows: ResultRow[], levels: ReadonlyMap<string, PublicationLevel>): ResultRow[] {
