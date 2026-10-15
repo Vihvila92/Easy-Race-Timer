@@ -54,7 +54,7 @@ The Kuulan hölkkä oracle lives in `testdata/kuulan-holkka/generate.py`. Change
 - Licenses must pass `pnpm check:licenses`.
 - Prefer maintained, widely used packages, and avoid install scripts unless they are required.
 - Dependabot pull requests are reviewed like any other pull request.
-- Pin third-party actions to a full commit SHA, and declare a minimal `permissions:` block in every workflow (default `contents: read`).
+- Pin every action to a full commit SHA with a version comment (e.g. `actions/checkout@<sha> # v7.0.1`); tags such as `@v4` are not allowed. Dependabot updates the SHA and comment together. Declare a minimal `permissions:` block in every workflow (default `contents: read`).
 
 ## Security-sensitive changes
 
