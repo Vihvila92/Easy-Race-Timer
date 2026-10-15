@@ -504,9 +504,10 @@ paths:
                 bib: { type: integer, nullable: true }
                 mode: { type: string }
                 deviceId: { type: string }
+                label: { type: string, description: Display F-number. The stored id is a ULID scoped by device. }
       responses:
-        '200': { description: Stored. Same id is a no-op. }
-        '409': { $ref: '#/components/responses/Error' }
+        '200': { description: Stored. Repeating the same id and payload is idempotent. }
+        '409': { description: The id already belongs to a different finish. The new tap is not stored. }
   /api/v1/corrections/assign-bib:
     post:
       tags: [timing]

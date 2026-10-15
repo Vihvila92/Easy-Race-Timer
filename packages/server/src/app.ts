@@ -204,7 +204,7 @@ export function createApp(options: AppOptions): { app: FastifyInstance; service:
     const body = request.body as { timeMs?: number; confirm?: boolean }
     return service.startRace((request.params as { id: string }).id, body.timeMs ?? clock.now(), Boolean(body.confirm))
   })
-  app.post('/api/v1/timing-events', async (request) => service.recordFinish(request.body as { id?: string; timeMs: number; bib?: number | null; mode?: string }))
+  app.post('/api/v1/timing-events', async (request) => service.recordFinish(request.body as { id?: string; timeMs: number; bib?: number | null; mode?: string; deviceId?: string; label?: string }))
   app.post('/api/v1/corrections/assign-bib', async (request) => {
     const body = request.body as { tapId: string; bib: number; reason: string }
     service.assignBib(body.tapId, body.bib, body.reason)

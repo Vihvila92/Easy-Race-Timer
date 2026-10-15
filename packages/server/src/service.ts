@@ -758,12 +758,19 @@ export class RaceService {
     return point.id
   }
 
-  private insertTiming(input: { id?: string; raceId: string; pointId: string; timeMs: number; bib: number | null; entryId: string | null; mode: string; source: string; raw: unknown; now: number }) {
+  private insertTiming(input: { id?: string; deviceId?: string; raceId: string; pointId: string; timeMs: number; bib: number | null; entryId: string | null; mode: string; source: string; raw: unknown; now: number }) {
+    const device = input.deviceId || this.deviceId
     if (input.id) {
       const existing = this.db.get<TimingRow>('SELECT * FROM timing_event WHERE id = ?', input.id)
-      if (existing) return existing
+      if (existing) {
+        const same = existing.time_ms === input.timeMs
+          && (existing.bib ?? null) === (input.bib ?? null)
+          && existing.device_id === device
+          && (existing.mode ?? '') === input.mode
+        if (same) return existing
+        throw new AppError('SYNC_CONFLICT', 'Timing event id already exists', { id: input.id })
+      }
     }
-    const device = input.id ? this.deviceId : this.deviceId
     this.ensureDevice(device)
     const seq = this.db.get<{ next_seq: number }>('SELECT next_seq FROM device WHERE id = ?', device)!.next_seq
     this.db.run('UPDATE device SET next_seq = ? WHERE id = ?', seq + 1, device)
@@ -797,7 +804,7 @@ export class RaceService {
     return this.races()[0]?.id ?? (() => { throw new AppError('RACE_NOT_STARTED', 'No race') })()
   }
 
-  recordFinish(input: { id?: string; timeMs: number; bib?: number | null; mode?: string; deviceId?: string }) {
+  recordFinish(input: { id?: string; timeMs: number; bib?: number | null; mode?: string; deviceId?: string; label?: string }) {
     const bib = input.bib ?? null
     const raceId = this.resolveRaceId(bib, input.timeMs)
     this.assertUnlocked(raceId)
@@ -810,9 +817,12 @@ export class RaceService {
       const previous = this.activeFinishes().filter((event) => event.entry_id === entry.id)
       if (previous.length) flags.push('duplicate')
     }
+    const start = entry ? this.runnerStartMs(entry, race) : race.actual_start_ms
+    if (start != null && input.timeMs < start) flags.push('before_start')
     const { now } = this.stamp()
     const event = this.db.tx(() => this.insertTiming({
       id: input.id,
+      deviceId: input.deviceId,
       raceId: entry?.race_id ?? raceId,
       pointId: this.finishPoint('finish'),
       timeMs: input.timeMs,
@@ -820,12 +830,13 @@ export class RaceService {
       entryId: entry?.id ?? null,
       mode: input.mode ?? 'time_first',
       source: 'touch',
-      raw: { flags },
+      raw: { flags, label: input.label },
       now,
     }))
     this.bus.emit('TimingEventRecorded', { id: event.id })
     this.bus.emit('ResultsInvalidated', { raceId })
-    return { id: event.id, flags, raceId: event.race_id }
+    const stored = JSON.parse(event.raw_json ?? '{}') as { flags?: string[]; label?: string }
+    return { id: event.id, flags: stored.flags ?? flags, raceId: event.race_id, label: stored.label ?? input.label ?? event.id }
   }
 
   private voidedIds() {
@@ -838,6 +849,26 @@ export class RaceService {
     return voided
   }
 
+  /** Start instant for this runner, including category and entry offsets. */
+  private runnerStartMs(entry: EntryRow, race: RaceRow): number | null {
+    const category = this.categories().find((item) => item.id === entry.category_id)
+    return massStart.startTimeFor({
+      massStartMs: race.actual_start_ms,
+      categoryOffsetMs: category?.start_offset_ms ?? 0,
+      entryOffsetMs: entry.start_offset_ms,
+      ownStartMs: null,
+    })
+  }
+
+  /** Earliest finish that is not earlier than the runner's own start. */
+  private scoringFinish(entry: EntryRow, race: RaceRow): TimingRow | undefined {
+    const start = this.runnerStartMs(entry, race)
+    return this.activeFinishes()
+      .filter((event) => event.entry_id === entry.id)
+      .filter((event) => start == null || event.time_ms >= start)
+      .sort((a, b) => a.time_ms - b.time_ms || a.created_at - b.created_at)[0]
+  }
+
   private activeFinishes() {
     const voided = this.voidedIds()
     const point = this.db.get<{ id: string }>('SELECT id FROM timing_point WHERE kind = ? ORDER BY order_no LIMIT 1', 'finish')
@@ -848,11 +879,16 @@ export class RaceService {
 
   timingEvents() {
     const voided = this.voidedIds()
-    return this.db.all<TimingRow>('SELECT * FROM timing_event ORDER BY created_at').map((event) => ({
-      ...event,
-      voided: voided.has(event.id),
-      flags: JSON.parse(event.raw_json ?? '{}').flags ?? [],
-    }))
+    return this.db.all<TimingRow>('SELECT * FROM timing_event ORDER BY created_at').map((event) => {
+      const raw = JSON.parse(event.raw_json ?? '{}') as { flags?: string[]; label?: string }
+      const label = raw.label || (/^F\d+$/.test(event.id) ? event.id : event.id)
+      return {
+        ...event,
+        voided: voided.has(event.id),
+        flags: raw.flags ?? [],
+        label,
+      }
+    })
   }
 
   assignBib(tapId: string, bib: number, reason: string) {
@@ -906,13 +942,16 @@ export class RaceService {
 
   lockBlockers(raceId: string): string[] {
     const blockers: string[] = []
+    const race = this.db.get<RaceRow>('SELECT * FROM race WHERE id = ?', raceId)
     for (const entry of this.entries().filter((item) => item.race_id === raceId)) {
       if (['dns', 'dnf', 'dsq'].includes(entry.status)) continue
-      const finish = this.activeFinishes().find((event) => event.entry_id === entry.id)
-      if (!finish) blockers.push(`entry:${entry.bib}:no_result`)
+      if (!race || !this.scoringFinish(entry, race)) blockers.push(`entry:${entry.bib}:no_result`)
     }
     for (const event of this.activeFinishes().filter((item) => item.race_id === raceId)) {
       if (!event.entry_id) blockers.push(`time:${event.id}:unassigned`)
+      const entry = event.entry_id ? this.db.get<EntryRow>('SELECT * FROM entry WHERE id = ?', event.entry_id) : undefined
+      const start = entry && race ? this.runnerStartMs(entry, race) : race?.actual_start_ms ?? null
+      if (start != null && event.time_ms < start) blockers.push(`time:${event.id}:before_start`)
     }
     for (const group of this.tieGroups().filter((group) => group.raceId === raceId && group.status === 'unconfirmed')) {
       blockers.push(`tie:${raceId}:${group.displayTime}`)
@@ -946,10 +985,10 @@ export class RaceService {
     for (const event of finishes) {
       const entry = this.db.get<EntryRow>('SELECT * FROM entry WHERE id = ?', event.entry_id)
       if (!entry || ['dns', 'dnf', 'dsq'].includes(entry.status)) continue
-      const first = this.activeFinishes().filter((item) => item.entry_id === entry.id).sort((a, b) => a.time_ms - b.time_ms || a.created_at - b.created_at)[0]
-      if (!first || first.id !== event.id) continue
       const race = this.db.get<RaceRow>('SELECT * FROM race WHERE id = ?', entry.race_id)
       if (!race?.actual_start_ms) continue
+      const first = this.scoringFinish(entry, race)
+      if (!first || first.id !== event.id) continue
       const category = this.categories().find((item) => item.id === entry.category_id)
       const start = massStart.startTimeFor({
         massStartMs: race.actual_start_ms,
@@ -1068,9 +1107,7 @@ export class RaceService {
       if (entry.status === 'dns') status = 'DNS'
       else if (entry.status === 'dnf') status = 'DNF'
       else if (entry.status === 'dsq') status = 'DSQ'
-      const finish = status === 'OK'
-        ? this.activeFinishes().filter((event) => event.entry_id === entry.id).sort((a, b) => a.time_ms - b.time_ms || a.created_at - b.created_at)[0]
-        : undefined
+      const finish = status === 'OK' ? this.scoringFinish(entry, race) : undefined
       if (status === 'OK' && !finish) continue
       const start = massStart.startTimeFor({
         massStartMs: race.actual_start_ms,
