@@ -29,10 +29,12 @@ describe('device token', () => {
 
     for (const key of PROTECTED_ROUTES) {
       const [method, url] = [key.split(' ')[0], key.slice(key.indexOf(' ') + 1).replaceAll(':id', 'x')]
+      const headers: Record<string, string> = { host: 'localhost:80' }
+      if (url === '/ws') headers.origin = 'http://localhost:80'
       const response = await app.inject({
         method: method as 'GET',
         url,
-        headers: { host: 'localhost:80' },
+        headers,
         payload: method === 'GET' ? undefined : {},
       })
       expect(response.statusCode, key).toBe(401)

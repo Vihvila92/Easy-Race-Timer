@@ -68,7 +68,7 @@ export async function createApp(options: AppOptions): Promise<{ app: FastifyInst
   service.bus.on('ResultsInvalidated', (payload) => broadcast('results.updated', payload))
 
   function broadcast(type: string, payload: unknown) {
-    const message = JSON.stringify({ type, payload })
+    const message = JSON.stringify({ type, payload: websocketPayload(type, payload) })
     for (const socket of sockets) socket.send(message)
   }
 
@@ -88,13 +88,9 @@ export async function createApp(options: AppOptions): Promise<{ app: FastifyInst
     }
     const extras = allowedOriginsFromEnv()
     const origin = typeof request.headers.origin === 'string' ? request.headers.origin : undefined
-    const websocket = request.headers.upgrade?.toLowerCase() === 'websocket' || request.url.split('?')[0] === '/ws'
-    if (websocket) {
-      if (!originAllowed(origin, listenPort, extras)) {
-        return reply.status(403).send({ error: { code: 'VALIDATION_ERROR', message: 'Origin not allowed' } })
-      }
-      return
-    }
+    // Origin is enforced in preHandler. Rejecting the upgrade here skips the websocket
+    // plugin's onRequest hook, so its onResponse hook never destroys the socket.
+    if (request.headers.upgrade?.toLowerCase() === 'websocket' || request.url.split('?')[0] === '/ws') return
     if (request.method === 'GET' || request.method === 'HEAD' || request.method === 'OPTIONS') return
     if (origin && !originAllowed(origin, listenPort, extras)) {
       return reply.status(403).send({ error: { code: 'VALIDATION_ERROR', message: 'Origin not allowed' } })
@@ -125,6 +121,15 @@ export async function createApp(options: AppOptions): Promise<{ app: FastifyInst
   app.addHook('preHandler', async (request, reply) => {
     if (reply.sent) return
     const url = request.routeOptions.url
+    const path = request.url.split('?')[0]
+    if (request.headers.upgrade?.toLowerCase() === 'websocket' || path === '/ws' || url === '/ws') {
+      const address = app.server.address()
+      const listenPort = typeof address === 'object' && address ? address.port : null
+      const origin = typeof request.headers.origin === 'string' ? request.headers.origin : undefined
+      if (!originAllowed(origin, listenPort, allowedOriginsFromEnv())) {
+        return reply.status(403).send({ error: { code: 'VALIDATION_ERROR', message: 'Origin not allowed' } })
+      }
+    }
     if (!url || (!url.startsWith('/api/') && url !== '/ws')) return
     const method = request.method === 'HEAD' ? 'GET' : request.method
     const access = routeAccess(method, url)
@@ -382,6 +387,25 @@ export async function createApp(options: AppOptions): Promise<{ app: FastifyInst
 }
 
 const clockBody = z.object({ at: z.string().nullable().optional() })
+
+/** Fields a connected client needs in order to refresh. Names, bibs, entry ids and correction reasons stay off the socket. */
+const WEBSOCKET_FIELDS: Record<string, readonly string[]> = {
+  'timing_event.created': ['id', 'raceId', 'kind'],
+  'correction.created': ['action'],
+  'results.updated': ['raceId'],
+}
+
+function websocketPayload(type: string, payload: unknown): Record<string, string> {
+  const source = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {}
+  const projected: Record<string, string> = {}
+  for (const key of WEBSOCKET_FIELDS[type] ?? []) {
+    const value = source[key]
+    if (typeof value !== 'string' || value.length === 0) continue
+    if (key === 'kind' && value !== 'start') continue
+    projected[key] = value
+  }
+  return projected
+}
 
 function workspace(service: RaceService) {
   const state = service.state()
