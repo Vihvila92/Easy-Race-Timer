@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { formatDuration } from './time.js'
 
 export type ResultStatus = 'OK' | 'DNS' | 'DNF' | 'DSQ'

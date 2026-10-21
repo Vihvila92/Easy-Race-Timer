@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
 import { mkdtempSync } from 'node:fs'

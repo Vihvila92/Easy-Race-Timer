@@ -1,6 +1,8 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { formatTime } from '@ert/i18n'
 import { useState } from 'react'
 import { useApp } from './context.js'
+import { sourceCodeUrl } from './source-link.js'
 import { Banner, Button, Checkbox, Clock, DateField, HintFrame, ListRow, Select, StatusBadge, TextField, TextLink } from './ui/components.js'
 
 const SAMPLE = new Date(2026, 9, 15, 14, 30)
@@ -75,7 +77,7 @@ export function PreviewPage() {
         </section>
         <section className="ui-section" aria-labelledby="preview-links-title">
           <h2 id="preview-links-title">{t('preview.linksTitle')}</h2>
-          <TextLink href="https://github.com/Vihvila92/Easy-Race-Timer" testId="preview-link">{t('common.source')}</TextLink>
+          <TextLink href={sourceCodeUrl(__ERT_SOURCE_REF__)} rel="noreferrer" testId="preview-link">{t('common.source')}</TextLink>
         </section>
         <section className="ui-section" aria-labelledby="preview-check-title">
           <h2 id="preview-check-title">{t('preview.checkTitle')}</h2>

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { z } from 'zod'
 import { AppError } from '@ert/core'
 import { SCHEMA_VERSION, type AppDb } from '@ert/storage'

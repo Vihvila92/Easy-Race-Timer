@@ -1,6 +1,8 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { parseLocale, translate, type Locale, type MessageKey } from '@ert/i18n'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ApiError, api, loadWorkspace } from './api.js'
+import { LiveSession, openLiveSocket } from './live-session.js'
 import type { Workspace } from './types.js'
 import { parseGuidance, parseThemeChoice, resolveColorScheme, type Guidance, type ThemeChoice } from './ui/preferences.js'
 import { unreachableDetail, validateWorkspaceResponse } from './workspace.js'
@@ -56,7 +58,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const dataRef = useRef<Workspace | null>(null)
   const [needsPin, setNeedsPin] = useState(false)
   const [unreachable, setUnreachable] = useState(false)
+  const [authenticated, setAuthenticated] = useState(false)
   const [error, setError] = useState('')
+  const sessionRef = useRef<LiveSession | null>(null)
 
   const setLocale = useCallback((next: Locale) => {
     const locale = parseLocale(next)
@@ -103,18 +107,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
       setData(result.workspace)
       setNeedsPin(false)
       setUnreachable(false)
+      setAuthenticated(true)
     } catch (caught) {
       if (caught instanceof ApiError && caught.code === 'PIN_REQUIRED') {
         dataRef.current = null
         setData(null)
         setNeedsPin(true)
         setUnreachable(false)
+        setAuthenticated(false)
         return
       }
       console.error('Race program is unreachable', caught instanceof Error ? caught : unreachableDetail(caught))
       const failure = validateWorkspaceResponse(caught)
       if (!failure.ok && dataRef.current == null) {
         setUnreachable(true)
+        setAuthenticated(false)
         return
       }
       throw caught
@@ -128,6 +135,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await reload()
     } catch (caught) {
       setNeedsPin(true)
+      setAuthenticated(false)
       setError(caught instanceof ApiError ? caught.code : 'VALIDATION_ERROR')
     }
   }, [reload])
@@ -135,6 +143,30 @@ export function AppProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     reload().catch(() => undefined)
   }, [reload])
+
+  useEffect(() => {
+    if (!authenticated) {
+      sessionRef.current?.stop()
+      sessionRef.current = null
+      return
+    }
+    const session = new LiveSession({
+      open: openLiveSocket,
+      onExpired: () => {
+        dataRef.current = null
+        setData(null)
+        setNeedsPin(true)
+        setUnreachable(false)
+        setAuthenticated(false)
+      },
+    })
+    sessionRef.current = session
+    session.start()
+    return () => {
+      session.stop()
+      if (sessionRef.current === session) sessionRef.current = null
+    }
+  }, [authenticated])
 
   const run = useCallback(async <T,>(fn: () => Promise<T>) => {
     setError('')

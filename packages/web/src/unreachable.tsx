@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { translate, type Locale } from '@ert/i18n'
 import { useEffect, useRef, useState } from 'react'
 import { Banner, Button } from './ui/components.js'

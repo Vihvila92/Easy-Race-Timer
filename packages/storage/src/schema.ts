@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { ageOnReference } from '@ert/core'
 
 export const SCHEMA_VERSION = 3

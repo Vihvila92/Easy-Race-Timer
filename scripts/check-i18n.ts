@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { ambiguousKeys, en, fi, mismatchedKeys } from '@ert/i18n'
 
 const missing = mismatchedKeys(fi, en)

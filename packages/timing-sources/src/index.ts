@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { createRegistry, type TimingSource } from '@ert/core'
 
 export const touchButton: TimingSource = {

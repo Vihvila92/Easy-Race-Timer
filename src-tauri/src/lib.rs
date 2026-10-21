@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! Minimal Tauri shell for Easy Race Timer.
 //!
 //! The shell only hosts the bundled web UI. It registers no custom commands

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 export function parseIsoMs(iso: string): number {
   const ms = Date.parse(iso)
   if (Number.isNaN(ms)) throw new Error(`Invalid timestamp: ${iso}`)

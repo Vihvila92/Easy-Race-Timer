@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 export type Gender = 'F' | 'M' | 'X'
 export type AgeBasis = 'birth_date' | 'birth_year'
 

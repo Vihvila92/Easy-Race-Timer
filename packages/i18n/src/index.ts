@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { en, fi, type MessageKey } from './catalog.js'
 
 export type CategoryWarning =
@@ -74,20 +75,20 @@ function formatWith(value: Date | string | number, locale: Locale, options: Intl
   return new Intl.DateTimeFormat(intlLocale[locale], options).format(date)
 }
 
-/** Calendar date. Finnish `15.10.2026`, English (en-GB) `15/10/2026`. Date-only strings stay on that civil day. */
-export function formatDate(value: Date | string | number, locale: Locale): string {
-  return formatWith(value, locale, { day: '2-digit', month: '2-digit', year: 'numeric' })
+/** Finnish days and months are numeric (`5.6.2026`). English stays zero-padded (`05/06/2026`). */
+function calendarOptions(locale: Locale): Intl.DateTimeFormatOptions {
+  const part = locale === 'fi' ? 'numeric' : '2-digit'
+  return { day: part, month: part, year: 'numeric' }
 }
 
-/**
- * Date typed into a field. Finnish uses `d.M.yyyy` (`12.6.2027`). English stays on
- * `formatDate` (`12/06/2027`). `formatDate` itself stays zero-padded.
- */
+/** Calendar date. Finnish `15.10.2026` or `5.6.2026`. English (en-GB) `15/10/2026`. Date-only strings stay on that civil day. */
+export function formatDate(value: Date | string | number, locale: Locale): string {
+  return formatWith(value, locale, calendarOptions(locale))
+}
+
+/** Date typed into a field. Finnish `d.M.yyyy` (`12.6.2027`, `5.6.2026`). English `12/06/2027`. Both come from formatDate. */
 export function formatEditableDate(value: Date | string | number, locale: Locale): string {
-  if (locale === 'en') return formatDate(value, locale)
-  const date = toDate(value)
-  if (!date) return typeof value === 'string' ? value : ''
-  return `${date.getDate()}.${date.getMonth() + 1}.${date.getFullYear()}`
+  return formatDate(value, locale)
 }
 
 /** Parse a field back to `YYYY-MM-DD`. Accepts ISO in either locale, Finnish `d.M.yyyy`, or English `d/M/yyyy`. */
@@ -123,12 +124,10 @@ export function formatTime(value: Date | string | number, locale: Locale): strin
   return formatWith(value, locale, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
 }
 
-/** Date and time. Finnish `15.10.2026 klo 14.30`, English `15/10/2026, 14:30`. */
+/** Date and time. Finnish `15.10.2026 klo 14.30` or `5.6.2026 klo 09.05`. English `15/10/2026, 14:30`. */
 export function formatDateTime(value: Date | string | number, locale: Locale): string {
   return formatWith(value, locale, {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
+    ...calendarOptions(locale),
     hour: '2-digit',
     minute: '2-digit',
     hourCycle: 'h23',

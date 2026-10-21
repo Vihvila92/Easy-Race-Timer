@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 /** Semicolon-separated CSV with RFC-style quotes. Strips a leading UTF-8 BOM. */
 
 export function parseCsv(text: string): Record<string, string>[] {

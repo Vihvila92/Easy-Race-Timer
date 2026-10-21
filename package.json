@@ -18,6 +18,7 @@
     "depcruise": "depcruise packages --config .dependency-cruiser.cjs",
     "check:i18n": "tsx scripts/check-i18n.ts",
     "check:licenses": "tsx scripts/check-licenses.ts",
+    "check:spdx": "tsx scripts/check-spdx.ts",
     "e2e": "pnpm build && playwright test"
   },
   "pnpm": {

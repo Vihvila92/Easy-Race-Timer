@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // @vitest-environment happy-dom
 import { act, createElement, StrictMode, type ReactNode } from 'react'
 import { createRoot, type Root } from 'react-dom/client'

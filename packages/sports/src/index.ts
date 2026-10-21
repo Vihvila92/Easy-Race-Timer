@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { createRegistry, type SportProfile } from '@ert/core'
 
 export interface TemplateCategory {
