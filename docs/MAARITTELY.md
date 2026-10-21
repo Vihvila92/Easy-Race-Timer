@@ -215,7 +215,7 @@ correction       -- audit-loki, append-only
 
 sync_state       -- per laite: viimeisin vastaanotettu seq_no kultakin muulta laitteelta (versiovektori)
 team, series, series_race, points_table      -- viestit ja cup (varattu, v0.3+)
-schema_meta      -- schema_version, app_version, installation_id
+schema_meta      -- schema_version, app_version, installation_id, file_id (sitoo tiedoston myöhempään avaintiedostoon)
 ```
 
 ### 6.1 Sarjan määräytyminen

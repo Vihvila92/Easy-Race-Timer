@@ -661,7 +661,7 @@ export class RaceService {
       } else {
         this.db.run('UPDATE entry SET status = ?, status_reason = ?, dsq_reason = NULL, updated_at = ?, rev = rev + 1, hlc = ? WHERE id = ?', status, reason, now, hlc, entry.id)
       }
-      this.correct('entry', entry.id, 'set_status', reason, { status: entry.status }, { status })
+      this.correct('entry', entry.id, 'set_status', status === 'dsq' ? 'set_status:dsq' : reason, { status: entry.status }, { status })
     })
   }
 

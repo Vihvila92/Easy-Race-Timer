@@ -14,6 +14,27 @@ export function fsyncDirectory(directory: string): void {
   }
 }
 
+/** Overwrite a file with zeros, then delete it. A crash may still leave ciphertext, not the old bytes. */
+export function secureRemove(file: string): void {
+  if (!fs.existsSync(file)) return
+  const stat = fs.statSync(file)
+  if (!stat.isFile()) return
+  const fd = fs.openSync(file, 'r+')
+  try {
+    const zeros = Buffer.alloc(64 * 1024)
+    let left = stat.size
+    while (left > 0) {
+      const wrote = fs.writeSync(fd, zeros, 0, Math.min(zeros.length, left))
+      if (wrote <= 0) break
+      left -= wrote
+    }
+    fs.fsyncSync(fd)
+  } finally {
+    fs.closeSync(fd)
+  }
+  fs.rmSync(file, { force: true })
+}
+
 export function fsyncFile(file: string): void {
   const fd = fs.openSync(file, 'r+')
   try {

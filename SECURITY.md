@@ -101,7 +101,7 @@ This process is designed to align with the EU Cyber Resilience Act
 ## Defaults
 
 - The server binds to localhost. Opening it on a LAN is a later, explicit choice.
-- The race file is SQLCipher (AES-256) with WAL, `synchronous=FULL` and `temp_store=MEMORY`. The file and its backups are mode 0600 on macOS and Linux. A dev key cannot be enabled in production.
+- The race file is SQLCipher (AES-256) with WAL, `synchronous=FULL`, `secure_delete=ON` and `temp_store=MEMORY`. The SQLCipher 4 per-page random IV and HMAC are unchanged, and the file has no custom header. The raw key is applied as `key = "x'" + dataKey.toString('hex') + "'"`. The file and its backups are mode 0600 on macOS and Linux. Every backup copies the database and then `ert.keys`, and a restore skips a pair that is missing either file. Until key wrapping lands, `ert.keys` is a stub that stores `file_id` and not the data key. A data key is required. The dev key is used only when `NODE_ENV` is `development` or `test` and `ERT_DEV_KEY=1`, and it cannot be enabled in production. Plaintext SQLite files in the data directory are encrypted or securely removed on startup.
 - Admin actions require a reason and are stored in the correction log.
 - Wrong PIN attempts are rate-limited.
 

@@ -39,7 +39,7 @@ Avaa osoite, jonka prosessi tulostaa rivillä `ERT_READY`. Kehittäjän palvelin
 
 `pnpm dev` käynnistää Vite-käyttöliittymän välityspalvelimella. Se on vain kehitysapu, eikä osoite ole mukana rakennetussa käyttöliittymässä.
 
-`pnpm start` ilman muuttujia käyttäytyy kuin tuleva työpöytäkuori: vapaa paikallinen portti ja käyttöjärjestelmän käyttäjähakemisto.
+`pnpm dev:server` lukee tiedoston `config/dev.env`, jossa `ERT_DEV_KEY=1` sallii julkisen kehitysavaimen. Sitä ei käytetä oikeaan kisaan. `pnpm start` ei lue tätä tiedostoa eikä avaa kisatiedostoa ilman tietokanta-avainta.
 
 ## Testit
 

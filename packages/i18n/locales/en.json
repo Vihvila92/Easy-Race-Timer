@@ -206,5 +206,6 @@
   "preview.clockLabel": "Sample time",
   "file.newer": "This race file was saved by a newer Easy Race Timer. Update the app before opening it.",
   "file.hint.newer": "The file is not damaged. This copy of the app is older than the file, so it leaves the file unchanged.",
-  "file.openFailed": "The race file {name} could not be opened."
+  "file.openFailed": "The race file {name} could not be opened.",
+  "file.missingKey": "No data key is configured. The race file was not opened."
 }

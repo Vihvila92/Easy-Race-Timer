@@ -230,4 +230,61 @@ describe('/ws handshake', () => {
       db.raw.close()
     }
   })
+
+  it('does not send a DSQ reason on the socket or in public results', async () => {
+    const db = await openDatabase(':memory:')
+    const { app, service } = await createApp({ db, testMode: true })
+    const opened: Handshake[] = []
+    try {
+      await app.listen({ port: 0, host: '127.0.0.1' })
+      const local = endpoint(app)
+      service.importEvent({
+        id: 'EV',
+        name: 'Privacy',
+        date: '2027-06-12',
+        timezone: 'Europe/Helsinki',
+        sport: 'run',
+        races: [{ id: 'R1', name: { fi: '1 km', en: '1 km' }, distance_m: 1000, start_mode: 'mass' }],
+        categories: [{ id: 'M', race_id: 'R1', name: { fi: 'M', en: 'M' }, gender: 'M', min_age: 0 }],
+      })
+      service.registerLate({
+        firstName: 'Aino',
+        lastName: 'Testi',
+        gender: 'F',
+        birthDate: '2014-08-09',
+        raceId: 'R1',
+        bib: 7,
+        consent: false,
+      })
+      const issued = await app.inject({
+        method: 'POST',
+        url: '/api/v1/settings/pin/check',
+        headers: { host: local.host, 'content-type': 'application/json' },
+        payload: {},
+      })
+      const token = issued.json().token as string
+      const bearer = await connect(app, { authorization: `Bearer ${token}` })
+      opened.push(bearer)
+      expect(bearer.status).toBe(101)
+      await bearer.waitFor(1)
+      const note = 'socket-dq-note'
+      service.setStatus(7, 'dsq', note)
+      await bearer.waitFor(2)
+      const wire = bearer.frames.join('\n')
+      expect(wire).not.toContain(note)
+      expect(wire).not.toContain('dsq_reason')
+      expect(wire).toContain('set_status')
+      const pub = await app.inject({ method: 'GET', url: '/api/v1/results', headers: { host: local.host } })
+      expect(pub.statusCode).toBe(200)
+      expect(pub.body).not.toContain(note)
+      expect(pub.body).not.toContain('dsq_reason')
+      const csv = await app.inject({ method: 'GET', url: '/api/v1/results?format=csv', headers: { host: local.host } })
+      expect(csv.body).not.toContain(note)
+      expect(csv.body).not.toContain('dsq_reason')
+    } finally {
+      for (const socket of opened) socket.close()
+      await app.close()
+      db.raw.close()
+    }
+  })
 })

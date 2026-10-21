@@ -1,5 +1,5 @@
 import path from 'node:path'
-import { AppDb, backupDatabase, pruneBackups } from '@ert/storage'
+import { AppDb, backupDatabase, pruneBackups, pruneSchemaBackups } from '@ert/storage'
 
 export function retentionMonths(db: AppDb): number {
   const row = db.get<{ settings_json: string }>('SELECT settings_json FROM event LIMIT 1')
@@ -18,7 +18,9 @@ export async function writeBackup(db: AppDb, directory: string, reason: string, 
   const stamp = now.toISOString().replace(/[:.]/g, '-')
   const dest = path.join(directory, `ert-${stamp}-${reason}.sqlite`)
   await backupDatabase(db, dest)
-  pruneBackups(directory, retentionMonths(db), now.getTime())
+  const months = retentionMonths(db)
+  pruneBackups(directory, months, now.getTime())
+  if (db.filePath !== ':memory:') pruneSchemaBackups(path.dirname(db.filePath), months, now.getTime())
   return dest
 }
 

@@ -1,13 +1,14 @@
+import Database from 'better-sqlite3-multiple-ciphers'
 import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterEach, describe, expect, it } from 'vitest'
-import { EXPECTED_CIPHER, cipherSettings, plaintextSqliteFiles } from './cipher.js'
-import { backupDatabase, openDataFile, openDatabase } from './db.js'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { EXPECTED_CIPHER, cipherSettings, plaintextSqliteFiles, rawKeyPragma } from './cipher.js'
+import { backupDatabase, openDataFile, openDatabase, rekeyDataFile, rekeyHooks } from './db.js'
 import { RaceFileError } from './errors.js'
-import { devDataKey } from './key.js'
+import { devDataKey, resetDevKeyWarning } from './key.js'
 import { SCHEMA_VERSION } from './schema.js'
 
 const dirs: string[] = []
@@ -20,6 +21,7 @@ function tempDir(): string {
 }
 
 afterEach(() => {
+  rekeyHooks.beforeRename = undefined
   for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true })
 })
 
@@ -47,7 +49,7 @@ function killDuring(modeName: string, dir: string): Promise<void> {
     const child = spawn(process.execPath, ['--import', 'tsx', fixture, modeName, dir], {
       cwd: fileURLToPath(new URL('../../../', import.meta.url)),
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, NODE_ENV: 'test' },
+      env: { ...process.env, NODE_ENV: 'test', ERT_DEV_KEY: '1' },
     })
     let stderr = ''
     let during: string[] | undefined
@@ -81,6 +83,15 @@ function killDuring(modeName: string, dir: string): Promise<void> {
 }
 
 describe('encrypted race file', () => {
+  it('builds the raw key pragma from the buffer hex only', () => {
+    const dataKey = Buffer.alloc(32, 0x22)
+    const hex = dataKey.toString('hex')
+    expect(rawKeyPragma('key', dataKey)).toBe(`key = "x'${hex}'"`)
+    expect(rawKeyPragma('rekey', dataKey)).toBe(`rekey = "x'${hex}'"`)
+    expect(hex).toMatch(/^[0-9a-f]{64}$/)
+    dataKey.fill(0)
+  })
+
   it('pins SQLCipher 4 settings and keeps accounts, consent, audit and race rows in that file', async () => {
     const dir = tempDir()
     const file = path.join(dir, 'ert.sqlite')
@@ -93,8 +104,9 @@ describe('encrypted race file', () => {
       VALUES ('p1', 'Maija', 'Fixture', 'F', 1994, ?, 'full', 1, 1, '1')`, email)
     db.run(`INSERT INTO user_account (id, display_name, email, role, created_at, updated_at)
       VALUES ('u1', ?, ?, 'admin', 1, 1)`, name, email)
-    db.run(`INSERT INTO key_slot (id, user_account_id, kind, kdf, created_at)
-      VALUES ('k1', 'u1', 'admin', 'argon2id', 1)`)
+    expect(db.get(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'key_slot'`)).toBeUndefined()
+    const fileId = db.get<{ file_id: string }>('SELECT file_id FROM schema_meta WHERE id = 1')?.file_id
+    expect(fileId).toMatch(/^[0-9a-f]{32}$/)
     db.run(`INSERT INTO consent (id, person_id, purpose, granted, given_by, text_version, channel, recorded_at)
       VALUES ('c1', 'p1', 'long_term_storage', 1, 'self', 'retention-v1', 'desk', 1)`)
     db.run(`INSERT INTO correction (id, target_type, target_id, action, reason, hlc, created_at)
@@ -111,7 +123,7 @@ describe('encrypted race file', () => {
     const again = await openDatabase(file)
     expect(again.get('SELECT email FROM person WHERE id = ?', 'p1')).toEqual({ email })
     expect(again.get('SELECT email FROM user_account WHERE id = ?', 'u1')).toEqual({ email })
-    expect(again.get('SELECT kind FROM key_slot WHERE id = ?', 'k1')).toEqual({ kind: 'admin' })
+    expect(again.get<{ file_id: string }>('SELECT file_id FROM schema_meta WHERE id = 1')?.file_id).toBe(fileId)
     expect(again.get('SELECT granted FROM consent WHERE id = ?', 'c1')).toEqual({ granted: 1 })
     expect(again.get<{ reason: string }>('SELECT reason FROM correction WHERE id = ?', 'a1')?.reason).toContain(email)
     again.raw.close()
@@ -179,11 +191,32 @@ describe('encrypted race file', () => {
     const file = path.join(dir, 'ert.sqlite')
     expect(() => devDataKey({ NODE_ENV: 'production' })).toThrow(/disabled in production/)
     expect(() => devDataKey({ NODE_ENV: 'production', ERT_ALLOW_DEV_KEY: '1' })).toThrow(/disabled in production/)
+    expect(() => devDataKey({ NODE_ENV: 'production', ERT_DEV_KEY: '1' })).toThrow(/disabled in production/)
     await expect(openDatabase(file, { env: { NODE_ENV: 'production' } })).rejects.toThrow(/disabled in production/)
+    await expect(openDatabase(file, { env: { NODE_ENV: 'production', ERT_DEV_KEY: '1' } })).rejects.toThrow(/disabled in production/)
     await expect(openDatabase(file, { env: { NODE_ENV: 'production', ERT_ALLOW_DEV_KEY: '1' }, dataKey: devDataKey() })).rejects.toThrow(/disabled in production/)
-    const db = await openDatabase(file, { env: { NODE_ENV: 'production' }, dataKey: Buffer.alloc(32, 0x22) })
+    await expect(openDatabase(file, { env: {} })).rejects.toThrow(/No data key is configured/)
+    await expect(openDatabase(file, { env: { NODE_ENV: '' } })).rejects.toThrow(/No data key is configured/)
+    await expect(openDatabase(file, { env: { NODE_ENV: 'test' } })).rejects.toThrow(/No data key is configured/)
+    await expect(openDatabase(file, { env: { NODE_ENV: 'development' } })).rejects.toThrow(/No data key is configured/)
+    const published = devDataKey()
+    await expect(openDatabase(file, { env: { NODE_ENV: 'test' }, dataKey: published })).rejects.toThrow(/No data key is configured/)
+    resetDevKeyWarning()
+    const warnings: string[] = []
+    const spy = vi.spyOn(console, 'warn').mockImplementation((message: unknown) => {
+      warnings.push(String(message))
+    })
+    const db = await openDatabase(file, { env: { NODE_ENV: 'development', ERT_DEV_KEY: '1' } })
+    expect(warnings.some((line) => line.includes('ERT_DEV_KEY is in use'))).toBe(true)
+    spy.mockRestore()
     expect(db.get<{ schema_version: number }>('SELECT schema_version FROM schema_meta WHERE id = 1')?.schema_version).toBe(SCHEMA_VERSION)
+    const key = db.dataKey
+    expect(key?.equals(published)).toBe(true)
     db.raw.close()
+    expect(key?.every((byte) => byte === 0)).toBe(true)
+    const production = await openDatabase(path.join(dir, 'production.sqlite'), { env: { NODE_ENV: 'production' }, dataKey: Buffer.alloc(32, 0x22) })
+    expect(production.get<{ schema_version: number }>('SELECT schema_version FROM schema_meta WHERE id = 1')?.schema_version).toBe(SCHEMA_VERSION)
+    production.raw.close()
   })
 
   it('stores birth year only, requires consent_date, and keeps the DSQ reason internal', async () => {
@@ -224,9 +257,132 @@ describe('encrypted race file', () => {
     const entryColumns = migrated.all<{ name: string; notnull: number }>('PRAGMA table_info(entry)')
     expect(entryColumns.find((column) => column.name === 'consent_date')?.notnull).toBe(1)
     expect(entryColumns.some((column) => column.name === 'dsq_reason')).toBe(true)
+    migrated.raw.pragma('wal_checkpoint(TRUNCATE)')
+    expect(migrated.raw.pragma('freelist_count', { simple: true })).toBe(0)
+    expect(Number(migrated.raw.pragma('secure_delete', { simple: true }))).toBe(1)
+    expect(migrated.raw.serialize().includes(Buffer.from('2014-08-09'))).toBe(false)
     migrated.raw.close()
+    const bakName = fs.readdirSync(dir).find((name) => name.endsWith('.v3.bak'))
+    expect(bakName).toBeTruthy()
+    const bak = await openDataFile(path.join(dir, bakName!), devDataKey())
+    bak.raw.pragma('wal_checkpoint(TRUNCATE)')
+    expect(bak.raw.pragma('freelist_count', { simple: true })).toBe(0)
+    expect(bak.all<{ name: string }>('PRAGMA table_info(person)').some((column) => column.name === 'birth_date')).toBe(false)
+    expect(bak.raw.serialize().includes(Buffer.from('2014-08-09'))).toBe(false)
+    bak.raw.close()
     expect(fs.readFileSync(file).includes(Buffer.from('2014-08-09'))).toBe(false)
     expect(plaintextSqliteFiles(dir)).toEqual([])
+  })
+
+  it('rotates the data key out of WAL mode and rejects the previous key', async () => {
+    const dir = tempDir()
+    const file = path.join(dir, 'ert.sqlite')
+    const db = await openDatabase(file)
+    db.run(`INSERT INTO person (id, first_name, last_name, gender, birth_year, publication, created_at, updated_at, hlc)
+      VALUES ('p1', 'Aino', 'Testi', 'F', 2014, 'full', 1, 1, '1')`)
+    const previous = Buffer.from(db.dataKey!)
+    const next = Buffer.alloc(32, 0x44)
+    const fileId = db.get<{ file_id: string }>('SELECT file_id FROM schema_meta WHERE id = 1')?.file_id
+    rekeyDataFile(db, next)
+    expect(db.get<{ file_id: string }>('SELECT file_id FROM schema_meta WHERE id = 1')?.file_id).toBe(fileId)
+    expect(db.raw.pragma('journal_mode', { simple: true })).toBe('wal')
+    expect(db.raw.pragma('integrity_check', { simple: true })).toBe('ok')
+    expect(db.dataKey?.equals(next)).toBe(true)
+    db.raw.close()
+    await expect(openDatabase(file, { dataKey: previous })).rejects.toBeInstanceOf(RaceFileError)
+    const opened = await openDatabase(file, { dataKey: next })
+    expect(opened.get('SELECT birth_year FROM person WHERE id = ?', 'p1')).toEqual({ birth_year: 2014 })
+    expect(opened.get<{ file_id: string }>('SELECT file_id FROM schema_meta WHERE id = 1')?.file_id).toBe(fileId)
+    expect(opened.raw.pragma('integrity_check', { simple: true })).toBe('ok')
+    const stub = fs.readFileSync(path.join(dir, 'ert.keys'))
+    expect(stub.subarray(0, 4).toString('utf8')).toBe('ERTS')
+    expect(stub.includes(next)).toBe(false)
+    expect(stub.toString('utf8').includes(next.toString('hex'))).toBe(false)
+    opened.raw.close()
+    previous.fill(0)
+    next.fill(0)
+  })
+
+  it('keeps the original pair when rekey stops before rename', async () => {
+    const dir = tempDir()
+    const file = path.join(dir, 'ert.sqlite')
+    const db = await openDatabase(file)
+    db.run(`INSERT INTO person (id, first_name, last_name, gender, birth_year, publication, created_at, updated_at, hlc)
+      VALUES ('p1', 'Aino', 'Testi', 'F', 2014, 'full', 1, 1, '1')`)
+    const previous = Buffer.from(db.dataKey!)
+    const fileId = db.get<{ file_id: string }>('SELECT file_id FROM schema_meta WHERE id = 1')?.file_id
+    rekeyHooks.beforeRename = () => {
+      throw new Error('stop')
+    }
+    expect(() => rekeyDataFile(db, Buffer.alloc(32, 0x44))).toThrow(/Rekey failed/)
+    expect(db.raw.pragma('journal_mode', { simple: true })).toBe('wal')
+    expect(db.get<{ file_id: string }>('SELECT file_id FROM schema_meta WHERE id = 1')?.file_id).toBe(fileId)
+    expect(fs.readdirSync(dir).some((name) => name.includes('.rekey'))).toBe(false)
+    db.raw.close()
+    const opened = await openDatabase(file, { dataKey: previous })
+    expect(opened.get('SELECT birth_year FROM person WHERE id = ?', 'p1')).toEqual({ birth_year: 2014 })
+    opened.raw.close()
+    previous.fill(0)
+  })
+
+  it('encrypts a plaintext race file and removes other plaintext copies', async () => {
+    const dir = tempDir()
+    const file = path.join(dir, 'ert.sqlite')
+    const plain = new Database(file)
+    plain.exec(`CREATE TABLE schema_meta (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      schema_version INTEGER NOT NULL,
+      app_version TEXT NOT NULL,
+      installation_id TEXT NOT NULL
+    )`)
+    plain.prepare('INSERT INTO schema_meta (id, schema_version, app_version, installation_id) VALUES (1, 3, ?, ?)').run('0.1.0', 'install')
+    plain.exec(`CREATE TABLE person (
+      id TEXT PRIMARY KEY,
+      first_name TEXT NOT NULL,
+      last_name TEXT NOT NULL,
+      gender TEXT NOT NULL,
+      birth_date TEXT,
+      birth_year INTEGER,
+      publication TEXT NOT NULL DEFAULT 'full',
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL,
+      hlc TEXT NOT NULL
+    )`)
+    plain.prepare(`INSERT INTO person (id, first_name, last_name, gender, birth_date, birth_year, publication, created_at, updated_at, hlc)
+      VALUES ('p1', 'Aino', 'Testi', 'F', '2014-08-09', NULL, 'full', 1, 1, '1')`).run()
+    plain.exec(`CREATE TABLE entry (
+      id TEXT PRIMARY KEY,
+      race_id TEXT,
+      person_id TEXT,
+      bib INTEGER,
+      registered_at INTEGER
+    )`)
+    plain.close()
+    const backups = path.join(dir, 'backups')
+    fs.mkdirSync(backups)
+    fs.copyFileSync(file, path.join(backups, 'old.sqlite'))
+    fs.copyFileSync(file, path.join(dir, 'race.premigrate.sqlite'))
+    const warnings: string[] = []
+    const spy = vi.spyOn(console, 'warn').mockImplementation((message: unknown) => {
+      warnings.push(String(message))
+    })
+    const db = await openDatabase(file)
+    spy.mockRestore()
+    expect(db.all<{ name: string }>('PRAGMA table_info(person)').some((column) => column.name === 'birth_date')).toBe(false)
+    expect(db.get('SELECT birth_year FROM person WHERE id = ?', 'p1')).toEqual({ birth_year: 2014 })
+    db.raw.pragma('wal_checkpoint(TRUNCATE)')
+    expect(db.raw.serialize().includes(Buffer.from('2014-08-09'))).toBe(false)
+    db.raw.close()
+    expect(fs.readFileSync(file).subarray(0, 16).toString('utf8')).not.toContain('SQLite format 3')
+    expect(fs.existsSync(path.join(backups, 'old.sqlite'))).toBe(false)
+    expect(fs.existsSync(path.join(dir, 'race.premigrate.sqlite'))).toBe(false)
+    expect(plaintextSqliteFiles(dir)).toEqual([])
+    expect(plaintextSqliteFiles(backups)).toEqual([])
+    const text = warnings.join('\n')
+    expect(text).toContain('Encrypted plaintext race file ert.sqlite')
+    expect(text).toContain('Removed plaintext SQLite file old.sqlite')
+    expect(text).toContain('Removed plaintext SQLite file race.premigrate.sqlite')
+    expect(text).not.toContain(dir)
   })
 
   it('shows a friendly error for a newer schema', async () => {

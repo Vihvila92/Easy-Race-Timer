@@ -26,6 +26,9 @@ describe('formatRaceFileError', () => {
     expect(open).not.toContain('/')
     expect(open).not.toContain('node:')
     expect(formatRaceFileError(new RaceFileError('', 'dev-key'))).toBe('Dev key provider is disabled in production.')
+    expect(formatRaceFileError(new RaceFileError('', 'missing-key'), 'en')).toBe(translate('en', 'file.missingKey'))
+    expect(formatRaceFileError(new RaceFileError('', 'missing-key'), 'fi')).toBe(translate('fi', 'file.missingKey'))
+    expect(formatRaceFileError(new RaceFileError('', 'missing-key'), 'fi')).not.toContain('/')
   })
 })
 
@@ -80,10 +83,18 @@ describe('race file privacy columns', () => {
     expect(JSON.stringify(service.exportPerson(personId!))).not.toContain('internal-dq-note')
     expect(JSON.stringify(service.exportPerson(personId!))).not.toContain('dsq_reason')
 
+    db.run(
+      `INSERT INTO correction (id, org_id, target_type, target_id, action, old_value_json, new_value_json, reason, hlc, created_at)
+       VALUES ('legacy-dq', 'local', 'entry', 'e1', 'set_status', ?, ?, 'internal-dq-note', '1', 1)`,
+      JSON.stringify({ status: 'registered' }),
+      JSON.stringify({ status: 'dsq' }),
+    )
     const archived = await unpackErtx(service.exportErtx())
-    const entries = JSON.stringify((archived.data as { entry: unknown[] }).entry)
-    expect(entries).not.toContain('internal-dq-note')
-    expect(entries).not.toContain('dsq_reason')
+    const archive = JSON.stringify(archived.data)
+    expect(archive).not.toContain('internal-dq-note')
+    expect(archive).not.toContain('dsq_reason')
+    const corrections = (archived.data as { correction: { action: string; reason: string; new_value_json: string }[] }).correction
+    expect(corrections.filter((row) => row.new_value_json.includes('"dsq"')).every((row) => row.reason === 'set_status:dsq')).toBe(true)
 
     db.raw.close()
     for (const name of fs.readdirSync(dir)) {

@@ -39,7 +39,7 @@ Open the address printed on the `ERT_READY` line. The developer server uses port
 
 `pnpm dev` starts the Vite UI with a proxy. That proxy is a development aid. The built UI does not contain a host or a port.
 
-`pnpm start` with no variables behaves like the future desktop shell: a free local port and the operating system user-data directory.
+`pnpm dev:server` loads `config/dev.env`, which sets `ERT_DEV_KEY=1`. That opts in to a public development key. It is not for a real race. `pnpm start` does not load that file and refuses to open a race file until a data key is configured.
 
 ## Tests
 

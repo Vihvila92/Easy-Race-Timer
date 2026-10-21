@@ -13,6 +13,8 @@ export const SQLITE_PLAINTEXT_HEADER = Buffer.from('SQLite format 3\0')
  * `legacy = 4` selects AES-256, 4096-byte pages, PBKDF2-HMAC-SHA512, HMAC-SHA512 and HMAC on.
  * Parameters after `legacy` keep those values if a library default changes.
  * `kdf_algorithm` and `hmac_algorithm` value 2 is SHA-512 in SQLite3 Multiple Ciphers.
+ * `plaintext_header_size = 0` keeps the SQLCipher salt at offset 0. There is no custom file header.
+ * SQLCipher 4 already stores a random 16-byte IV per page and an HMAC-SHA512 over the page. Those are not changed.
  */
 export const CIPHER_STATEMENTS = [
   "cipher = 'sqlcipher'",
@@ -44,21 +46,35 @@ export function cipherSettings(raw: SqliteDatabase): Record<keyof typeof EXPECTE
   return settings
 }
 
-function keyStatement(dataKey: Buffer): string {
-  return `key = "x'${dataKey.toString('hex')}'"`
+/**
+ * SQLCipher raw-key pragma, `key` or `rekey`.
+ *
+ * The text is `name = "x'<hex>'"`. `<hex>` is exactly `dataKey.toString('hex')`:
+ * 64 lowercase hex digits, and nothing else is concatenated. Callers pass a Buffer.
+ * This function is the only place that builds the statement. SQL tracing is not enabled,
+ * so the statement is not written to a log.
+ *
+ * `Database#key(Buffer)` and `Database#rekey(Buffer)` are not used. This binding treats
+ * those bytes as a passphrase. The `x'hex'` form is SQLCipher's raw-key syntax and does
+ * not run the passphrase KDF on top of the 32 bytes.
+ */
+export function rawKeyPragma(name: 'key' | 'rekey', dataKey: Buffer): string {
+  if (dataKey.length !== 32) throw new Error('Data key must be 32 bytes')
+  return `${name} = "x'${dataKey.toString('hex')}'"`
 }
 
 /** Cipher parameters and the raw 256-bit key. Does not change journal settings. */
 export function unlock(raw: SqliteDatabase, dataKey: Buffer): void {
   if (dataKey.length !== 32) throw new Error('Data key must be 32 bytes')
   for (const statement of CIPHER_STATEMENTS) raw.pragma(statement)
-  raw.pragma(keyStatement(dataKey))
+  raw.pragma(rawKeyPragma('key', dataKey))
   raw.prepare('SELECT count(*) AS n FROM sqlite_master').get()
 }
 
 /** Unlock, then the runtime pragmas for a database this process will write. */
 export function applyCipher(raw: SqliteDatabase, dataKey: Buffer): void {
   unlock(raw, dataKey)
+  raw.pragma('secure_delete = ON')
   raw.pragma('temp_store = MEMORY')
   raw.pragma('journal_mode = WAL')
   raw.pragma('synchronous = FULL')
@@ -115,6 +131,20 @@ export function peekSchemaVersion(filePath: string, dataKey: Buffer): number | u
     } catch {
       // The handle may already be closed.
     }
+  }
+}
+
+export function isPlaintextSqlite(file: string): boolean {
+  let fd: number | undefined
+  try {
+    fd = fs.openSync(file, 'r')
+    const header = Buffer.alloc(SQLITE_PLAINTEXT_HEADER.length)
+    const read = fs.readSync(fd, header, 0, header.length, 0)
+    return read === header.length && header.equals(SQLITE_PLAINTEXT_HEADER)
+  } catch {
+    return false
+  } finally {
+    if (fd !== undefined) fs.closeSync(fd)
   }
 }
 

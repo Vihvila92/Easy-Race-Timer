@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { ageOnReference } from '@ert/core'
 import type { SqliteDatabase } from './cipher.js'
 
@@ -115,11 +116,15 @@ export const MIGRATIONS: Migration[] = [
         raw.exec('ALTER TABLE entry ADD COLUMN dsq_reason TEXT')
       }
       raw.exec(ACCOUNT_TABLES)
+      raw.exec('DROP TABLE IF EXISTS key_slot')
     },
   },
 ]
 
-/** User accounts and key-slot metadata live in the same encrypted file. Wrapping is #131. */
+/**
+ * Accounts stay in the encrypted race file.
+ * Key slots do not. #131 stores wraps in the sidecar bound to schema_meta.file_id.
+ */
 const ACCOUNT_TABLES = `
 CREATE TABLE IF NOT EXISTS user_account (
   id TEXT PRIMARY KEY,
@@ -130,25 +135,26 @@ CREATE TABLE IF NOT EXISTS user_account (
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
-
-CREATE TABLE IF NOT EXISTS key_slot (
-  id TEXT PRIMARY KEY,
-  org_id TEXT NOT NULL DEFAULT 'local',
-  user_account_id TEXT,
-  kind TEXT NOT NULL CHECK (kind IN ('admin', 'recovery')),
-  kdf TEXT,
-  salt BLOB,
-  wrapped_key BLOB,
-  created_at INTEGER NOT NULL
-);
 `
+
+/** 16 CSPRNG bytes, hex-encoded. Not secret. Stable for the life of the file, including rekey. */
+export function ensureFileId(raw: SqliteDatabase, preferred?: string): string {
+  const columns = columnNames(raw, 'schema_meta')
+  if (!columns.has('file_id')) raw.exec('ALTER TABLE schema_meta ADD COLUMN file_id TEXT')
+  const row = raw.prepare('SELECT file_id FROM schema_meta WHERE id = 1').get() as { file_id: string | null } | undefined
+  if (row?.file_id && /^[0-9a-f]{32}$/.test(row.file_id)) return row.file_id
+  const fileId = preferred && /^[0-9a-f]{32}$/.test(preferred) ? preferred : randomBytes(16).toString('hex')
+  raw.prepare('UPDATE schema_meta SET file_id = ? WHERE id = 1').run(fileId)
+  return fileId
+}
 
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS schema_meta (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   schema_version INTEGER NOT NULL,
   app_version TEXT NOT NULL,
-  installation_id TEXT NOT NULL
+  installation_id TEXT NOT NULL,
+  file_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS event (
