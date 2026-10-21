@@ -6,7 +6,7 @@ import rateLimit from '@fastify/rate-limit'
 import fastifyStatic from '@fastify/static'
 import websocket from '@fastify/websocket'
 import { AppError, errorBody, resultProjection } from '@ert/core'
-import { AppDb } from '@ert/storage'
+import { AppDb, deleteQuarantinedPlaintext, plaintextQuarantinePending } from '@ert/storage'
 import { isLoopbackAddress, routeAccess } from './access.js'
 import { allowedOriginsFromEnv, hostAllowed, jsonContentType, originAllowed } from './guard.js'
 import { issueToken, sessionCookie, sessionSecret, tokenFromRequest, verifyToken } from './session.js'
@@ -147,7 +147,7 @@ export async function createApp(options: AppOptions): Promise<{ app: FastifyInst
     ok: true,
     version: '0.1.0',
     pinConfigured: service.pinConfigured(),
-    plaintextQuarantine: options.db.quarantinedPlaintext.length > 0,
+    plaintextQuarantine: plaintextQuarantinePending(options.db.filePath),
   }))
   app.get('/api/v1/runtime', async () => ({
     url: options.runtime?.url ?? '',
@@ -313,6 +313,9 @@ export async function createApp(options: AppOptions): Promise<{ app: FastifyInst
   })
   app.get('/api/v1/club-stats', async () => service.clubStatistics())
   app.get('/api/v1/audit', async () => service.audit())
+  app.post('/api/v1/plaintext-quarantine/delete', strictLimit, async () => ({
+    deleted: deleteQuarantinedPlaintext(options.db.filePath),
+  }))
   app.post('/api/v1/retention/run', strictLimit, async (request, reply) => {
     const body = (request.body as { at?: unknown; confirm?: boolean } | undefined) ?? {}
     if (body.at !== undefined && !options.testMode) {

@@ -9,7 +9,7 @@ import { RaceFileError } from './errors.js'
 import { omitInternal } from './internal.js'
 import { devKeyOptIn, isDevDataKey, resolveDataKey, type OpenOptions } from './key.js'
 import { backupPairComplete, databasePathForKeyFile, ensureKeyFile, inspectKeyFile, keyFilePath, rekeyTempPaths, writeKeyStub } from './key-file.js'
-import { migratePlaintextFile, quarantinePlaintextCopies, recoverPlaintextMigration } from './plaintext.js'
+import { migratePlaintextFile, purgeExpiredQuarantine, quarantinePlaintextCopies, recoverPlaintextMigration } from './plaintext.js'
 import { ensureFileId, MIGRATIONS, SCHEMA_SQL, SCHEMA_VERSION } from './schema.js'
 
 export const APP_VERSION = '0.1.0'
@@ -31,7 +31,7 @@ export const rekeyHooks: {
   beforeRename?: () => void
 } = {}
 
-export { plaintextHooks, type PlaintextStep } from './plaintext.js'
+export { plaintextHooks, QUARANTINE_RETENTION_MS, deleteQuarantinedPlaintext, plaintextQuarantinePending, type PlaintextStep } from './plaintext.js'
 
 function zeroKeyOnClose(raw: SqliteDatabase, dataKey: Buffer): void {
   const close = raw.close.bind(raw)
@@ -360,6 +360,7 @@ export async function openDatabase(filePath: string, options: OpenOptions = {}):
   recoverPlaintextMigration(resolved, dataKey)
   if (fs.existsSync(resolved) && isPlaintextSqlite(resolved)) migratePlaintextFile(resolved, dataKey)
   const quarantinedPlaintext = quarantinePlaintextCopies(path.dirname(resolved), resolved)
+  purgeExpiredQuarantine(path.dirname(resolved))
 
   if (!fs.existsSync(resolved)) {
     const raw = openEncrypted(resolved, dataKey)

@@ -19,10 +19,28 @@ export function fsyncDirectory(directory: string): void {
  * On SSDs and copy-on-write filesystems that overwrite does not prove the old bytes are gone.
  */
 export function secureRemove(file: string): void {
-  if (!fs.existsSync(file)) return
-  const stat = fs.statSync(file)
+  let stat: fs.Stats
+  try {
+    stat = fs.lstatSync(file)
+  } catch {
+    return
+  }
+  if (stat.isSymbolicLink()) {
+    fs.unlinkSync(file)
+    return
+  }
   if (!stat.isFile()) return
-  const fd = fs.openSync(file, 'r+')
+  const flags = fs.constants.O_NOFOLLOW ? fs.constants.O_RDWR | fs.constants.O_NOFOLLOW : 'r+'
+  let fd: number
+  try {
+    fd = fs.openSync(file, flags)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === 'ELOOP') {
+      fs.unlinkSync(file)
+      return
+    }
+    throw error
+  }
   try {
     const zeros = Buffer.alloc(64 * 1024)
     let left = stat.size

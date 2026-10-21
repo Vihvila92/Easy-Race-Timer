@@ -1,9 +1,10 @@
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { fsyncDirectory, fsyncFile, secureRemove } from './atomic.js'
 import { isPlaintextSqlite, openEncrypted, restrictPermissions, unlock } from './cipher.js'
+import { RaceFileError } from './errors.js'
 
 const IDENT = /^[A-Za-z_][A-Za-z0-9_]*$/
 
@@ -44,11 +45,33 @@ function moveFile(from: string, to: string): void {
   }
 }
 
+function lstatOrUndefined(file: string): fs.Stats | undefined {
+  try {
+    return fs.lstatSync(file)
+  } catch {
+    return undefined
+  }
+}
+
 function moveWithSidecars(from: string, to: string): void {
   moveFile(from, to)
   for (const suffix of ['-wal', '-shm']) {
-    if (!fs.existsSync(`${from}${suffix}`)) continue
-    moveFile(`${from}${suffix}`, `${to}${suffix}`)
+    const side = `${from}${suffix}`
+    const stat = lstatOrUndefined(side)
+    if (!stat || stat.isDirectory()) continue
+    moveFile(side, `${to}${suffix}`)
+  }
+}
+
+/** Retention starts when the file enters quarantine, recorded as its mtime. */
+function stampMovedAt(file: string): void {
+  const stat = lstatOrUndefined(file)
+  if (!stat || stat.isSymbolicLink()) return
+  const now = new Date()
+  try {
+    fs.utimesSync(file, now, now)
+  } catch {
+    // The filesystem timestamp is the fallback.
   }
 }
 
@@ -231,7 +254,7 @@ export function recoverPlaintextMigration(filePath: string, dataKey: Buffer): vo
     return
   }
   if (!targetExists && anyEncrypting) {
-    throw new Error(`Plaintext race file ${base} could not be recovered. Archive or delete it, then start again.`)
+    throw new RaceFileError(base, 'open')
   }
   if (targetExists && isPlaintextSqlite(filePath)) {
     if (anyEncrypting) discardEncrypting(filePath)
@@ -259,15 +282,22 @@ export function isRecognizedRaceFileName(name: string, inBackups: boolean): bool
   return false
 }
 
+/**
+ * Read-only URI for the original file. `immutable=1` does not create `-wal` or `-shm`.
+ * `node:sqlite` is used because better-sqlite3-multiple-ciphers does not pass `SQLITE_OPEN_URI`,
+ * so the same text would be opened as a literal filename.
+ */
+export function immutableReadUri(file: string): string {
+  const absolute = path.resolve(file)
+  const slash = process.platform === 'win32' ? absolute.replaceAll('\\', '/') : absolute
+  const encoded = slash.split('/').map((part) => encodeURIComponent(part)).join('/')
+  return `file:${encoded}?mode=ro&immutable=1`
+}
+
 function hasSchemaMeta(file: string): boolean {
-  const copy = path.join(os.tmpdir(), `ert-peek-${process.pid}-${Date.now()}-${Math.random().toString(16).slice(2)}.sqlite`)
-  let raw: Database.Database | undefined
+  let raw: DatabaseSync | undefined
   try {
-    fs.copyFileSync(file, copy)
-    for (const suffix of ['-wal', '-shm']) {
-      if (fs.existsSync(`${file}${suffix}`)) fs.copyFileSync(`${file}${suffix}`, `${copy}${suffix}`)
-    }
-    raw = new Database(copy, { readonly: true, fileMustExist: true })
+    raw = new DatabaseSync(immutableReadUri(file), { readOnly: true })
     const row = raw.prepare(`SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = 'schema_meta' LIMIT 1`).get()
     return Boolean(row)
   } catch {
@@ -278,7 +308,6 @@ function hasSchemaMeta(file: string): boolean {
     } catch {
       // The handle may already be closed.
     }
-    for (const suffix of ['', '-wal', '-shm']) fs.rmSync(`${copy}${suffix}`, { force: true })
   }
 }
 
@@ -302,32 +331,111 @@ export function quarantinePlaintextCopies(directory: string, keep: string | unde
   const moved: string[] = []
   const roots = [directory]
   const backups = path.join(directory, 'backups')
-  if (fs.existsSync(backups) && fs.statSync(backups).isDirectory()) roots.push(backups)
+  const backupStat = lstatOrUndefined(backups)
+  if (backupStat?.isDirectory() && !backupStat.isSymbolicLink()) roots.push(backups)
   const keepResolved = keep ? path.resolve(keep) : undefined
   for (const root of roots) {
-    if (!fs.existsSync(root)) continue
+    const rootStat = lstatOrUndefined(root)
+    if (!rootStat?.isDirectory() || rootStat.isSymbolicLink()) continue
     const inBackups = path.resolve(root) === path.resolve(backups)
     for (const name of fs.readdirSync(root)) {
       if (name === 'plaintext-quarantine' || name === 'backups') continue
       if (!isRecognizedRaceFileName(name, inBackups)) continue
       const full = path.join(root, name)
       if (keepResolved && path.resolve(full) === keepResolved) continue
-      let stat: fs.Stats
-      try {
-        stat = fs.statSync(full)
-      } catch {
-        continue
-      }
-      if (!stat.isFile()) continue
+      const stat = lstatOrUndefined(full)
+      if (!stat || stat.isSymbolicLink() || !stat.isFile()) continue
       if (!isPlaintextSqlite(full)) continue
       if (!hasSchemaMeta(full)) continue
       const quarantine = quarantineDirectory(directory)
       let dest = path.join(quarantine, name)
-      if (fs.existsSync(dest)) dest = path.join(quarantine, `${name}.${Date.now()}`)
+      if (lstatOrUndefined(dest)) dest = path.join(quarantine, `${name}.${Date.now()}`)
       moveWithSidecars(full, dest)
+      stampMovedAt(dest)
+      for (const suffix of ['-wal', '-shm']) stampMovedAt(`${dest}${suffix}`)
       moved.push(name)
       console.warn(`Quarantined plaintext race file ${name}. It is in plaintext-quarantine and was not deleted.`)
     }
   }
   return moved
+}
+
+export const QUARANTINE_DIR_NAME = 'plaintext-quarantine'
+/** Quarantined plaintext is removed at startup once it is this old. */
+export const QUARANTINE_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
+
+function quarantinePath(dataDir: string): string {
+  return path.join(dataDir, QUARANTINE_DIR_NAME)
+}
+
+function dataDirOf(databasePath: string): string | undefined {
+  if (!databasePath || databasePath === ':memory:') return undefined
+  return path.dirname(path.resolve(databasePath))
+}
+
+/** True when plaintext-quarantine/ contains a file or a symlink. Empty after a restart still counts. */
+export function plaintextQuarantinePending(databasePath: string): boolean {
+  const dataDir = dataDirOf(databasePath)
+  if (!dataDir) return false
+  const dir = quarantinePath(dataDir)
+  const dirStat = lstatOrUndefined(dir)
+  if (!dirStat || dirStat.isSymbolicLink() || !dirStat.isDirectory()) return false
+  for (const name of fs.readdirSync(dir)) {
+    const stat = lstatOrUndefined(path.join(dir, name))
+    if (!stat || stat.isDirectory()) continue
+    return true
+  }
+  return false
+}
+
+function removeQuarantineEntry(full: string): void {
+  const stat = lstatOrUndefined(full)
+  if (!stat || stat.isDirectory()) return
+  if (stat.isSymbolicLink()) {
+    fs.unlinkSync(full)
+    return
+  }
+  secureRemove(full)
+}
+
+/**
+ * Overwrite quarantined files where the filesystem allows, unlink them, and fsync the directory.
+ * Symlinks are unlinked and not followed. Returns basenames only.
+ */
+export function deleteQuarantinedPlaintext(databasePath: string): string[] {
+  const dataDir = dataDirOf(databasePath)
+  if (!dataDir) return []
+  const dir = quarantinePath(dataDir)
+  const dirStat = lstatOrUndefined(dir)
+  if (!dirStat || dirStat.isSymbolicLink() || !dirStat.isDirectory()) return []
+  const removed: string[] = []
+  for (const name of fs.readdirSync(dir)) {
+    const full = path.join(dir, name)
+    const stat = lstatOrUndefined(full)
+    if (!stat || stat.isDirectory()) continue
+    removeQuarantineEntry(full)
+    removed.push(name)
+    console.warn(`Removed quarantined plaintext race file ${name}. The bytes were overwritten where the filesystem allows.`)
+  }
+  if (removed.length) fsyncDirectory(dir)
+  return removed
+}
+
+/** Drop quarantined files whose mtime is older than the retention window. Checked at startup. */
+export function purgeExpiredQuarantine(dataDir: string, nowMs = Date.now(), retentionMs = QUARANTINE_RETENTION_MS): string[] {
+  const dir = quarantinePath(dataDir)
+  const dirStat = lstatOrUndefined(dir)
+  if (!dirStat || dirStat.isSymbolicLink() || !dirStat.isDirectory()) return []
+  const removed: string[] = []
+  for (const name of fs.readdirSync(dir)) {
+    const full = path.join(dir, name)
+    const stat = lstatOrUndefined(full)
+    if (!stat || stat.isDirectory()) continue
+    if (nowMs - stat.mtimeMs < retentionMs) continue
+    removeQuarantineEntry(full)
+    removed.push(name)
+    console.warn(`Removed quarantined plaintext race file ${name}. It was older than the retention period. The bytes were overwritten where the filesystem allows.`)
+  }
+  if (removed.length) fsyncDirectory(dir)
+  return removed
 }

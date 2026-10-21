@@ -10,6 +10,10 @@ export function formatRaceFileError(error: unknown, locale: Locale = 'fi'): stri
     if (error.kind === 'newer') return `${translate(locale, 'file.newer')} ${translate(locale, 'file.hint.newer')}`
     if (error.kind === 'dev-key' || error.kind === 'key-file') return error.message
     if (error.kind === 'missing-key') return translate(locale, 'file.missingKey')
+    if (error.kind === 'open') {
+      const name = error.fileName || 'race file'
+      return `${translate(locale, 'file.openFailed', { name })} ${translate(locale, 'file.hint.openFailed')}`
+    }
     return translate(locale, 'file.openFailed', { name: error.fileName })
   }
   if (error instanceof Error) return error.message

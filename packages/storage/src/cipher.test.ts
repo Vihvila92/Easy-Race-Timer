@@ -31,6 +31,28 @@ function modeOf(file: string): number {
   return fs.statSync(file).mode & 0o777
 }
 
+/** Names in the shared temp directory that are peek files or byte-identical copies of `bytes`. */
+function tmpPlaintextCopies(bytes: Buffer): string[] {
+  const found: string[] = []
+  for (const name of fs.readdirSync(os.tmpdir())) {
+    if (name.startsWith('ert-peek-')) found.push(name)
+    const full = path.join(os.tmpdir(), name)
+    let stat: fs.Stats
+    try {
+      stat = fs.lstatSync(full)
+    } catch {
+      continue
+    }
+    if (!stat.isFile() || stat.size !== bytes.length) continue
+    try {
+      if (fs.readFileSync(full).equals(bytes)) found.push(name)
+    } catch {
+      // The file may disappear while the directory is scanned.
+    }
+  }
+  return found
+}
+
 /** Plain SQLite, not SQLCipher. The sqlite3 CLI is preferred; CPython's sqlite3 is the same library. */
 function assertPlainSqliteRejects(file: string): void {
   const cli = spawnSync('sqlite3', [file, 'SELECT count(*) FROM sqlite_master;'], { encoding: 'utf8' })
@@ -388,6 +410,8 @@ describe('encrypted race file', () => {
       path.join(backups, 'notes.sqlite'),
       path.join(dir, 'ert-foreign.sqlite'),
     ].map((candidate) => ({ file: candidate, bytes: fs.readFileSync(candidate), mtime: fs.statSync(candidate).mtimeMs }))
+    const legacyBytes = fs.readFileSync(path.join(dir, 'ert-legacy.sqlite'))
+    const tmpBefore = new Set(tmpPlaintextCopies(legacyBytes))
     const warnings: string[] = []
     const spy = vi.spyOn(console, 'warn').mockImplementation((message: unknown) => {
       warnings.push(String(message))
@@ -431,6 +455,40 @@ describe('encrypted race file', () => {
     expect(text).not.toContain('Removed plaintext')
     expect(text).not.toContain('notes.sqlite')
     expect(text).not.toContain(dir)
+    expect(fs.readdirSync(os.tmpdir()).some((name) => name.startsWith('ert-peek-'))).toBe(false)
+    expect(tmpPlaintextCopies(legacyBytes).filter((name) => !tmpBefore.has(name))).toEqual([])
+  })
+
+  it('does not follow a symlink named like a race file', async () => {
+    const dir = tempDir()
+    const file = path.join(dir, 'ert.sqlite')
+    const plain = new Database(file)
+    plain.exec(`CREATE TABLE schema_meta (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      schema_version INTEGER NOT NULL,
+      app_version TEXT NOT NULL,
+      installation_id TEXT NOT NULL
+    )`)
+    plain.prepare('INSERT INTO schema_meta (id, schema_version, app_version, installation_id) VALUES (1, 4, ?, ?)').run('0.1.0', 'install')
+    plain.close()
+    const notes = path.join(dir, 'notes.sqlite')
+    fs.copyFileSync(file, notes)
+    const notesBytes = fs.readFileSync(notes)
+    fs.symlinkSync(notes, path.join(dir, 'ert-linked.sqlite'))
+    const elsewhere = path.join(dir, 'elsewhere')
+    fs.mkdirSync(elsewhere)
+    fs.copyFileSync(file, path.join(elsewhere, 'ert-hidden.sqlite'))
+    const hiddenBytes = fs.readFileSync(path.join(elsewhere, 'ert-hidden.sqlite'))
+    fs.symlinkSync(elsewhere, path.join(dir, 'backups'))
+    const db = await openDatabase(file)
+    db.raw.close()
+    expect(fs.lstatSync(path.join(dir, 'ert-linked.sqlite')).isSymbolicLink()).toBe(true)
+    expect(fs.readlinkSync(path.join(dir, 'ert-linked.sqlite'))).toBe(notes)
+    expect(fs.readFileSync(notes).equals(notesBytes)).toBe(true)
+    expect(fs.lstatSync(path.join(dir, 'backups')).isSymbolicLink()).toBe(true)
+    expect(fs.readFileSync(path.join(elsewhere, 'ert-hidden.sqlite')).equals(hiddenBytes)).toBe(true)
+    expect(fs.existsSync(path.join(dir, 'plaintext-quarantine', 'ert-linked.sqlite'))).toBe(false)
+    expect(fs.existsSync(path.join(dir, 'plaintext-quarantine', 'ert-hidden.sqlite'))).toBe(false)
   })
 
   it('keeps race rows when plaintext encryption stops after each durable step', async () => {
@@ -518,9 +576,12 @@ describe('encrypted race file', () => {
     const file = path.join(dir, 'ert.sqlite')
     fs.writeFileSync(`${file}.encrypting`, Buffer.from('not a database, and not empty'))
     const error = await openDatabase(file).then(() => null, (caught: unknown) => caught)
-    expect(error).toBeInstanceOf(Error)
-    expect((error as Error).message).toContain('could not be recovered')
-    expect((error as Error).message).not.toContain(dir)
+    expect(error).toBeInstanceOf(RaceFileError)
+    const raceFile = error as RaceFileError
+    expect(raceFile.kind).toBe('open')
+    expect(raceFile.fileName).toBe('ert.sqlite')
+    expect(raceFile.message).not.toContain(dir)
+    expect(raceFile.message).not.toContain('could not be recovered')
     expect(fs.existsSync(file)).toBe(false)
     expect(fs.readFileSync(`${file}.encrypting`).toString('utf8')).toContain('not a database')
   })

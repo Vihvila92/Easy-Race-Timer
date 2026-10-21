@@ -2,9 +2,9 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { translate } from '@ert/i18n'
-import { RaceFileError, openDatabase } from '@ert/storage'
+import { QUARANTINE_RETENTION_MS, RaceFileError, openDatabase } from '@ert/storage'
 import { unpackErtx } from '@ert/sync'
 import { createApp } from './app.js'
 import { formatRaceFileError } from './race-file.js'
@@ -24,13 +24,32 @@ describe('formatRaceFileError', () => {
     expect(english).toContain('newer Easy Race Timer')
     expect(english).toContain('not damaged')
     const open = formatRaceFileError(new RaceFileError('race.sqlite', 'open'), 'en')
-    expect(open).toBe(translate('en', 'file.openFailed', { name: 'race.sqlite' }))
+    expect(open).toBe(`${translate('en', 'file.openFailed', { name: 'race.sqlite' })} ${translate('en', 'file.hint.openFailed')}`)
+    const openFi = formatRaceFileError(new RaceFileError('race.sqlite', 'open'), 'fi')
+    expect(openFi).toBe(`${translate('fi', 'file.openFailed', { name: 'race.sqlite' })} ${translate('fi', 'file.hint.openFailed')}`)
+    expect(openFi).not.toContain('/')
     expect(open).not.toContain('/')
     expect(open).not.toContain('node:')
     expect(formatRaceFileError(new RaceFileError('', 'dev-key'))).toBe('Dev key provider is disabled in production.')
     expect(formatRaceFileError(new RaceFileError('', 'missing-key'), 'en')).toBe(translate('en', 'file.missingKey'))
     expect(formatRaceFileError(new RaceFileError('', 'missing-key'), 'fi')).toBe(translate('fi', 'file.missingKey'))
     expect(formatRaceFileError(new RaceFileError('', 'missing-key'), 'fi')).not.toContain('/')
+  })
+
+  it('maps an unrecoverable plaintext leftover to the openFailed text', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ert-open-failed-'))
+    dirs.push(dir)
+    const file = path.join(dir, 'ert.sqlite')
+    fs.writeFileSync(`${file}.encrypting`, Buffer.from('not a database, and not empty'))
+    const error = await openDatabase(file).then(() => null, (caught: unknown) => caught)
+    expect(error).toBeInstanceOf(RaceFileError)
+    const english = formatRaceFileError(error, 'en')
+    const finnish = formatRaceFileError(error, 'fi')
+    expect(english).toBe(`${translate('en', 'file.openFailed', { name: 'ert.sqlite' })} ${translate('en', 'file.hint.openFailed')}`)
+    expect(finnish).toBe(`${translate('fi', 'file.openFailed', { name: 'ert.sqlite' })} ${translate('fi', 'file.hint.openFailed')}`)
+    expect(english).not.toContain(dir)
+    expect(finnish).not.toContain(dir)
+    expect(english).not.toContain('could not be recovered')
   })
 })
 
@@ -145,11 +164,80 @@ describe('plaintext quarantine flag', () => {
     await app.close()
     db.raw.close()
 
+    const again = await openDatabase(path.join(dir, 'ert.sqlite'))
+    expect(again.quarantinedPlaintext).toEqual([])
+    const second = await createApp({ db: again, testMode: true })
+    const still = await second.app.inject({ method: 'GET', url: '/api/v1/health' })
+    expect(still.json().plaintextQuarantine).toBe(true)
+    const anonymous = await second.app.inject({
+      method: 'POST',
+      url: '/api/v1/plaintext-quarantine/delete',
+      headers: { host: 'localhost:80' },
+      payload: {},
+    })
+    expect(anonymous.statusCode).toBe(401)
+    const session = await second.app.inject({ method: 'POST', url: '/api/v1/settings/pin/check', payload: {} })
+    const warnings: string[] = []
+    const spy = vi.spyOn(console, 'warn').mockImplementation((message: unknown) => {
+      warnings.push(String(message))
+    })
+    const deleted = await second.app.inject({
+      method: 'POST',
+      url: '/api/v1/plaintext-quarantine/delete',
+      headers: { authorization: `Bearer ${session.json().token as string}`, host: 'localhost:80' },
+      payload: {},
+    })
+    spy.mockRestore()
+    expect(deleted.statusCode).toBe(200)
+    expect(deleted.json().deleted).toEqual(['ert-legacy.sqlite'])
+    expect(warnings.join('\n')).toContain('overwritten where the filesystem allows')
+    expect(warnings.join('\n')).not.toContain(dir)
+    const cleared = await second.app.inject({ method: 'GET', url: '/api/v1/health' })
+    expect(cleared.json().plaintextQuarantine).toBe(false)
+    expect(fs.readdirSync(path.join(dir, 'plaintext-quarantine'))).toEqual([])
+    await second.app.close()
+    again.raw.close()
+
     const memory = await openDatabase(':memory:')
     const memoryApp = await createApp({ db: memory, testMode: true })
     const memoryHealth = await memoryApp.app.inject({ method: 'GET', url: '/api/v1/health' })
     expect(memoryHealth.json().plaintextQuarantine).toBe(false)
     await memoryApp.app.close()
     memory.raw.close()
+  })
+
+  it('clears the quarantine flag after the retention period on the next startup', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ert-quarantine-expire-'))
+    dirs.push(dir)
+    const legacy = new DatabaseSync(path.join(dir, 'ert-legacy.sqlite'))
+    legacy.exec(`CREATE TABLE schema_meta (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      schema_version INTEGER NOT NULL,
+      app_version TEXT NOT NULL,
+      installation_id TEXT NOT NULL
+    )`)
+    legacy.prepare('INSERT INTO schema_meta (id, schema_version, app_version, installation_id) VALUES (1, 4, ?, ?)').run('0.1.0', 'install')
+    legacy.close()
+    const db = await openDatabase(path.join(dir, 'ert.sqlite'))
+    db.raw.close()
+    const quarantined = path.join(dir, 'plaintext-quarantine', 'ert-legacy.sqlite')
+    expect(fs.existsSync(quarantined)).toBe(true)
+    const expired = new Date(Date.now() - QUARANTINE_RETENTION_MS - 60_000)
+    fs.utimesSync(quarantined, expired, expired)
+    const warnings: string[] = []
+    const spy = vi.spyOn(console, 'warn').mockImplementation((message: unknown) => {
+      warnings.push(String(message))
+    })
+    const again = await openDatabase(path.join(dir, 'ert.sqlite'))
+    spy.mockRestore()
+    expect(fs.existsSync(quarantined)).toBe(false)
+    expect(warnings.join('\n')).toContain('ert-legacy.sqlite')
+    expect(warnings.join('\n')).toContain('overwritten where the filesystem allows')
+    expect(warnings.join('\n')).not.toContain(dir)
+    const { app } = await createApp({ db: again, testMode: true })
+    const health = await app.inject({ method: 'GET', url: '/api/v1/health' })
+    expect(health.json().plaintextQuarantine).toBe(false)
+    await app.close()
+    again.raw.close()
   })
 })
