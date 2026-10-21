@@ -78,6 +78,25 @@ test.describe('unreachable race program', () => {
     expect(pageErrors).toEqual([])
   })
 
+  test('a bootstrap that never answers shows Try again', async ({ page }) => {
+    const pageErrors = trackPageErrors(page)
+    let release: () => void = () => undefined
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    await page.route('**/api/v1/bootstrap', async (route) => {
+      await held
+      await route.abort('timedout').catch(() => undefined)
+    })
+    await page.goto(origin)
+    await expect(page.getByText('Ladataan')).toBeVisible()
+    await expect(page.getByTestId('unreachable-message')).toHaveText(fiMessage, { timeout: 20_000 })
+    await expect(page.getByRole('button', { name: 'Yritä uudelleen' })).toBeVisible()
+    await expect(page.getByTestId('wizard')).toHaveCount(0)
+    release()
+    expect(pageErrors).toEqual([])
+  })
+
   test('Try again opens the wizard once the program answers', async ({ page }) => {
     const pageErrors = trackPageErrors(page)
     let reachable = false

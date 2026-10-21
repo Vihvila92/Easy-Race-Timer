@@ -71,6 +71,7 @@ export async function flush(focusId?: string): Promise<{ flags: string[]; synced
     try {
       const saved = await api<{ flags?: string[] }>('/api/v1/timing-events', {
         method: 'POST',
+        timeout: false,
         body: JSON.stringify({
           id: item.id,
           deviceId: item.deviceId,
