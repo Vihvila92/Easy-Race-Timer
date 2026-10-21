@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App.js'
 import { AppProvider } from './context.js'
+import { AppErrorBoundary } from './error-boundary.js'
 import './styles.css'
 import './ui/ui.css'
 
@@ -10,7 +11,9 @@ if (!root) throw new Error('root missing')
 createRoot(root).render(
   <StrictMode>
     <AppProvider>
-      <App />
+      <AppErrorBoundary>
+        <App />
+      </AppErrorBoundary>
     </AppProvider>
   </StrictMode>,
 )

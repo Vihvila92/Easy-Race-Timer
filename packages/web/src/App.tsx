@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { syncServerClock } from './api.js'
 import { useApp } from './context.js'
 import { flush } from './queue.js'
+import { UnreachableView } from './unreachable.js'
 import { Wizard } from './wizard.js'
 import { Audit, Clubs, Corrections, Entries, Finish, ImportView, Office, PrintView, Results, Start, Ties } from './views.js'
 
@@ -66,7 +67,7 @@ function PinGate() {
 }
 
 export function App() {
-  const { t, data, needsPin, error } = useApp()
+  const { t, data, needsPin, unreachable, error, reload, locale } = useApp()
   const [hash, setHash] = useState(() => window.location.hash.replace('#', '') || '/office')
   useEffect(() => {
     const onHash = () => setHash(window.location.hash.replace('#', '') || '/office')
@@ -84,12 +85,15 @@ export function App() {
   }, [])
   const current = VIEWS.find(([path]) => path === hash) ?? VIEWS[0]
   const View = current[2]
-  const waiting = data?.ties.filter((group) => group.status === 'unconfirmed').length ?? 0
   if (needsPin) return <PinGate />
   const preview = import.meta.env.DEV && hash === '/preview' && PreviewPage != null
   if (!data && !preview) {
+    if (unreachable) {
+      return <UnreachableView locale={locale} onRetry={() => { void reload().catch(() => undefined) }} />
+    }
     return <div className="shell wizard-shell"><main className="main"><p>{t('common.loading')}</p></main></div>
   }
+  const waiting = data?.ties?.filter((group) => group.status === 'unconfirmed').length ?? 0
   const settingUp = !data?.event
   const links = !data || settingUp ? VIEWS.filter(([path]) => data && path === '/import') : VIEWS
   const showWizard = !preview && settingUp && hash !== '/import' && !!data
