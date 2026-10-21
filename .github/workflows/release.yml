@@ -70,10 +70,12 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2
+      # The desktop bundle only builds the web UI. better-sqlite3 is the Node
+      # server's native module and has no Visual Studio toolchain on this job.
       - name: Install JavaScript dependencies
         run: |
-          pnpm install --frozen-lockfile
-          pnpm rebuild better-sqlite3 esbuild
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm rebuild esbuild
       - name: Build Tauri bundles
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
