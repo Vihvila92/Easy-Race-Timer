@@ -10,6 +10,7 @@ import {
   lipoInfoHasBoth,
   needsShell,
   nodeLaunchArgs,
+  pnpmLaunch,
   quoteWindowsArg,
   seaBuildKind,
   windowsCommandLine,
@@ -70,11 +71,22 @@ describe('sidecar build plan', () => {
     expect(lipoInfoHasBoth('Non-fat file: arm64')).toBe(false)
   })
 
-  it('runs pnpm through cmd.exe on Windows and quotes paths that contain spaces', () => {
+  it('runs Windows pnpm as a Node script and quotes paths that contain spaces', () => {
     expect(needsShell('pnpm', 'win32')).toBe(true)
     expect(needsShell('pnpm', 'linux')).toBe(false)
-    expect(needsShell('pnpm', 'darwin')).toBe(false)
     expect(needsShell('lipo', 'win32')).toBe(false)
+    expect(pnpmLaunch('linux', undefined, () => false, 'node')).toEqual({ command: 'pnpm', prefix: [] })
+    const root = 'C:\\Users\\runneradmin\\setup-pnpm\\node_modules\\.bin'
+    const cjs = 'C:\\Users\\runneradmin\\setup-pnpm\\node_modules\\pnpm\\bin\\pnpm.cjs'
+    expect(pnpmLaunch('win32', root, (file) => file === cjs, 'C:\\node\\node.exe')).toEqual({
+      command: 'C:\\node\\node.exe',
+      prefix: [cjs],
+    })
+    expect(pnpmLaunch('win32', 'C:\\pnpm', (file) => file === 'C:\\pnpm\\pnpm.exe', 'C:\\node\\node.exe')).toEqual({
+      command: 'C:\\pnpm\\pnpm.exe',
+      prefix: [],
+    })
+    expect(() => pnpmLaunch('win32', 'C:\\empty', () => false, 'node')).toThrow(/pnpm was not found/)
     expect(quoteWindowsArg('')).toBe('""')
     expect(quoteWindowsArg('--filter')).toBe('--filter')
     expect(quoteWindowsArg('C:\\Program Files\\ert-server.exe')).toBe('"C:\\Program Files\\ert-server.exe"')
@@ -83,7 +95,7 @@ describe('sidecar build plan', () => {
       'pnpm exec postject "C:\\a b\\ert-server.exe" NODE_SEA_BLOB',
     )
     const source = readFileSync(new URL('./build-sidecar.ts', import.meta.url), 'utf8')
-    expect(source).toContain('needsShell')
-    expect(source).toContain('windowsVerbatimArguments: true')
+    expect(source).toContain('pnpmLaunch')
+    expect(source).not.toContain('cmd.exe')
   })
 })

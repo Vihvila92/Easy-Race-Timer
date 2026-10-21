@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+import path from 'node:path'
+
 /** Node copied into the sidecar, or downloaded when a universal macOS binary is built. */
 export const NODE_VERSION = '22.23.3'
 
@@ -87,6 +89,34 @@ export function fileDescribesArch(output: string, arch: 'arm64' | 'x64'): boolea
 /** `lipo -info` on the universal sidecar lists both slices. */
 export function lipoInfoHasBoth(output: string): boolean {
   return /\bx86_64\b/.test(output) && /\barm64\b/.test(output)
+}
+
+/**
+ * The Windows pnpm shim is `pnpm.cmd`. `execFile` does not run that shim, and
+ * passing its arguments through `cmd.exe /c` puts absolute paths in a shell
+ * string. Run `pnpm.cjs` with Node, or `pnpm.exe` when the standalone binary
+ * is on PATH. Other platforms run `pnpm` directly.
+ */
+export function pnpmLaunch(
+  platform: NodeJS.Platform,
+  pathValue: string | undefined,
+  exists: (file: string) => boolean,
+  execPath: string,
+): { command: string; prefix: string[] } {
+  if (platform !== 'win32') return { command: 'pnpm', prefix: [] }
+  const entries = (pathValue ?? '').split(';').map((entry) => entry.trim()).filter(Boolean)
+  for (const dir of entries) {
+    const exe = path.win32.join(dir, 'pnpm.exe')
+    if (exists(exe)) return { command: exe, prefix: [] }
+    const candidates = [
+      path.win32.resolve(dir, '..', 'pnpm', 'bin', 'pnpm.cjs'),
+      path.win32.resolve(dir, 'node_modules', 'pnpm', 'bin', 'pnpm.cjs'),
+      path.win32.join(dir, 'pnpm.cjs'),
+    ]
+    const cjs = candidates.find((file) => exists(file))
+    if (cjs) return { command: execPath, prefix: [cjs] }
+  }
+  throw new Error('pnpm was not found on PATH')
 }
 
 /**

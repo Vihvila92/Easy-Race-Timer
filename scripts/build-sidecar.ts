@@ -23,24 +23,19 @@ import {
   assertHostNode,
   fileDescribesArch,
   lipoInfoHasBoth,
-  needsShell,
   nodeLaunchArgs,
+  pnpmLaunch,
   seaBuildKind,
-  windowsCommandLine,
 } from './sidecar-plan.ts'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const nodeRequire = createRequire(import.meta.url)
 
 function run(command: string, args: string[]) {
-  if (needsShell(command, process.platform)) {
-    // `cmd.exe` is looked up on PATH. The build must not take the shell path from the environment.
-    execFileSync('cmd.exe', ['/d', '/s', '/c', windowsCommandLine(command, args)], {
-      cwd: root,
-      stdio: 'inherit',
-      windowsHide: true,
-      windowsVerbatimArguments: true,
-    })
+  if (command === 'pnpm') {
+    const pathKey = Object.keys(process.env).find((key) => key.toLowerCase() === 'path')
+    const launch = pnpmLaunch(process.platform, pathKey ? process.env[pathKey] : undefined, fs.existsSync, process.execPath)
+    execFileSync(launch.command, [...launch.prefix, ...args], { cwd: root, stdio: 'inherit', windowsHide: true })
     return
   }
   execFileSync(command, args, { cwd: root, stdio: 'inherit' })
