@@ -28,7 +28,7 @@
     "onlyBuiltDependencies": ["esbuild"]
   },
   "devDependencies": {
-    "@axe-core/playwright": "^4.10.2",
+    "@axe-core/playwright": "^4.14.0",
     "@cyclonedx/cdxgen": "12.8.6",
     "@eslint/js": "^9.36.0",
     "@playwright/test": "^1.56.1",
