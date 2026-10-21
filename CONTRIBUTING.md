@@ -27,6 +27,7 @@ pnpm lint
 pnpm depcruise
 pnpm check:i18n
 pnpm check:licenses
+pnpm check:spdx
 pnpm typecheck
 pnpm test
 pnpm e2e
@@ -89,6 +90,8 @@ Changes to authentication (PIN, tokens), consent, publication levels, anonymizat
 ## License
 
 The project is licensed under `AGPL-3.0-only` (see `LICENSE`). External contributors must sign the Contributor License Agreement ([CLA.md](CLA.md)) before their pull request can be merged; the CLA assistant bot guides you in the PR by asking you to comment `I have read the CLA Document and I hereby sign the CLA`. Do not submit code you cannot license under these terms.
+
+Every source file (`.ts`, `.tsx`, `.js`, `.mjs`, `.cjs`, `.css`, `.py`, `.html`, `.rs`) carries `SPDX-License-Identifier: AGPL-3.0-only` in its first lines. A shebang stays on the first line and the header follows it. `pnpm check:spdx` fails when a source file is missing that header. JSON, Markdown and lockfiles are not source files. See [ADR 0012](docs/adr/0012-spdx-and-source-link.md).
 
 ## Security
 

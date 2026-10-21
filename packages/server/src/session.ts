@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import type { AppDb } from '@ert/storage'
 

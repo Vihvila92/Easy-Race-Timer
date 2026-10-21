@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { ApiError, api } from './api.js'
 
 export interface QueuedTap {

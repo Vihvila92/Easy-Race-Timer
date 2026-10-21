@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { en, fi, type MessageKey } from './catalog.js'
 
 export type CategoryWarning =

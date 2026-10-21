@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { RESULT_FIELDS, resultProjection, stringifyCsv, type ResultRow } from '@ert/core'
 import { translate, type Locale } from '@ert/i18n'
 

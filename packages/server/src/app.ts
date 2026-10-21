@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import path from 'node:path'
 import { existsSync } from 'node:fs'
 import Fastify, { type FastifyInstance } from 'fastify'

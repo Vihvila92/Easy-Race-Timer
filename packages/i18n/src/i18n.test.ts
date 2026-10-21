@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from 'vitest'
 import { ambiguousKeys, catalogKeys, commitEditableDate, en, fi, formatDate, formatDateTime, formatEditableDate, formatTime, mismatchedKeys, missingKeys, parseEditableDate, parseLocale } from './index.js'
 

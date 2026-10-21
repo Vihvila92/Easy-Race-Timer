@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { expect, test, type Page } from '@playwright/test'
 import { smallTargets, violations } from './a11y.ts'
 import { spawn, type ChildProcess } from 'node:child_process'

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { createRegistry, type RaceFormat } from '@ert/core'
 
 /** Mass start plus a per-entry offset. An own start event, when present, wins. */

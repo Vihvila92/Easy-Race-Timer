@@ -1,9 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { formatDate } from '@ert/i18n'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { blockerLink } from './blockers.js'
-import { Checkbox, TextLink } from './ui/components.js'
 import { ApiError, api, clientNow, clockMs, createTapId, deviceNow, localDeviceId, nextTapLabel, readClockOffset, syncServerClock } from './api.js'
 import { useApp } from './context.js'
+import { licenseUrl, sourceCodeUrl } from './source-link.js'
+import { Banner, Checkbox, TextLink } from './ui/components.js'
 import { flush, pendingCount, recordTap } from './queue.js'
 import type { ClubMatch, Preview, Suggestion, TieGroup } from './types.js'
 
@@ -722,6 +724,22 @@ export function PrintView() {
       <h1>{t('print.title')}</h1>
       <p className="lead">{t('print.lead')}</p>
       <iframe title={t('print.title')} data-testid="print-frame" srcDoc={html} style={{ width: '100%', minHeight: '70vh', border: '1px solid var(--line)', borderRadius: 16, background: 'white' }} />
+    </section>
+  )
+}
+
+export function About() {
+  const { t } = useApp()
+  return (
+    <section data-testid="about">
+      <h1>{t('about.title')}</h1>
+      <p className="lead" data-testid="about-version">{t('about.version', { version: __ERT_VERSION__ })}</p>
+      <p data-testid="about-revision">{t('about.revision', { revision: __ERT_SOURCE_REF__ })}</p>
+      <p className="footer">
+        <TextLink href={sourceCodeUrl(__ERT_SOURCE_REF__)} rel="noreferrer" testId="about-source">{t('common.source')}</TextLink>
+        <TextLink href={licenseUrl(__ERT_SOURCE_REF__)} rel="noreferrer" testId="about-license-link">{t('about.licenseLink')}</TextLink>
+      </p>
+      <Banner tone="info" testId="about-license">{t('about.license')}</Banner>
     </section>
   )
 }

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { AppError, ageOnReference, type AgeInput } from '@ert/core'
 
 /** A person under this age on race day cannot consent for themselves. */

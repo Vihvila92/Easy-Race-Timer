@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import type { MessageKey } from '@ert/i18n'
 import { useState, type AnchorHTMLAttributes, type ButtonHTMLAttributes, type FocusEventHandler, type ReactNode } from 'react'
 import { useApp } from '../context.js'

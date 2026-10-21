@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { ageOnReference, type AgeBasis, type AgeInput, type ResultRow } from '@ert/core'
 
 export interface PrivacyEntrant {

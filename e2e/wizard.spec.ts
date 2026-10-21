@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { expect, test } from '@playwright/test'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -19,6 +20,21 @@ test.describe('first run', () => {
 
   test('creates a race without a file import', async ({ page }) => {
     await page.goto(`http://127.0.0.1:${server.port}/`)
+    await expect(page.getByTestId('wizard')).toBeVisible()
+    const source = await page.getByTestId('source-link').getAttribute('href')
+    expect(source).toMatch(/^https:\/\/github\.com\/Vihvila92\/Easy-Race-Timer\/(commit\/[0-9a-f]{40}|tree\/[A-Za-z0-9._-]+)$/)
+    expect(source).not.toBe('https://github.com/Vihvila92/Easy-Race-Timer')
+    await page.getByTestId('nav-about').click()
+    await expect(page.getByTestId('about-version')).toContainText('0.1.0')
+    await expect(page.getByTestId('about-license')).toContainText('GNU Affero General Public License')
+    await expect(page.getByTestId('about-source')).toHaveAttribute('href', source ?? '')
+    const license = await page.getByTestId('about-license-link').getAttribute('href')
+    expect(license).toMatch(/\/blob\/.+\/LICENSE$/)
+    await page.getByTestId('lang-en').click()
+    await expect(page.getByRole('heading', { name: 'About' })).toBeVisible()
+    await expect(page.getByTestId('about-license')).toContainText('network service')
+    await page.getByTestId('lang-fi').click()
+    await page.goto(`http://127.0.0.1:${server.port}/#/office`)
     await expect(page.getByTestId('wizard')).toBeVisible()
     await page.getByTestId('theme-light').click()
     const shots = screenshotDir()
@@ -92,6 +108,7 @@ test.describe('first run', () => {
     await page.getByTestId('lang-en').click()
     await expect(page.getByTestId('office-date')).toContainText('12/06/2027')
     await expect(page.getByRole('heading', { level: 1, name: 'Race office' })).toBeVisible()
+    await expect(page.getByTestId('source-link')).toBeVisible()
     await page.getByTestId('lang-fi').click()
     await expect(page.getByTestId('wizard-next-import')).toBeVisible()
     await expect(page.getByTestId('nav-finish')).toBeVisible()

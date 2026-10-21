@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { parseLocale, translate, type Locale, type MessageKey } from '@ert/i18n'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ApiError, api, loadWorkspace } from './api.js'

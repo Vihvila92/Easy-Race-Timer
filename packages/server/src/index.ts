@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
