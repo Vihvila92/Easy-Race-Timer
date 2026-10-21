@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ambiguousKeys, catalogKeys, en, fi, formatDate, formatDateTime, formatTime, mismatchedKeys, missingKeys, parseLocale } from './index.js'
+import { ambiguousKeys, catalogKeys, commitEditableDate, en, fi, formatDate, formatDateTime, formatEditableDate, formatTime, mismatchedKeys, missingKeys, parseEditableDate, parseLocale } from './index.js'
 
 describe('i18n', () => {
   it('has the same keys in Finnish and English', () => {
@@ -36,6 +36,39 @@ describe('i18n', () => {
     expect(formatDate('2026-10-15', 'en')).toBe('15/10/2026')
     expect(formatDate(new Date(2026, 9, 15, 23, 30), 'fi')).toBe('15.10.2026')
     expect(formatDate('not-a-date', 'fi')).toBe('not-a-date')
+  })
+
+  it('keeps zero-padding in formatDate', () => {
+    expect(formatDate('2027-06-12', 'fi')).toBe('12.06.2027')
+    expect(formatDate('2027-06-12', 'en')).toBe('12/06/2027')
+    expect(formatDate('2026-06-05', 'fi')).toBe('05.06.2026')
+  })
+
+  it('formats an editable date in the app locale', () => {
+    expect(formatEditableDate('2027-06-12', 'fi')).toBe('12.6.2027')
+    expect(formatEditableDate('2026-06-05', 'fi')).toBe('5.6.2026')
+    expect(formatEditableDate('2026-10-15', 'fi')).toBe('15.10.2026')
+    expect(formatEditableDate('2027-06-12', 'en')).toBe('12/06/2027')
+    expect(formatEditableDate('2026-10-15', 'en')).toBe('15/10/2026')
+    expect(formatEditableDate('not-a-date', 'fi')).toBe('not-a-date')
+  })
+
+  it('parses an editable date back to ISO without using the browser order', () => {
+    expect(parseEditableDate('12.6.2027', 'fi')).toBe('2027-06-12')
+    expect(parseEditableDate('12.06.2027', 'fi')).toBe('2027-06-12')
+    expect(parseEditableDate('5.6.2026', 'fi')).toBe('2026-06-05')
+    expect(parseEditableDate('2027-06-12', 'fi')).toBe('2027-06-12')
+    expect(parseEditableDate('2027-06-12', 'en')).toBe('2027-06-12')
+    expect(parseEditableDate('12/6/2027', 'en')).toBe('2027-06-12')
+    expect(parseEditableDate('06/12/2027', 'en')).toBe('2027-12-06')
+    expect(parseEditableDate('06/12/2027', 'fi')).toBeNull()
+    expect(parseEditableDate('12.6.2027', 'en')).toBeNull()
+    expect(parseEditableDate('31.2.2027', 'fi')).toBeNull()
+    expect(parseEditableDate('29.2.2027', 'fi')).toBeNull()
+    expect(parseEditableDate('29.2.2028', 'fi')).toBe('2028-02-29')
+    expect(commitEditableDate('2027-06-12', 'fi')).toEqual({ text: '12.6.2027', iso: '2027-06-12' })
+    expect(commitEditableDate('31.2.2027', 'fi')).toEqual({ text: '31.2.2027', iso: '' })
+    expect(commitEditableDate(' 12/06/2027 ', 'en')).toEqual({ text: '12/06/2027', iso: '2027-06-12' })
   })
 
   it('formats time of day in fi-FI and en-GB', () => {

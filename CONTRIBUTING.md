@@ -48,9 +48,11 @@ Guided mode is the default. A `<view>.hint.<id>` string is shown only while guid
 
 Format dates and times with `formatDate`, `formatTime` and `formatDateTime` from `@ert/i18n` (`fi-FI` and `en-GB`). A Finnish date looks like `15.10.2026`. Store a calendar date as `YYYY-MM-DD`.
 
+Do not use `<input type="date">` for a date a volunteer reads. The browser paints that control in the browser language, not the app language. Use `DateField`: Finnish shows `d.M.yyyy` (for example `12.6.2027`) and English shows the `formatDate` value (`12/06/2027`). The field still stores `YYYY-MM-DD`. `formatDate` stays zero-padded. `DateField` passes a format hint and, after blur, an error through `TextField` (`aria-invalid` and `aria-describedby`). Lock-blocker ids stay in the API; the results view shows `results.blocker.*` instead of the raw id.
+
 ## User interface
 
-Shared controls live in [`packages/web/src/ui`](packages/web/src/ui). Use them for new views: `Button` (primary, secondary, danger), `TextField`, `Select`, `Banner`, `ListRow`, `StatusBadge`, `Clock` and `HintFrame`. Colors, type and spacing are CSS variables on `:root`. `[data-theme="dark"]` replaces them. The theme follows the system setting until the user chooses light or dark. Targets are at least 44 by 44 px, and both themes meet WCAG 2.2 AA contrast.
+Shared controls live in [`packages/web/src/ui`](packages/web/src/ui). Use them for new views: `Button` (primary, secondary, danger), `TextField`, `DateField`, `Select`, `Checkbox`, `TextLink`, `Banner`, `ListRow`, `StatusBadge`, `Clock` and `HintFrame`. Colors, type and spacing are CSS variables on `:root`. `[data-theme="dark"]` replaces them. The theme follows the system setting until the user chooses light or dark. Targets are at least 44 by 44 px (`--target`), including inline links and checkboxes, and both themes meet WCAG 2.2 AA contrast.
 
 `HintFrame` renders a `<view>.hint.<id>` string in the page flow only while guided mode is on. It is not a dialog. A dev build reviews the set at `#/preview`. That route is not part of the production build.
 

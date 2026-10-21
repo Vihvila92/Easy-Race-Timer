@@ -1,5 +1,5 @@
-import AxeBuilder from '@axe-core/playwright'
 import { expect, test, type Page } from '@playwright/test'
+import { smallTargets, violations } from './a11y.ts'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { readdirSync, readFileSync, mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -47,12 +47,19 @@ test.describe('component preview', () => {
     await expect(page.getByRole('dialog')).toHaveCount(0)
     await expect(page.getByTestId('preview-clock')).toContainText('14.30')
 
+    await expect(page.getByTestId('preview-date')).toHaveValue('12.6.2027')
     await page.getByTestId('lang-en').click()
+    await expect(page.getByTestId('preview-date')).toHaveValue('12/06/2027')
     await expect(page.getByRole('heading', { level: 1, name: 'Components' })).toBeVisible()
     await expect(page.getByTestId('preview-hint')).toContainText('guided mode')
     await expect(page.getByTestId('preview-clock')).toContainText('14:30')
     await page.getByTestId('lang-fi').click()
+    await expect(page.getByTestId('preview-date')).toHaveValue('12.6.2027')
     await expect(page.getByTestId('preview-primary')).toHaveText('Jatka')
+    await expect(page.getByTestId('preview-link')).toBeVisible()
+    await expect(page.getByTestId('preview-check')).not.toBeChecked()
+    await page.getByTestId('preview-check').check()
+    await expect(page.getByTestId('preview-check')).toBeChecked()
 
     await page.getByTestId('preview-name').fill('Aino')
     await page.getByTestId('preview-distance').selectOption('long')
@@ -195,23 +202,3 @@ async function clockLine(page: Page): Promise<{ lines: number; nowrap: boolean; 
   })
 }
 
-async function violations(page: Page): Promise<string[]> {
-  const result = await new AxeBuilder({ page }).analyze()
-  return result.violations.map((violation) => `${violation.id}: ${violation.help} (${violation.nodes.length})`)
-}
-
-async function smallTargets(page: Page): Promise<string[]> {
-  return page.evaluate(() => {
-    const nodes = [...document.querySelectorAll('button, a, input, select, textarea')]
-    const found: string[] = []
-    for (const el of nodes) {
-      const rect = el.getBoundingClientRect()
-      if (rect.width === 0 || rect.height === 0) continue
-      if (rect.width < 44 || rect.height < 44) {
-        const name = el.getAttribute('data-testid') || el.getAttribute('aria-label') || (el.textContent ?? '').trim().slice(0, 40) || el.tagName
-        found.push(`${name} ${Math.round(rect.width)}x${Math.round(rect.height)}`)
-      }
-    }
-    return found
-  })
-}

@@ -4,6 +4,7 @@ import { kidsAndAdultsTemplate } from '@ert/sports'
 import { useState } from 'react'
 import { api } from './api.js'
 import { useApp } from './context.js'
+import { DateField, TextLink } from './ui/components.js'
 
 function todayLocal(): string {
   const now = new Date()
@@ -75,15 +76,13 @@ export function Wizard() {
       <p className="wizard-steps" aria-live="polite">{t('wizard.step', { step })}</p>
       <h1>{t('wizard.title')}</h1>
       <p className="lead">{t('wizard.lead')}</p>
-      <p><a href="#/import">{t('wizard.importFile')}</a></p>
+      <p><TextLink href="#/import" testId="wizard-import-file">{t('wizard.importFile')}</TextLink></p>
       {step === 1 && (
         <div className="card stack">
           <label className="stack" htmlFor="wizard-name">{t('wizard.name')}
             <input id="wizard-name" data-testid="wizard-name" value={name} onChange={(event) => setName(event.target.value)} autoComplete="off" />
           </label>
-          <label className="stack" htmlFor="wizard-date">{t('wizard.date')}
-            <input id="wizard-date" data-testid="wizard-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} />
-          </label>
+          <DateField id="wizard-date" label={t('wizard.date')} hint={t('wizard.dateHint')} errorMessage={t('wizard.dateError')} value={date} onChange={setDate} testId="wizard-date" />
           <label className="stack" htmlFor="wizard-place">{t('wizard.place')}
             <input id="wizard-place" data-testid="wizard-place" value={place} onChange={(event) => setPlace(event.target.value)} />
           </label>
