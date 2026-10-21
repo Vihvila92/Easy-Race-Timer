@@ -44,7 +44,8 @@ jobs:
             target: ""
           - platform: macos
             os: macos-15
-            bundles: dmg
+            # app keeps the .app. A dmg-only bundle deletes it, and the updater archive is that .app.
+            bundles: app,dmg
             target: universal-apple-darwin
           - platform: windows
             os: windows-2022

@@ -50,6 +50,7 @@ describe('release workflow', () => {
     expect(release).toContain('ubuntu-22.04')
     expect(release).toContain('ubuntu-24.04')
     expect(release).toContain('macos-15')
+    expect(release).toContain('bundles: app,dmg')
     expect(release).toContain('windows-2022')
     expect(job('bundle')).toContain('pnpm install --frozen-lockfile --ignore-scripts')
     expect(job('bundle')).toContain('pnpm rebuild esbuild')
