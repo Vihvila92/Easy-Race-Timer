@@ -42,7 +42,6 @@ function Preferences() {
         <button type="button" className={theme === 'dark' ? '' : 'secondary'} aria-pressed={theme === 'dark'} data-testid="theme-dark" onClick={() => setTheme('dark')}>{t('theme.dark')}</button>
         <button type="button" className={theme === 'system' ? '' : 'secondary'} aria-pressed={theme === 'system'} data-testid="theme-system" onClick={() => setTheme('system')}>{t('theme.system')}</button>
       </div>
-      <p className="muted" data-testid="theme-value">{theme}</p>
     </div>
   )
 }
