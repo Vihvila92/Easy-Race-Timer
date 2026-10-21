@@ -77,12 +77,12 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2
       # --ignore-scripts skips lifecycle scripts. esbuild's binary comes from
-      # pnpm rebuild. build:sidecar compiles better-sqlite3 with node-gyp for
-      # the target, and on macOS once for each universal slice.
+      # pnpm rebuild. build:sidecar compiles better-sqlite3-multiple-ciphers
+      # with node-gyp for the target, and on macOS once for each universal slice.
       - name: Install JavaScript dependencies
         run: |
           pnpm install --frozen-lockfile --ignore-scripts
-          pnpm rebuild better-sqlite3 esbuild
+          pnpm rebuild esbuild
       # This step runs before `tauri build`, which is what normally sets
       # TAURI_ENV_TARGET_TRIPLE. macOS must pass universal-apple-darwin here
       # so the sidecar is both slices, not only the runner's arm64 host.
@@ -156,6 +156,8 @@ jobs:
             os: macos-15
           - platform: windows
             os: windows-2022
+          - platform: linux
+            os: ubuntu-22.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

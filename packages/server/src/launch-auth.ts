@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { timingSafeEqual } from 'node:crypto'
 
 export const LAUNCH_COOKIE = 'ert_launch'

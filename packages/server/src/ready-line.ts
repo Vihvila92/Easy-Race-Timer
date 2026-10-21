@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 /** Payload the desktop shell reads from one stdout line. */
 export interface ReadyPayload {
   url: string

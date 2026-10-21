@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: AGPL-3.0-only
 """Kuulan hölkkä -fixture (Easy Race Timer v0.1 -hyväksymistesti).
 
 Deterministinen generaattori: tuottaa kisan konfiguraation, ilmoittautumis-CSV:n,

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 /* global Buffer, clearTimeout, console, fetch, process, setTimeout, WebSocket */
 /**
  * Install a packaged desktop build, wait until /api/v1/health returns 200,
@@ -7,7 +8,8 @@
  * Neither path prints the launch token or the auth code.
  */
 import { spawn, spawnSync } from 'node:child_process'
-import { mkdirSync, readdirSync, rmSync, statSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
+import { chmodSync, closeSync, mkdirSync, openSync, readSync, readdirSync, rmSync, statSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -26,7 +28,43 @@ export function chooseInstaller(platform, names) {
     if (!setup) throw new Error('Windows NSIS installer is missing')
     return setup
   }
+  if (platform === 'linux') {
+    const image = names.find((name) => name.toLowerCase().endsWith('.appimage'))
+    if (!image) throw new Error('Linux AppImage is missing')
+    return image
+  }
   throw new Error(`No desktop smoke install for ${platform}`)
+}
+
+const PLAINTEXT_HEADER = Buffer.from('SQLite format 3\0')
+const APP_ID = 'fi.easyracetimer.app'
+
+/** A SQLCipher file does not start with the plaintext SQLite header. */
+export function sqliteHeaderIsEncrypted(header) {
+  return Buffer.isBuffer(header) && header.length >= PLAINTEXT_HEADER.length && !header.subarray(0, PLAINTEXT_HEADER.length).equals(PLAINTEXT_HEADER)
+}
+
+/** Race file the packaged shell opens. Tauri uses `data_dir` plus the bundle identifier. */
+export function packagedRaceFile(platform, env) {
+  const paths = platform === 'windows' ? path.win32 : path.posix
+  if (platform === 'macos') return paths.join(env.HOME, 'Library', 'Application Support', APP_ID, 'ert.sqlite')
+  if (platform === 'windows') {
+    const base = env.APPDATA || paths.join(env.USERPROFILE || '', 'AppData', 'Roaming')
+    return paths.join(base, APP_ID, 'ert.sqlite')
+  }
+  const base = env.XDG_DATA_HOME || paths.join(env.HOME, '.local', 'share')
+  return paths.join(base, APP_ID, 'ert.sqlite')
+}
+
+export function readFileHeader(file) {
+  const fd = openSync(file, 'r')
+  try {
+    const header = Buffer.alloc(PLAINTEXT_HEADER.length)
+    const read = readSync(fd, header, 0, header.length, 0)
+    return header.subarray(0, read)
+  } finally {
+    closeSync(fd)
+  }
 }
 
 /** True when a loopback capture saw the health request and its JSON body. */
@@ -159,8 +197,9 @@ async function smokeMac(dmg) {
       console.error(redactSecrets(capture.text()).slice(-2000))
       throw error
     }
-    if (!sidecarRunningMac()) throw new Error('sidecar process was not running')
-    console.log('sidecar /api/v1/health returned 200')
+  if (!sidecarRunningMac()) throw new Error('sidecar process was not running')
+  assertEncryptedRaceFile(packagedRaceFile('macos', process.env))
+  console.log('sidecar /api/v1/health returned 200')
     spawnSync('osascript', ['-e', 'tell application "Easy Race Timer" to quit'])
     const deadline = Date.now() + STOP_MS
     while (Date.now() < deadline && (sidecarRunningMac() || pgrepExact('easy-race-timer'))) {
@@ -252,6 +291,7 @@ async function smokeWindows(setup) {
     }
   })
   if (!sidecarRunningWindows()) throw new Error('sidecar process was not running')
+  assertEncryptedRaceFile(packagedRaceFile('windows', process.env))
   console.log('sidecar /api/v1/health returned 200')
   spawnSync('taskkill', ['/IM', 'easy-race-timer.exe'])
   const deadline = Date.now() + STOP_MS
@@ -261,6 +301,91 @@ async function smokeWindows(setup) {
   if (imageRunning('easy-race-timer.exe')) spawnSync('taskkill', ['/IM', 'easy-race-timer.exe', '/T', '/F'])
   await sleep(2000)
   if (sidecarRunningWindows()) throw new Error('sidecar still running after the app exited')
+  console.log('sidecar exited with the app')
+}
+
+function assertEncryptedRaceFile(file) {
+  if (!statSync(file, { throwIfNoEntry: false })?.isFile()) throw new Error(`race file was not created at ${file}`)
+  if (!sqliteHeaderIsEncrypted(readFileHeader(file))) throw new Error(`race file ${file} is not encrypted`)
+  console.log('race file is encrypted')
+}
+
+function readReady(stream) {
+  return new Promise((resolve, reject) => {
+    let buffer = ''
+    const timer = setTimeout(() => {
+      stream.off('data', onData)
+      reject(new Error('sidecar did not report ERT_READY'))
+    }, HEALTH_MS)
+    const onData = (chunk) => {
+      buffer += chunk.toString('utf8')
+      let newline = buffer.indexOf('\n')
+      while (newline >= 0) {
+        const line = buffer.slice(0, newline).trim()
+        buffer = buffer.slice(newline + 1)
+        if (line.startsWith('ERT_READY ')) {
+          clearTimeout(timer)
+          stream.off('data', onData)
+          resolve(JSON.parse(line.slice('ERT_READY '.length)))
+          return
+        }
+        newline = buffer.indexOf('\n')
+      }
+    }
+    stream.on('data', onData)
+  })
+}
+
+async function smokeLinux(appimage) {
+  const work = path.join(os.tmpdir(), `ert-appimage-${process.pid}`)
+  rmSync(work, { recursive: true, force: true })
+  mkdirSync(work, { recursive: true })
+  chmodSync(appimage, 0o755)
+  const extracted = spawnSync(appimage, ['--appimage-extract'], { cwd: work, encoding: 'utf8' })
+  if (extracted.status !== 0) throw new Error(extracted.stderr || 'AppImage extract failed')
+  const root = path.join(work, 'squashfs-root')
+  const binary = filesUnder(root).find((file) => path.basename(file).startsWith('ert-server'))
+  if (!binary) throw new Error('sidecar binary was not inside the AppImage')
+  const dataDir = path.join(work, 'data')
+  mkdirSync(dataDir, { mode: 0o700 })
+  const token = randomBytes(32).toString('hex')
+  const child = spawn(binary, [], {
+    cwd: path.dirname(binary),
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: {
+      HOST: '127.0.0.1',
+      PORT: '0',
+      ERT_DATA_DIR: dataDir,
+      NODE_ENV: 'production',
+      LANG: 'C.UTF-8',
+    },
+  })
+  let stderr = ''
+  child.stderr.on('data', (chunk) => {
+    stderr += chunk.toString('utf8')
+  })
+  child.stdin.write(`${token}\n`)
+  let ready
+  try {
+    ready = await readReady(child.stdout)
+  } catch (error) {
+    child.kill()
+    throw new Error(`${error instanceof Error ? error.message : error}\n${redactSecrets(stderr)}`)
+  }
+  const auth = await fetch(`${ready.url}/auth?code=${ready.authCode}`, { redirect: 'manual' })
+  if (auth.status !== 302) throw new Error(`auth status ${auth.status}`)
+  const cookie = (auth.headers.get('set-cookie') ?? '').split(';')[0]
+  const health = await fetch(`${ready.url}/api/v1/health`, { headers: { cookie } })
+  if (health.status !== 200) throw new Error(`health status ${health.status}`)
+  assertEncryptedRaceFile(ready.dbPath)
+  console.log('sidecar /api/v1/health returned 200')
+  child.stdin.end()
+  const deadline = Date.now() + STOP_MS
+  while (Date.now() < deadline && child.exitCode == null) await sleep(200)
+  if (child.exitCode == null) {
+    child.kill()
+    throw new Error('sidecar still running after stdin closed')
+  }
   console.log('sidecar exited with the app')
 }
 
@@ -279,6 +404,7 @@ async function main() {
   if (!statSync(installer).isFile()) throw new Error(`installer is missing: ${installer}`)
   if (platform === 'macos') await smokeMac(installer)
   else if (platform === 'windows') await smokeWindows(installer)
+  else if (platform === 'linux') await smokeLinux(installer)
   else throw new Error(`No desktop smoke install for ${platform}`)
 }
 

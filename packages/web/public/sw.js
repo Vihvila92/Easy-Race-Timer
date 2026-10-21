@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 const CACHE = 'ert-shell-v1'
 
 self.addEventListener('install', (event) => {

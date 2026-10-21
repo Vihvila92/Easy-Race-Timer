@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 export type ThemeChoice = 'light' | 'dark' | 'system'
 export type ColorScheme = 'light' | 'dark'
 export type Guidance = 'guided' | 'expert'

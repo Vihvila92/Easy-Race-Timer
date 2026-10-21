@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
@@ -25,7 +26,10 @@ describe('release workflow', () => {
     expect(release).toMatch(/tags:\n\s+- ['"]v\*['"]/)
     expect(release).toMatch(/toolchain: ['"]1\.90\.0['"]/)
     expect(release).toContain('node-version: "22.23.3"')
-    expect(release).toContain('pnpm rebuild better-sqlite3 esbuild')
+    expect(release).toContain('pnpm rebuild esbuild')
+    expect(release).toContain('better-sqlite3-multiple-ciphers')
+    const plainModule = ['better', 'sqlite3'].join('-')
+    expect(release).not.toContain(`pnpm rebuild ${plainModule} `)
     expect(release).toContain('pnpm build:sidecar')
     expect(release).toContain('TAURI_ENV_TARGET_TRIPLE: ${{ matrix.target }}')
     expect(release).toContain('ert-server-')
@@ -35,6 +39,7 @@ describe('release workflow', () => {
     expect(job('smoke')).toContain('desktop-smoke.mjs')
     expect(job('smoke')).toContain('macos-15')
     expect(job('smoke')).toContain('windows-2022')
+    expect(job('smoke')).toContain('ubuntu-22.04')
     expect(job('smoke')).not.toContain('secrets.')
     const publish = job('publish')
     expect(publish).toContain('contents: write')

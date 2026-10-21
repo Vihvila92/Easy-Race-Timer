@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 export interface ResultRow {
   race: string
   scope: string

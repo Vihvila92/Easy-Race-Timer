@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import type { Workspace } from './types.js'
 
 export type WorkspaceResponse =

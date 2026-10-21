@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { test as base, expect } from '@playwright/test'
 
 /** Fail the test when the browser reports a Content-Security-Policy violation. */

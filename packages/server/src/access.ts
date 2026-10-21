@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 export type Access = 'public' | 'protected' | 'local'
 
 /** Routes that answer without a device token. Anything not listed is refused. */
@@ -51,6 +52,7 @@ export const PROTECTED_ROUTES = [
   'POST /api/v1/races/:id/lock',
   'POST /api/v1/races/:id/unlock',
   'GET /api/v1/audit',
+  'POST /api/v1/plaintext-quarantine/delete',
   'POST /api/v1/retention/run',
   'GET /api/v1/persons/:id/export',
   'POST /api/v1/persons/:id/publication',

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! Parse the one stdout line the Node sidecar prints when it is listening.
 
 /// Loopback URL and data paths from a valid `ERT_READY` line.

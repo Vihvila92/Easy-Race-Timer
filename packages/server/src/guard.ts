@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 const LOOPBACK = new Set(['localhost', '127.0.0.1', '::1'])
 
 export function parseHost(header: string | undefined): { hostname: string; port: number | null } | null {

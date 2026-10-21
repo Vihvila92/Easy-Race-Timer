@@ -1,6 +1,7 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import fs from 'node:fs'
 import path from 'node:path'
-import Database from 'better-sqlite3'
+import Database from 'better-sqlite3-multiple-ciphers'
 
 export interface HeldLock {
   close(): void

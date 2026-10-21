@@ -1,14 +1,12 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 /**
  * Build the Node server as a Tauri sidecar: a Node 22.23.3 single executable
- * that includes the web UI and the better-sqlite3 native module.
+ * that includes the web UI and the better-sqlite3-multiple-ciphers native module.
  *
- * A universal macOS target compiles better-sqlite3 for arm64 and for x64,
+ * A universal macOS target compiles that module for arm64 and for x64,
  * generates each SEA blob with that architecture's Node, and combines the
  * executables with lipo. The `check` job does not run this script.
- *
- * TODO(#130): when the encrypted race file lands, extract
- * better-sqlite3-multiple-ciphers instead of better-sqlite3. Do not embed a
- * development key.
+ * Do not embed a development key.
  */
 import { execFileSync } from 'node:child_process'
 import crypto from 'node:crypto'
@@ -61,7 +59,7 @@ function prebuildName(platform: string, arch: string): string {
     return `${musl ? 'linuxmusl' : 'linux'}-${arch}.node`
   }
   if (platform === 'darwin' || platform === 'win32') return `${platform}-${arch}.node`
-  throw new Error(`No better-sqlite3 sidecar prebuild for ${platform}-${arch}`)
+  throw new Error(`No better-sqlite3-multiple-ciphers sidecar prebuild for ${platform}-${arch}`)
 }
 
 function readTree(dir: string, prefix: string, files: Record<string, Buffer>, accept: (rel: string) => boolean) {
@@ -83,16 +81,20 @@ function embed(files: Record<string, Buffer>): { files: Record<string, string>; 
   return { files: encoded, hashes }
 }
 
+function sqlitePackageRoot(): string {
+  return path.dirname(nodeRequire.resolve('better-sqlite3-multiple-ciphers/package.json'))
+}
+
 function sqlitePayload(natives: { name: string; file: string }[]): { files: Record<string, string>; hashes: Record<string, string> } {
-  const pkgRoot = path.dirname(nodeRequire.resolve('better-sqlite3/package.json'))
+  const pkgRoot = sqlitePackageRoot()
   const files: Record<string, Buffer> = {}
   readTree(path.join(pkgRoot, 'lib'), 'lib', files, (rel) => rel.endsWith('.js'))
   for (const native of natives) {
-    if (!fs.existsSync(native.file)) throw new Error(`Missing better-sqlite3 build ${native.file}`)
+    if (!fs.existsSync(native.file)) throw new Error(`Missing better-sqlite3-multiple-ciphers build ${native.file}`)
     files[`prebuilds/${native.name}`] = fs.readFileSync(native.file)
   }
   files['package.json'] = Buffer.from(JSON.stringify({
-    name: 'better-sqlite3',
+    name: 'better-sqlite3-multiple-ciphers',
     main: 'lib/index.js',
     type: 'commonjs',
   }))
@@ -111,9 +113,9 @@ function webPayload(): { files: Record<string, string>; hashes: Record<string, s
 
 function sqlitePlugin(payload: { files: Record<string, string>; hashes: Record<string, string> }): esbuild.Plugin {
   return {
-    name: 'better-sqlite3-prebuild',
+    name: 'sqlite-prebuild',
     setup(build) {
-      build.onResolve({ filter: /^better-sqlite3$/ }, () => ({ path: 'better-sqlite3', namespace: 'sqlite-prebuild' }))
+      build.onResolve({ filter: /^better-sqlite3-multiple-ciphers$/ }, () => ({ path: 'better-sqlite3-multiple-ciphers', namespace: 'sqlite-prebuild' }))
       build.onLoad({ filter: /.*/, namespace: 'sqlite-prebuild' }, () => ({
         loader: 'js',
         resolveDir: path.join(root, 'scripts'),
@@ -226,15 +228,15 @@ function ensureRosetta(arch: string) {
   }
 }
 
-/** Compile better-sqlite3 with the Node that will run this slice, then keep that `.node`. */
+/** Compile better-sqlite3-multiple-ciphers with the Node that will run this slice, then keep that `.node`. */
 function rebuildNative(nodeBin: string, arch: string): { name: string; file: string } {
   ensureRosetta(arch)
-  const pkgRoot = path.dirname(nodeRequire.resolve('better-sqlite3/package.json'))
+  const pkgRoot = sqlitePackageRoot()
   const nodeGyp = nodeRequire.resolve('node-gyp/bin/node-gyp.js')
   const buildDir = path.join(pkgRoot, 'build')
   fs.rmSync(buildDir, { recursive: true, force: true })
   const name = prebuildName(process.platform, arch)
-  console.log(`rebuilding better-sqlite3 for ${process.platform}-${arch} with ${nodeBin}`)
+  console.log(`rebuilding better-sqlite3-multiple-ciphers for ${process.platform}-${arch} with ${nodeBin}`)
   const launch = nodeLaunchArgs(nodeBin, arch, process.arch, process.platform)
   const [command, ...prefix] = launch
   if (!command) throw new Error('missing node binary')
@@ -244,7 +246,7 @@ function rebuildNative(nodeBin: string, arch: string): { name: string; file: str
     env: { ...process.env, npm_config_arch: arch },
   })
   const built = path.join(buildDir, 'Release', 'better_sqlite3.node')
-  if (!fs.existsSync(built)) throw new Error(`better-sqlite3 rebuild did not produce ${built}`)
+  if (!fs.existsSync(built)) throw new Error(`better-sqlite3-multiple-ciphers rebuild did not produce ${built}`)
   const destDir = path.join(root, 'dist/sidecar/native')
   fs.mkdirSync(destDir, { recursive: true })
   const dest = path.join(destDir, name)

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { strToU8, zipSync } from 'fflate'
 import { describe, expect, it } from 'vitest'
 import { ERTX_MAX_UNCOMPRESSED_BYTES, ErtxError, packErtx, unpackErtx } from './index.js'

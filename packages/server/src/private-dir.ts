@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import fs from 'node:fs'
 
 /** True when `stat` is owned by `uid` and is not writable by group or others. */

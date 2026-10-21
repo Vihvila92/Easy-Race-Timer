@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { randomBytes } from 'node:crypto'
 import { writeSync } from 'node:fs'
 import os from 'node:os'
@@ -5,6 +6,7 @@ import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { holdExclusiveLock, type AppDb, type HeldLock } from '@ert/storage'
 import { createApp, DEFAULT_GLOBAL_MAX, DEFAULT_RECORDING_MAX, DEFAULT_STRICT_MAX } from './app.js'
+import { formatRaceFileError } from './race-file.js'
 import { startBackupSchedule, writeBackup } from './backup.js'
 import { assertCanListen, resolveDataDir, resolveDbPath, resolveListenPort } from './config.js'
 import { openRaceDatabase } from './database.js'
@@ -78,9 +80,10 @@ export async function startServer(): Promise<void> {
 
   const db: AppDb = await openRaceDatabase(dbPath, {
     production: process.env.NODE_ENV === 'production',
+    desktop: Boolean(token),
     env: process.env,
   }).catch((error: unknown) => {
-    console.error(error instanceof Error ? error.message : error)
+    console.error(formatRaceFileError(error))
     process.exit(1)
   })
 

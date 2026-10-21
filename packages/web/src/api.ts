@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { createId } from '@ert/core'
 import type { Workspace } from './types.js'
 

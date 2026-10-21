@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { API_TIMEOUT_MS, api } from './api.js'
 import { validateWorkspaceResponse } from './workspace.js'

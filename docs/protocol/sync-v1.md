@@ -6,7 +6,7 @@ v0.1 siirtää dataa vain `.ertx`-tiedostona ja paikallisena WebSocket-ilmoituks
 
 ## WebSocket
 
-`GET /ws` (protocol 1). The handshake uses the same device token as the other protected routes (`Authorization: Bearer` or the `ert_session` cookie) and requires a loopback `Origin`. A missing or invalid token is rejected with 401. A missing or foreign `Origin` is rejected with 403, including when a valid token is sent.
+`GET /ws` (protocol 1). The handshake uses the same device token as the other protected routes (`Authorization: Bearer` or the `ert_session` cookie) and requires a loopback `Origin`. A missing or invalid token is rejected with 401. A malformed, truncated, or non-decodable `ert_session` cookie is an invalid token: HTTP routes and the `/ws` handshake respond with 401 and the usual `PIN_REQUIRED` body, with no stack trace or parser detail. A missing or foreign `Origin` is rejected with 403, including when a valid token is sent. If the device token reaches its expiry while the socket is open, the server closes the connection with WebSocket close code 4401 and reason `expired`. That reason does not include the token.
 
 After the handshake the server sends:
 
@@ -62,7 +62,7 @@ Zip-paketti:
 - `manifest.json`: `{ "format_version": 1, "app_version": "0.1.0", "schema_version": 1 }`
 - `data.json`: taulujen rivit (`event`, `race`, `category`, `person`, `club`, `club_alias`, `consent`, `entry`, `timing_point`, `device`, `timing_event`, `correction`, `tie_resolution`, `schema_meta`)
 
-Tuonti korvaa sallittujen taulujen sisällön vasta vahvistuksen jälkeen. `format_version` on 1, `schema_version` on enintään sovelluksen skeema, ja `app_version` on pakollinen. Tuntematon taulu tai sarake hylkää koko tuonnin. `pin_hash` ei kulje arkistossa eikä korvaa paikallista PINiä. Purku sallii vain `manifest.json` ja `data.json`, yhteensä enintään 50 MiB.
+Tuonti korvaa sallittujen taulujen sisällön vasta vahvistuksen jälkeen. `format_version` on 1, `schema_version` on enintään sovelluksen skeema, ja `app_version` on pakollinen. Tuntematon taulu tai sarake hylkää koko tuonnin. `pin_hash` ei kulje arkistossa eikä korvaa paikallista PINiä. `entry.dsq_reason` on sisäinen kenttä eikä kuulu arkiston osallistujariveihin. Arkiston `correction`-rivillä hylkäyksen syy on kiinteä `set_status:dsq`, ei vapaa teksti. Purku sallii vain `manifest.json` ja `data.json`, yhteensä enintään 50 MiB.
 
 HTTP: `GET /api/v1/sync/export` palauttaa zipin. `POST /api/v1/sync/import` ottaa `{ "base64": "..." }`. Ilman `confirm: true` vastaus on esikatselu eikä kirjoita. Vahvistettu tuonti tekee ensin varmuuskopion ja kirjaa auditiin `import_ertx`.
 

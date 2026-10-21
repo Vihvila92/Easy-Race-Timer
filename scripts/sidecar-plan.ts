@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 /** Node copied into the sidecar, or downloaded when a universal macOS binary is built. */
 export const NODE_VERSION = '22.23.3'
 

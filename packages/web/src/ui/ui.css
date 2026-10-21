@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
 .ui-frame {
   display: flex;
   flex-direction: column;
@@ -25,6 +26,11 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+  max-width: 100%;
+}
+
+.ui-break {
+  overflow-wrap: anywhere;
   max-width: 100%;
 }
 

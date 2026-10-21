@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 export * from './errors.js'
 export * from './time.js'
 export * from './ids.js'

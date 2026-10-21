@@ -14,7 +14,7 @@ packages/sports          running profile
 packages/timing-sources  touch finish
 packages/race-formats    mass start
 packages/exporters       CSV and A4 print
-packages/storage         SQLite
+packages/storage         encrypted SQLite (SQLCipher)
 packages/sync            .ertx
 packages/server          Fastify, composition root
 packages/web             React PWA
@@ -30,7 +30,7 @@ You need Node.js 22 and pnpm 10.33. These commands are for developers. The club 
 
 ```bash
 pnpm install
-pnpm rebuild better-sqlite3 esbuild
+pnpm rebuild esbuild
 pnpm build
 pnpm dev:server
 ```
@@ -39,11 +39,11 @@ Open the address printed on the `ERT_READY` line. The developer server uses port
 
 `pnpm dev` starts the Vite UI with a proxy. That proxy is a development aid. The built UI does not contain a host or a port.
 
-`pnpm start` with no variables behaves like the desktop shell: a free local port and the operating system user-data directory.
+`pnpm dev:server` loads `config/dev.env`, which sets `ERT_DEV_KEY=1`. That opts in to a public development key. It is not for a real race. `pnpm start` does not load that file and refuses to open a race file until a data key is configured. With no variables it uses a free local port and the operating system user-data directory.
 
 ## Desktop app (Tauri)
 
-`src-tauri/` is a Tauri 2 shell. On startup it clears the environment, then sets `HOST=127.0.0.1`, `PORT=0`, `ERT_DATA_DIR` (the operating system app data directory) and `NODE_ENV=production`. On Unix it also sets `LANG`. On Windows it keeps `SystemRoot` and `WINDIR` from the shell and leaves every other variable unset. It writes a per-launch token to the sidecar's standard input. It waits up to 20 seconds for one stdout line, `ERT_READY` plus JSON. It then opens `http://127.0.0.1:<port>/auth?code=…`. That code is single-use. `/auth` answers `Cache-Control: no-store` and sets an HttpOnly session cookie (`ert_launch`, no `Max-Age` or `Expires`). The API and the websocket require the cookie or a bearer token. An unauthenticated `/ws` is HTTP 401 before the upgrade. The window has no shell or process API. Closing the window closes the sidecar's standard input, and the sidecar also exits if the shell process disappears.
+`src-tauri/` is a Tauri 2 shell. On startup it clears the environment, then sets `HOST=127.0.0.1`, `PORT=0`, `ERT_DATA_DIR` (the operating system app data directory) and `NODE_ENV=production`. On Unix it also sets `LANG`. On Windows it keeps `SystemRoot` and `WINDIR` from the shell and leaves every other variable unset. The race file is SQLCipher. Until #131 wraps the data key, the desktop sidecar creates `desktop-data.key` (32 raw bytes, mode 0600) beside that file and does not read a key from the environment, argv, or `ERT_READY`. `pnpm start` has no such file and still refuses to open a race file. It writes a per-launch token to the sidecar's standard input. It waits up to 20 seconds for one stdout line, `ERT_READY` plus JSON. It then opens `http://127.0.0.1:<port>/auth?code=…`. That code is single-use. `/auth` answers `Cache-Control: no-store` and sets an HttpOnly session cookie (`ert_launch`, no `Max-Age` or `Expires`). The API and the websocket require the cookie or a bearer token. An unauthenticated `/ws` is HTTP 401 before the upgrade. The window has no shell or process API. Closing the window closes the sidecar's standard input, and the sidecar also exits if the shell process disappears.
 
 Packaged interface files and the database module are stored in the app data directory and checked against SHA-256 hashes embedded in the sidecar. On Windows the per-user `%APPDATA%` directory is the boundary: the sidecar does not check the directory owner or mode there. Every launch still checks each extracted file's SHA-256 against the hashes embedded in the sidecar and replaces a file that does not match. A second instance focuses the existing window. The sidecar also holds an exclusive lock in the data directory while a launch token is set.
 
@@ -51,13 +51,13 @@ If the sidecar fails or the ready line does not arrive, the window shows a stati
 
 Every response from that server, including HTML results, sends `Content-Security-Policy` (with `default-src 'self'`, `connect-src 'self'`, and `frame-ancestors 'none'`), `X-Content-Type-Options: nosniff`, and `Referrer-Policy: no-referrer`.
 
-`pnpm build:sidecar` builds the web UI and packages `packages/server` as a Node 22.23.3 single executable. It compiles `better-sqlite3` with that Node. On macOS the universal build compiles the module again for arm64 and for x64, and each slice's single-executable blob is produced by that architecture's Node binary (the x64 slice uses the x64 Node under Rosetta, not the arm64 Node). `lipo` joins the slices into `src-tauri/binaries/ert-server-universal-apple-darwin` and the result is ad-hoc signed. Tauri bundles the thin files `ert-server-aarch64-apple-darwin` and `ert-server-x86_64-apple-darwin`. Other targets write `src-tauri/binaries/ert-server-<target-triple>` (`.exe` on Windows). It is not committed. `pnpm tauri build` runs that script first. The `check` job does not. The Release workflow runs the same build, then prints `file` and `lipo -info` for the universal binary before it builds installers.
+`pnpm build:sidecar` builds the web UI and packages `packages/server` as a Node 22.23.3 single executable. It compiles `better-sqlite3-multiple-ciphers` with that Node. On macOS the universal build compiles the module again for arm64 and for x64, and each slice's single-executable blob is produced by that architecture's Node binary (the x64 slice uses the x64 Node under Rosetta, not the arm64 Node). `lipo` joins the slices into `src-tauri/binaries/ert-server-universal-apple-darwin` and the result is ad-hoc signed. Tauri bundles the thin files `ert-server-aarch64-apple-darwin` and `ert-server-x86_64-apple-darwin`. Other targets write `src-tauri/binaries/ert-server-<target-triple>` (`.exe` on Windows). It is not committed. `pnpm tauri build` runs that script first. The `check` job does not. The Release workflow runs the same build, then prints `file` and `lipo -info` for the universal binary before it builds installers.
 
 Requirements: Node.js 22.23.3 and Rust 1.90 or newer (`rust-toolchain.toml`; CI installs 1.90.0). On Linux also install `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `librsvg2-dev`, `patchelf`, and `libayatana-appindicator3-dev`. See the Tauri prerequisites guide for Windows and macOS.
 
 ```sh
 pnpm install
-pnpm rebuild better-sqlite3 esbuild
+pnpm rebuild esbuild
 pnpm build:sidecar
 pnpm tauri dev
 pnpm tauri build --bundles appimage,deb   # Linux: AppImage + .deb

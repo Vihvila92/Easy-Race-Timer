@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 //! Tauri shell for Easy Race Timer.
 //!
 //! The shell does not know race rules. It spawns the Node sidecar, passes a

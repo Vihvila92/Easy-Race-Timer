@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from 'vitest'
 import { RESULT_FIELDS } from '@ert/core'
 import { openDatabase } from '@ert/storage'
@@ -115,7 +116,6 @@ describe('public results privacy', () => {
       first_name: 'Vanha',
       last_name: 'Arkisto',
       gender: 'M',
-      birth_date: null,
       birth_year: null,
       publication: 'full',
       created_at: 1,

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 /** True while `parentPid` is still the parent and the process exists. */
 export function parentStillAlive(
   parentPid: number,

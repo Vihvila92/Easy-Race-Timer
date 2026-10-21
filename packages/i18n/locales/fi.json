@@ -12,6 +12,7 @@
   "nav.results": "Tulokset",
   "nav.print": "Tuloste",
   "nav.audit": "Loki",
+  "nav.about": "Tietoja",
   "action.save": "Tallenna",
   "action.cancel": "Peruuta",
   "action.undo": "Kumoa",
@@ -187,6 +188,11 @@
   "unreachable.message": "Ajanotto-ohjelmaan ei saada yhteyttä. Paina Yritä uudelleen. Jos se ei auta, sulje ohjelma ja avaa se uudelleen. Jos ongelma jatkuu, ota yhteys seuran tekniseen tukeen.",
   "unreachable.retry": "Yritä uudelleen",
   "unreachable.connecting": "Yhdistetään…",
+  "about.title": "Tietoja",
+  "about.version": "Versio {version}",
+  "about.revision": "Lähdekoodin tunniste {revision}",
+  "about.license": "Easy Race Timer on vapaa ohjelmisto, ja sen lisenssi on GNU Affero General Public License, vain versio 3. Ohjelmaa saa levittää ja muokata tuon lisenssin ehdoilla. Jos muokattua versiota tarjotaan verkkopalveluna, lisenssi velvoittaa tarjoamaan juuri sen version lähdekoodin.",
+  "about.licenseLink": "Lisenssiteksti",
   "a11y.menu": "Päänavigaatio",
   "a11y.theme": "Teema",
   "a11y.language": "Kieli",
@@ -216,5 +222,10 @@
   "preview.clockLabel": "Esimerkkiaika",
   "preview.linksTitle": "Linkit",
   "preview.checkTitle": "Valintaruutu",
-  "preview.dateTitle": "Päivämäärä"
+  "preview.dateTitle": "Päivämäärä",
+  "file.newer": "Tämä kisatiedosto on tehty uudemmalla Easy Race Timer -versiolla. Päivitä ohjelma ennen kuin avaat sen.",
+  "file.hint.newer": "Tiedosto ei ole rikki. Tämä ohjelma on vanhempi kuin tiedosto, joten se ei avaa eikä muuta sitä.",
+  "file.openFailed": "Kisatiedostoa {name} ei voitu avata.",
+  "file.hint.openFailed": "Tiedosto jätettiin ennalleen. Säilytä se, kunnes kisatiedosto aukeaa.",
+  "file.missingKey": "Tietokanta-avainta ei ole asetettu. Kisatiedostoa ei avattu."
 }
