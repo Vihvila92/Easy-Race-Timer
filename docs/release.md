@@ -34,15 +34,22 @@ If Windows SmartScreen says the app is unrecognized, choose **More info**, then 
 Install [GitHub CLI](https://cli.github.com/) for the attestation command. `sha256sum` is on Linux. On macOS, `shasum -a 256 -c checksums.txt` does the same check when `sha256sum` is not installed.
 
 ```sh
-gh release download vX.Y.Z --repo Vihvila92/Easy-Race-Timer
+gh release download "vX.Y.Z" --repo Vihvila92/Easy-Race-Timer
 sha256sum -c checksums.txt
 gh attestation verify FILE \
   --repo Vihvila92/Easy-Race-Timer \
   --signer-workflow Vihvila92/Easy-Race-Timer/.github/workflows/release.yml \
-  --source-ref refs/tags/vX.Y.Z
+  --source-ref "refs/tags/vX.Y.Z"
+gh attestation verify INSTALLER \
+  --repo Vihvila92/Easy-Race-Timer \
+  --signer-workflow Vihvila92/Easy-Race-Timer/.github/workflows/release.yml \
+  --source-ref "refs/tags/vX.Y.Z" \
+  --predicate-type https://cyclonedx.org/bom
 ```
 
-Replace `vX.Y.Z` with the tag and `FILE` with each installer (`.msi`, `.exe`, `.dmg`, `.AppImage`, `.deb`), each updater archive (`.tar.gz`, `.nsis.zip`, `.msi.zip`), each `.sig` file and `latest.json`. The checksum command checks every file listed in `checksums.txt`. The attestation command fails when the file was not built by this repository's Release workflow for that tag.
+Replace `vX.Y.Z` with the tag. For the first attestation command, `FILE` is each installer (`.msi`, `.exe`, `.dmg`, `.AppImage`, `.deb`), each updater archive (`.tar.gz`, `.nsis.zip`, `.msi.zip`), each `.sig` file, `latest.json`, `checksums.txt` and both SBOM files. For the second, `INSTALLER` is each installer and each updater archive. That command checks the CycloneDX attestations: their subjects are those files, and their predicates are the two SBOM files. The checksum command checks every file listed in `checksums.txt`. An attestation command fails when the file was not built by this repository's Release workflow for that tag.
+
+The release `verify` job also checks every `.sig` against `plugins.updater.pubkey` in `src-tauri/tauri.conf.json`. A tag whose public key is still the placeholder fails that check.
 
 A dry run uploads workflow artifacts only. Those artifacts are not a GitHub Release and do not have attestations. Check them with `sha256sum -c checksums.txt` from the `release-assets` artifact.
 
@@ -50,7 +57,7 @@ A dry run uploads workflow artifacts only. Those artifacts are not a GitHub Rele
 
 A tagged release also includes:
 
-- `sbom-npm.cdx.json` — CycloneDX SBOM from the pnpm lockfile
+- `sbom-npm.cdx.json` — CycloneDX SBOM from the pnpm lockfile, written by the locked `@cyclonedx/cdxgen` devDependency
 - `sbom-cargo.cdx.json` — CycloneDX SBOM from `cargo cyclonedx` on `src-tauri/`
 - `checksums.txt` — SHA-256 of every other asset
 - `latest.json` and `.sig` files — Tauri updater metadata for a tagged release

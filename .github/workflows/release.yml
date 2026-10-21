@@ -122,11 +122,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master @ 2026-10-09
         with:
           toolchain: "1.90.0"
+      - name: Install JavaScript dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
       - name: CycloneDX SBOM from the pnpm lockfile
         run: |
           set -euo pipefail
           mkdir -p sbom
-          pnpm dlx @cyclonedx/cdxgen@12.8.6 -t pnpm -o sbom/sbom-npm.cdx.json --spec-version 1.6 --no-install-deps --author "Easy Race Timer contributors" .
+          pnpm exec cdxgen -t pnpm -o sbom/sbom-npm.cdx.json --spec-version 1.6 --no-install-deps --author "Easy Race Timer contributors" .
           node --input-type=module -e "import {readFileSync} from 'node:fs'; const bom=JSON.parse(readFileSync('sbom/sbom-npm.cdx.json','utf8')); if (bom.bomFormat!=='CycloneDX') process.exit(1)"
       - name: CycloneDX SBOM from Cargo.lock
         run: |
@@ -169,7 +171,11 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          git -c "http.extraheader=AUTHORIZATION: bearer ${GITHUB_TOKEN}" fetch --no-tags origin main
+          # The token stays in the environment. It is not a git argument.
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0=http.extraheader
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer ${GITHUB_TOKEN}"
+          git fetch --no-tags origin main
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
@@ -178,10 +184,8 @@ jobs:
       - name: Reject a placeholder updater public key
         run: node --experimental-strip-types scripts/release-assets.ts assert-pubkey
       - name: Install the official Tauri CLI
-        run: |
-          set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/tauri-signer"
-          npm install --prefix "$RUNNER_TEMP/tauri-signer" @tauri-apps/cli@2.12.3
+        working-directory: tools/tauri-signer
+        run: npm ci --ignore-scripts --no-audit --no-fund
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
           pattern: installers-*
@@ -194,8 +198,9 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
-          signer="$RUNNER_TEMP/tauri-signer/node_modules/.bin/tauri"
-          version="${GITHUB_REF_NAME#v}"
+          signer="$GITHUB_WORKSPACE/tools/tauri-signer/node_modules/.bin/tauri"
+          tag="$GITHUB_REF_NAME"
+          version="${tag#v}"
           nonce="$RUNNER_TEMP/updater-nonce.bin"
           head -c 64 /dev/urandom > "$nonce"
           "$signer" signer sign "$nonce" --app-version "$version"
@@ -294,22 +299,38 @@ jobs:
             release/checksums.txt
             release/sbom-npm.cdx.json
             release/sbom-cargo.cdx.json
+      # Subjects are the installers and updater archives, not the SBOM files.
       - uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
         with:
-          subject-path: release/sbom-npm.cdx.json
+          subject-path: |
+            release/*.msi
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+            release/*.deb
+            release/*.tar.gz
+            release/*.zip
           sbom-path: release/sbom-npm.cdx.json
       - uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
         with:
-          subject-path: release/sbom-cargo.cdx.json
+          subject-path: |
+            release/*.msi
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+            release/*.deb
+            release/*.tar.gz
+            release/*.zip
           sbom-path: release/sbom-cargo.cdx.json
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          version="${GITHUB_REF_NAME#v}"
-          cat > release-notes.md <<EOF
-          Easy Race Timer ${version}
+          tag="$GITHUB_REF_NAME"
+          version="${tag#v}"
+          notes=$(cat <<'EOF'
+          Easy Race Timer VERSION
 
           The installers are not notarized and do not use a paid Windows code-signing certificate.
           On macOS, if Gatekeeper blocks the app, right-click it and choose Open.
@@ -317,19 +338,24 @@ jobs:
 
           Verify the download:
 
-              gh release download ${GITHUB_REF_NAME} --repo Vihvila92/Easy-Race-Timer
+              gh release download "TAG" --repo Vihvila92/Easy-Race-Timer
               sha256sum -c checksums.txt
-              gh attestation verify FILE --repo Vihvila92/Easy-Race-Timer --signer-workflow Vihvila92/Easy-Race-Timer/.github/workflows/release.yml --source-ref refs/tags/${GITHUB_REF_NAME}
+              gh attestation verify FILE --repo Vihvila92/Easy-Race-Timer --signer-workflow Vihvila92/Easy-Race-Timer/.github/workflows/release.yml --source-ref "refs/tags/TAG"
+              gh attestation verify INSTALLER --repo Vihvila92/Easy-Race-Timer --signer-workflow Vihvila92/Easy-Race-Timer/.github/workflows/release.yml --source-ref "refs/tags/TAG" --predicate-type https://cyclonedx.org/bom
 
           See docs/release.md in the repository.
           EOF
-          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release ${GITHUB_REF_NAME} already exists. Refusing to replace published assets." >&2
+          )
+          notes="${notes//VERSION/$version}"
+          notes="${notes//TAG/$tag}"
+          printf '%s\n' "$notes" > release-notes.md
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release ${tag} already exists. Refusing to replace published assets." >&2
             exit 1
           fi
-          gh release create "$GITHUB_REF_NAME" release/* \
+          gh release create "$tag" release/* \
             --repo "$GITHUB_REPOSITORY" \
-            --title "Easy Race Timer ${GITHUB_REF_NAME}" \
+            --title "Easy Race Timer ${tag}" \
             --notes-file release-notes.md
 
   verify:
@@ -342,29 +368,64 @@ jobs:
       contents: read
       attestations: read
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
       - name: Download the release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release download "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --dir assets --clobber
+        run: |
+          tag="$GITHUB_REF_NAME"
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir assets --clobber
       - name: Check checksums
         run: |
           cd assets
           sha256sum -c checksums.txt
+      - name: Verify updater signatures
+        run: node --experimental-strip-types scripts/release-assets.ts verify-signatures --dir assets
       - name: Verify attestations
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           shopt -s nullglob
+          tag="$GITHUB_REF_NAME"
+          verify_one() {
+            local asset="$1"
+            shift
+            local ok=0
+            local _attempt
+            for _attempt in 1 2 3 4 5 6; do
+              if gh attestation verify "$asset" \
+                --repo Vihvila92/Easy-Race-Timer \
+                --signer-workflow Vihvila92/Easy-Race-Timer/.github/workflows/release.yml \
+                --source-ref "refs/tags/${tag}" \
+                "$@"; then
+                ok=1
+                break
+              fi
+              sleep 15
+            done
+            if [[ "$ok" != 1 ]]; then
+              echo "Attestation check failed for $asset" >&2
+              exit 1
+            fi
+          }
           files=(
             assets/*.msi assets/*.exe assets/*.dmg assets/*.AppImage assets/*.deb
             assets/*.tar.gz assets/*.zip assets/*.sig assets/latest.json
+            assets/checksums.txt assets/sbom-npm.cdx.json assets/sbom-cargo.cdx.json
           )
           if [[ "${#files[@]}" -eq 0 ]]; then
             echo "No release assets were downloaded" >&2
             exit 1
           fi
-          for required in assets/latest.json; do
+          for required in assets/latest.json assets/checksums.txt assets/sbom-npm.cdx.json assets/sbom-cargo.cdx.json; do
             if [[ ! -f "$required" ]]; then
               echo "Missing $required" >&2
               exit 1
@@ -377,19 +438,16 @@ jobs:
             exit 1
           fi
           for asset in "${files[@]}"; do
-            ok=0
-            for _attempt in 1 2 3 4 5 6; do
-              if gh attestation verify "$asset" \
-                --repo Vihvila92/Easy-Race-Timer \
-                --signer-workflow Vihvila92/Easy-Race-Timer/.github/workflows/release.yml \
-                --source-ref "refs/tags/${GITHUB_REF_NAME}"; then
-                ok=1
-                break
-              fi
-              sleep 15
-            done
-            if [[ "$ok" != 1 ]]; then
-              echo "Attestation check failed for $asset" >&2
-              exit 1
-            fi
+            verify_one "$asset"
+          done
+          bom=(
+            assets/*.msi assets/*.exe assets/*.dmg assets/*.AppImage assets/*.deb
+            assets/*.tar.gz assets/*.zip
+          )
+          if [[ "${#bom[@]}" -eq 0 ]]; then
+            echo "No installer or updater archive for the SBOM attestation" >&2
+            exit 1
+          fi
+          for asset in "${bom[@]}"; do
+            verify_one "$asset" --predicate-type https://cyclonedx.org/bom
           done

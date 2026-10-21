@@ -34,15 +34,22 @@ Jos Windows SmartScreen ilmoittaa tuntemattomasta ohjelmasta, valitse **More inf
 Attestaation tarkistus tarvitsee [GitHub CLI:n](https://cli.github.com/). `sha256sum` on Linuxissa. macOS:lla sama tarkistus on `shasum -a 256 -c checksums.txt`, jos `sha256sum` puuttuu.
 
 ```sh
-gh release download vX.Y.Z --repo Vihvila92/Easy-Race-Timer
+gh release download "vX.Y.Z" --repo Vihvila92/Easy-Race-Timer
 sha256sum -c checksums.txt
 gh attestation verify FILE \
   --repo Vihvila92/Easy-Race-Timer \
   --signer-workflow Vihvila92/Easy-Race-Timer/.github/workflows/release.yml \
-  --source-ref refs/tags/vX.Y.Z
+  --source-ref "refs/tags/vX.Y.Z"
+gh attestation verify INSTALLER \
+  --repo Vihvila92/Easy-Race-Timer \
+  --signer-workflow Vihvila92/Easy-Race-Timer/.github/workflows/release.yml \
+  --source-ref "refs/tags/vX.Y.Z" \
+  --predicate-type https://cyclonedx.org/bom
 ```
 
-Vaihda `vX.Y.Z` tagiin ja `FILE` kuhunkin asentimeen (`.msi`, `.exe`, `.dmg`, `.AppImage`, `.deb`), kuhunkin päivitysarkistoon (`.tar.gz`, `.nsis.zip`, `.msi.zip`), kuhunkin `.sig`-tiedostoon ja tiedostoon `latest.json`. Tarkistussummakomento tarkistaa jokaisen `checksums.txt`-tiedostossa luetellun tiedoston. Attestaatiokomento epäonnistuu, jos tiedostoa ei ole rakentanut tämän tietovaraston Release-työnkulku kyseiselle tagille.
+Vaihda `vX.Y.Z` tagiin. Ensimmäisessä attestaatiokomennossa `FILE` on kukin asennin (`.msi`, `.exe`, `.dmg`, `.AppImage`, `.deb`), kukin päivitysarkisto (`.tar.gz`, `.nsis.zip`, `.msi.zip`), kukin `.sig`-tiedosto, `latest.json`, `checksums.txt` ja molemmat SBOM-tiedostot. Toisessa komennossa `INSTALLER` on kukin asennin ja kukin päivitysarkisto. Se tarkistaa CycloneDX-attestaatiot: kohteena ovat nämä tiedostot ja predikaattina molemmat SBOM-tiedostot. Tarkistussummakomento tarkistaa jokaisen `checksums.txt`-tiedostossa luetellun tiedoston. Attestaatiokomento epäonnistuu, jos tiedostoa ei ole rakentanut tämän tietovaraston Release-työnkulku kyseiselle tagille.
+
+Julkaisun `verify`-työ tarkistaa myös jokaisen `.sig`-tiedoston tiedostossa `src-tauri/tauri.conf.json` olevaa avainta `plugins.updater.pubkey` vasten. Tagi, jonka julkinen avain on yhä paikkamerkki, epäonnistuu tässä tarkistuksessa.
 
 Kuivaharjoitus lataa vain työnkulun artefakteja. Ne eivät ole GitHub-julkaisu, eikä niillä ole attestaatioita. Tarkista ne komennolla `sha256sum -c checksums.txt` artefaktista `release-assets`.
 
@@ -50,7 +57,7 @@ Kuivaharjoitus lataa vain työnkulun artefakteja. Ne eivät ole GitHub-julkaisu,
 
 Tagattu julkaisu sisältää lisäksi:
 
-- `sbom-npm.cdx.json` — CycloneDX-SBOM pnpm-lukkotiedostosta
+- `sbom-npm.cdx.json` — CycloneDX-SBOM pnpm-lukkotiedostosta, lukitulla `@cyclonedx/cdxgen`-kehitysriippuvuudella
 - `sbom-cargo.cdx.json` — CycloneDX-SBOM komennolla `cargo cyclonedx` hakemistosta `src-tauri/`
 - `checksums.txt` — jokaisen muun tiedoston SHA-256
 - `latest.json` ja `.sig`-tiedostot — Taurin päivityksen metadata tagatussa julkaisussa

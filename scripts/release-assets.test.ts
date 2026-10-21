@@ -18,6 +18,7 @@ import {
   releaseOverlay,
   storedZip,
   updaterSignatureMatches,
+  verifyUpdaterSignatures,
   versionFromTag,
 } from './release-assets'
 
@@ -212,6 +213,18 @@ describe('updater archives', () => {
     ).toString('base64')
     expect(updaterSignatureMatches(pubkey, message, hashedFile)).toBe(true)
     assertRealUpdaterPubkey(pubkey)
+
+    const dir = tempDir()
+    const archive = 'Easy Race Timer.app.tar.gz'
+    writeFileSync(path.join(dir, archive), message)
+    writeFileSync(path.join(dir, `${archive}.sig`), sigFile)
+    expect(verifyUpdaterSignatures(dir, pubkey)).toEqual([`${archive}.sig`])
+    expect(() => verifyUpdaterSignatures(dir, UPDATER_PUBKEY_PLACEHOLDER)).toThrow(/placeholder/)
+    writeFileSync(path.join(dir, archive), Buffer.from('tampered'))
+    expect(() => verifyUpdaterSignatures(dir, pubkey)).toThrow(/does not match/)
+    writeFileSync(path.join(dir, archive), message)
+    writeFileSync(path.join(dir, 'other.app.tar.gz'), message)
+    expect(() => verifyUpdaterSignatures(dir, pubkey)).toThrow(/has no signature/)
   })
 })
 

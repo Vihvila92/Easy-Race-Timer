@@ -54,6 +54,11 @@ describe('release workflow', () => {
     expect(release).toContain('windows-2022')
     expect(job('bundle')).toContain('pnpm install --frozen-lockfile --ignore-scripts')
     expect(job('bundle')).toContain('pnpm rebuild esbuild')
+    const sbom = job('sbom')
+    expect(sbom).toContain('pnpm install --frozen-lockfile --ignore-scripts')
+    expect(sbom).not.toContain('pnpm dlx')
+    expect(sbom).toContain('pnpm exec cdxgen')
+    expect(readFileSync('package.json', 'utf8')).toContain('"@cyclonedx/cdxgen": "12.8.6"')
   })
 
   it('refuses to replace an existing release and attests updater files', () => {
@@ -64,11 +69,19 @@ describe('release workflow', () => {
     for (const subject of ['release/*.sig', 'release/latest.json', 'release/*.tar.gz', 'release/*.zip']) {
       expect(publish).toContain(subject)
     }
+    expect(publish).not.toMatch(/subject-path: release\/sbom-/)
+    expect(publish).toContain('sbom-path: release/sbom-npm.cdx.json')
+    expect(publish).toContain('sbom-path: release/sbom-cargo.cdx.json')
     const verify = job('verify')
     expect(verify).toContain('--clobber')
     expect(verify).toContain('assets/*.sig')
     expect(verify).toContain('assets/latest.json')
     expect(verify).toContain('assets/*.tar.gz')
+    expect(verify).toContain('assets/checksums.txt')
+    expect(verify).toContain('assets/sbom-npm.cdx.json')
+    expect(verify).toContain('assets/sbom-cargo.cdx.json')
+    expect(verify).toContain('--predicate-type https://cyclonedx.org/bom')
+    expect(verify).toContain('verify-signatures')
     expect(verify).toContain('--signer-workflow Vihvila92/Easy-Race-Timer/.github/workflows/release.yml')
   })
 
@@ -80,8 +93,21 @@ describe('release workflow', () => {
     expect(sign).toContain('TAURI_SIGNING_PRIVATE_KEY_PASSWORD')
     expect(sign).not.toContain('TAURI_SIGNING_PUBLIC_KEY')
     expect(sign).toContain('merge-base --is-ancestor')
+    expect(sign).toContain('GIT_CONFIG_COUNT=1')
+    expect(sign).toContain('GIT_CONFIG_KEY_0=http.extraheader')
+    expect(sign).toContain('GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer ${GITHUB_TOKEN}"')
+    expect(sign).not.toContain('git -c')
+    expect(sign).toContain('tag="$GITHUB_REF_NAME"')
     expect(sign).toContain('signer sign')
+    expect(sign).toContain('npm ci --ignore-scripts --no-audit --no-fund')
+    expect(sign).not.toContain('npm install')
     expect(sign).not.toContain('pnpm install')
+    const signerLock = JSON.parse(readFileSync('tools/tauri-signer/package-lock.json', 'utf8')) as {
+      packages: Record<string, { version?: string; integrity?: string }>
+    }
+    const signerCli = signerLock.packages['node_modules/@tauri-apps/cli']
+    expect(signerCli?.version).toBe('2.12.3')
+    expect(signerCli?.integrity).toMatch(/^sha512-/)
     expect(release).not.toContain('TAURI_SIGNING_PUBLIC_KEY')
     const outside = release.replace(sign, '')
     expect(outside).not.toContain('TAURI_SIGNING_PRIVATE_KEY')

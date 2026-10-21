@@ -96,6 +96,36 @@ export function updaterSignatureMatches(pubkey: string, fileBytes: Buffer, sigFi
   return verify(null, signed, key, signature)
 }
 
+function isUpdaterArchive(name: string): boolean {
+  const lower = name.toLowerCase()
+  return lower.endsWith('.app.tar.gz') || lower.endsWith('.appimage.tar.gz') || lower.endsWith('.nsis.zip') || lower.endsWith('.msi.zip')
+}
+
+/** Fail closed. A placeholder public key, a bad signature, or a missing pair fails the tag. */
+export function verifyUpdaterSignatures(dir: string, pubkey: string): string[] {
+  assertRealUpdaterPubkey(pubkey)
+  const names = filesIn(dir)
+  const sigs = names.filter((name) => name.endsWith('.sig'))
+  if (!sigs.length) throw new Error('No updater signatures to verify')
+  const verified: string[] = []
+  for (const sigName of [...sigs].sort()) {
+    const assetName = sigName.slice(0, -'.sig'.length)
+    const assetPath = path.join(dir, assetName)
+    if (!existsSync(assetPath) || !statSync(assetPath).isFile()) {
+      throw new Error(`Signature ${sigName} has no matching file ${assetName}`)
+    }
+    const ok = updaterSignatureMatches(pubkey, readFileSync(assetPath), readFileSync(path.join(dir, sigName), 'utf8'))
+    if (!ok) throw new Error(`Signature ${sigName} does not match plugins.updater.pubkey`)
+    verified.push(sigName)
+  }
+  const archives = names.filter(isUpdaterArchive)
+  if (!archives.length) throw new Error('No updater archives to verify')
+  for (const archive of archives) {
+    if (!sigs.includes(`${archive}.sig`)) throw new Error(`Updater archive ${archive} has no signature`)
+  }
+  return verified
+}
+
 export function bundleDir(targetDir: string, platform: string): string {
   if (platform === 'macos') return path.join(targetDir, 'universal-apple-darwin', 'release', 'bundle')
   return path.join(targetDir, 'release', 'bundle')
@@ -442,6 +472,11 @@ function main() {
     console.log('Updater private key matches the committed public key')
     return
   }
+  if (command === 'verify-signatures') {
+    const verified = verifyUpdaterSignatures(arg('--dir'), readConfigPubkey())
+    console.log(`Verified ${verified.length} updater signatures against the committed public key`)
+    return
+  }
   if (command === 'latest') {
     const dir = arg('--dir')
     flattenReleaseDir(dir)
@@ -485,7 +520,9 @@ function main() {
     console.log('Release assets are complete')
     return
   }
-  console.error('Usage: release-assets.ts overlay|pack|collect|latest|checksums|assert|assert-pubkey|verify-signature')
+  console.error(
+    'Usage: release-assets.ts overlay|pack|collect|latest|checksums|assert|assert-pubkey|verify-signature|verify-signatures',
+  )
   process.exit(1)
 }
 
