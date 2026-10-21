@@ -43,15 +43,17 @@ Open the address printed on the `ERT_READY` line. The developer server uses port
 
 ## Desktop app (Tauri)
 
-`src-tauri/` is a Tauri 2 shell. On startup it spawns the Node server as a sidecar (`PORT=0`, `HOST=127.0.0.1`, `ERT_DATA_DIR` set to the operating system app data directory) and waits up to 20 seconds for one stdout line, `ERT_READY` plus JSON. It then opens the window at that `http://127.0.0.1:<port>` URL, so the UI and the API stay on the same origin. Closing the window stops the sidecar.
+`src-tauri/` is a Tauri 2 shell. On startup it clears the environment, spawns the Node server as a sidecar (`PORT=0`, `HOST=127.0.0.1`, `ERT_DATA_DIR` set to the operating system app data directory, `NODE_ENV=production`), and writes a per-launch token to the sidecar's standard input. It waits up to 20 seconds for one stdout line, `ERT_READY` plus JSON. It then opens `http://127.0.0.1:<port>/auth?code=…`. That code is single-use and is exchanged for an HttpOnly cookie. The API and the websocket require the cookie or a bearer token. The window has no shell or process API. Closing the window closes the sidecar's standard input, and the sidecar also exits if the shell process disappears.
 
-The shell plugin may spawn only `binaries/ert-server`, with no arguments. It cannot run other programs. If the sidecar fails or the ready line does not arrive, the window shows a static Finnish and English error page instead of a blank view.
+Packaged interface files and the database module are stored in the app data directory and checked against SHA-256 hashes embedded in the sidecar. A second instance focuses the existing window. The sidecar also holds an exclusive lock in the data directory while a launch token is set.
+
+If the sidecar fails or the ready line does not arrive, the window shows a static Finnish and English error page instead of a blank view. The shell page's CSP is `default-src 'none'; style-src 'self'`.
 
 Every response from that server, including HTML results, sends `Content-Security-Policy` (with `default-src 'self'`, `connect-src 'self'`, and `frame-ancestors 'none'`), `X-Content-Type-Options: nosniff`, and `Referrer-Policy: no-referrer`.
 
-`pnpm build:sidecar` builds the web UI and packages `packages/server` as a Node 22 single executable, including the `better-sqlite3` prebuild for this machine. The file is `src-tauri/binaries/ert-server-<target-triple>` (`.exe` on Windows). It is not committed. `pnpm tauri build` runs that script first. The `check` job does not.
+`pnpm build:sidecar` builds the web UI and packages `packages/server` as a Node 22.23.3 single executable, including the `better-sqlite3` prebuild for the target. On macOS the universal build produces arm64 and x64 executables, combines them with `lipo`, and ad-hoc signs the result. The file is `src-tauri/binaries/ert-server-<target-triple>` (`.exe` on Windows). It is not committed. `pnpm tauri build` runs that script first. The `check` job does not. The Release workflow rebuilds the native modules, builds the sidecar, and checks that the binary exists before it builds installers.
 
-Requirements: Node.js 22 and Rust 1.90 or newer (`rust-toolchain.toml`; CI installs 1.90.0). On Linux also install `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `librsvg2-dev`, `patchelf`, and `libayatana-appindicator3-dev`. See the Tauri prerequisites guide for Windows and macOS.
+Requirements: Node.js 22.23.3 and Rust 1.90 or newer (`rust-toolchain.toml`; CI installs 1.90.0). On Linux also install `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `librsvg2-dev`, `patchelf`, and `libayatana-appindicator3-dev`. See the Tauri prerequisites guide for Windows and macOS.
 
 ```sh
 pnpm install
@@ -76,7 +78,7 @@ pnpm e2e
 
 ## Roadmap
 
-v0.1 is this repository. A tagged release publishes unsigned installers for Windows, macOS and Linux ([docs/release.md](docs/release.md)). Paid signing and the server sidecar are still later. [docs/roadmap.md](docs/roadmap.md). Decisions: [`docs/adr/`](docs/adr/).
+v0.1 is this repository. A tagged release publishes unsigned installers for Windows, macOS and Linux ([docs/release.md](docs/release.md)). Paid signing is not in use. The Node server ships inside the desktop app as a sidecar. [docs/roadmap.md](docs/roadmap.md). Decisions: [`docs/adr/`](docs/adr/).
 
 ## Contributing
 

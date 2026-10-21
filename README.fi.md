@@ -43,15 +43,17 @@ Avaa osoite, jonka prosessi tulostaa rivillä `ERT_READY`. Kehittäjän palvelin
 
 ## Työpöytäsovellus (Tauri)
 
-`src-tauri/` on Tauri 2 -kuori. Käynnistyksessä se käynnistää Node-palvelimen sidecarina (`PORT=0`, `HOST=127.0.0.1`, `ERT_DATA_DIR` on käyttöjärjestelmän sovellusdatahakemisto) ja odottaa enintään 20 sekuntia yhtä stdout-riviä: `ERT_READY` ja JSON. Sitten se avaa ikkunan osoitteeseen `http://127.0.0.1:<port>`, joten käyttöliittymä ja API ovat sama origin. Ikkunan sulkeminen pysäyttää sidecarin.
+`src-tauri/` on Tauri 2 -kuori. Käynnistyksessä se tyhjentää ympäristön, käynnistää Node-palvelimen sidecarina (`PORT=0`, `HOST=127.0.0.1`, `ERT_DATA_DIR` on käyttöjärjestelmän sovellusdatahakemisto, `NODE_ENV=production`) ja kirjoittaa käynnistyskohtaisen tunnisteen sidecarin vakiosyötteeseen. Se odottaa enintään 20 sekuntia yhtä stdout-riviä: `ERT_READY` ja JSON. Sitten se avaa osoitteen `http://127.0.0.1:<port>/auth?code=…`. Koodi on kertakäyttöinen ja vaihdetaan HttpOnly-evästeeseen. API ja websocket vaativat evästeen tai bearer-tunnisteen. Ikkunalla ei ole shell- tai prosessirajapintaa. Ikkunan sulkeminen sulkee sidecarin vakiosyötteen, ja sidecar päättyy myös, jos kuoriprosessi katoaa.
 
-Shell-liitännäinen saa käynnistää vain `binaries/ert-server`-ohjelman, ilman argumentteja. Se ei saa ajaa muita ohjelmia. Jos sidecar epäonnistuu tai valmisriviä ei tule, ikkuna näyttää staattisen suomen- ja englanninkielisen virhesivun tyhjän näkymän sijaan.
+Paketin käyttöliittymätiedostot ja tietokantamoduuli tallennetaan sovellusdatahakemistoon ja tarkistetaan sidecariin upotetuilla SHA-256-tiivisteillä. Toinen instanssi nostaa esiin jo avatun ikkunan. Sidecar pitää myös yksinoikeudella lukkoa datahakemistossa, kun käynnistystunniste on asetettu.
+
+Jos sidecar epäonnistuu tai valmisriviä ei tule, ikkuna näyttää staattisen suomen- ja englanninkielisen virhesivun tyhjän näkymän sijaan. Kuoren sivun CSP on `default-src 'none'; style-src 'self'`.
 
 Jokainen palvelimen vastaus, myös HTML-tulokset, lähettää otsakkeet `Content-Security-Policy` (mukana `default-src 'self'`, `connect-src 'self'` ja `frame-ancestors 'none'`), `X-Content-Type-Options: nosniff` ja `Referrer-Policy: no-referrer`.
 
-`pnpm build:sidecar` rakentaa käyttöliittymän ja pakkaa `packages/server`-palvelimen Node 22 -yhdeksi suoritettavaksi, mukana tämän koneen `better-sqlite3`-natiivimoduuli. Tiedosto on `src-tauri/binaries/ert-server-<target-triple>` (Windowsissa `.exe`). Sitä ei commitoida. `pnpm tauri build` ajaa skriptin ensin. `check`-ajo ei rakenna sitä.
+`pnpm build:sidecar` rakentaa käyttöliittymän ja pakkaa `packages/server`-palvelimen Node 22.23.3 -yhdeksi suoritettavaksi, mukana kohteen `better-sqlite3`-natiivimoduuli. macOS:n universal-käännös tekee arm64- ja x64-ohjelmat, yhdistää ne `lipo`-komennolla ja ad-hoc-allekirjoittaa tuloksen. Tiedosto on `src-tauri/binaries/ert-server-<target-triple>` (Windowsissa `.exe`). Sitä ei commitoida. `pnpm tauri build` ajaa skriptin ensin. `check`-ajo ei rakenna sitä. Release-työnkulku rakentaa natiivimoduulit uudelleen, rakentaa sidecarin ja tarkistaa, että binääri on olemassa, ennen asenninten rakentamista.
 
-Vaatimukset: Node.js 22 ja Rust 1.90 tai uudempi (`rust-toolchain.toml`; CI asentaa 1.90.0). Linuxilla tarvitaan myös `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `librsvg2-dev`, `patchelf` ja `libayatana-appindicator3-dev`. Windowsin ja macOS:n muut vaatimukset löytyvät Taurin ohjeesta.
+Vaatimukset: Node.js 22.23.3 ja Rust 1.90 tai uudempi (`rust-toolchain.toml`; CI asentaa 1.90.0). Linuxilla tarvitaan myös `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `librsvg2-dev`, `patchelf` ja `libayatana-appindicator3-dev`. Windowsin ja macOS:n muut vaatimukset löytyvät Taurin ohjeesta.
 
 ```sh
 pnpm install
@@ -76,7 +78,7 @@ pnpm e2e
 
 ## Tiekartta
 
-v0.1 on tässä repossa. Tagattu julkaisu julkaisee allekirjoittamattomat asentimet Windowsille, macOS:lle ja Linuxille ([docs/release.fi.md](docs/release.fi.md)). Maksullinen allekirjoitus ja palvelimen sidecar tulevat myöhemmin. [docs/roadmap.md](docs/roadmap.md). Päätökset: [`docs/adr/`](docs/adr/).
+v0.1 on tässä repossa. Tagattu julkaisu julkaisee allekirjoittamattomat asentimet Windowsille, macOS:lle ja Linuxille ([docs/release.fi.md](docs/release.fi.md)). Maksullinen allekirjoitus ei ole käytössä. Node-palvelin kulkee työpöytäsovelluksen sidecarina. [docs/roadmap.md](docs/roadmap.md). Päätökset: [`docs/adr/`](docs/adr/).
 
 ## Osallistuminen
 

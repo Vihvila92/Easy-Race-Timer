@@ -18,6 +18,29 @@ export function parseHost(header: string | undefined): { hostname: string; port:
   return { hostname: parts[0], port }
 }
 
+/** Desktop mode accepts only `127.0.0.1`, never `localhost` or another loopback name. */
+export function desktopHostAllowed(header: string | undefined, listenPort: number | null): boolean {
+  const parsed = parseHost(header)
+  if (!parsed || parsed.hostname !== '127.0.0.1') return false
+  if (listenPort == null) return true
+  return (parsed.port ?? 80) === listenPort
+}
+
+/** Desktop mode accepts only `http://127.0.0.1:<port>`. */
+export function desktopOriginAllowed(origin: string | undefined, listenPort: number | null): boolean {
+  if (!origin) return false
+  let url: URL
+  try {
+    url = new URL(origin)
+  } catch {
+    return false
+  }
+  if (url.protocol !== 'http:' || url.username || url.password || url.hostname !== '127.0.0.1') return false
+  if (listenPort == null) return true
+  const port = url.port ? Number(url.port) : 80
+  return port === listenPort
+}
+
 /** Host must be loopback. Once the process is listening, the port has to match. */
 export function hostAllowed(header: string | undefined, listenPort: number | null): boolean {
   const parsed = parseHost(header)

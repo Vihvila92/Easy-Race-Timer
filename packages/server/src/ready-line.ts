@@ -3,14 +3,19 @@ export interface ReadyPayload {
   url: string
   dataDir: string
   dbPath: string
+  /** Present only when the shell passed a launch token. Never log this value. */
+  authCode?: string
 }
 
 /**
- * One stdout line: `ERT_READY` plus JSON (`url`, `dataDir`, `dbPath`).
- * The Tauri shell parses the same shape in `src-tauri/src/ready.rs`.
+ * One stdout line: `ERT_READY` plus JSON (`url`, `dataDir`, `dbPath`, and
+ * `authCode` when a launch token was read). The Tauri shell parses the same
+ * shape in `src-tauri/src/ready.rs` and requires `authCode`.
  */
 export function formatReadyLine(payload: ReadyPayload): string {
-  return `ERT_READY ${JSON.stringify({ url: payload.url, dataDir: payload.dataDir, dbPath: payload.dbPath })}`
+  const body: Record<string, string> = { url: payload.url, dataDir: payload.dataDir, dbPath: payload.dbPath }
+  if (payload.authCode) body.authCode = payload.authCode
+  return `ERT_READY ${JSON.stringify(body)}`
 }
 
 /** Accept only `http://127.0.0.1:<port>` with an optional trailing slash. */
@@ -30,6 +35,10 @@ export function parseReadyLine(line: string): ReadyPayload | null {
   if (!record.dataDir || !record.dbPath) return null
   const url = loopbackUrl(record.url)
   if (!url) return null
+  if (record.authCode !== undefined) {
+    if (typeof record.authCode !== 'string' || !/^[0-9a-f]{64}$/.test(record.authCode)) return null
+    return { url, dataDir: record.dataDir, dbPath: record.dbPath, authCode: record.authCode }
+  }
   return { url, dataDir: record.dataDir, dbPath: record.dbPath }
 }
 

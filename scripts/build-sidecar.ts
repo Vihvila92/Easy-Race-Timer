@@ -1,17 +1,23 @@
 /**
- * Build the Node server as a Tauri sidecar: a Node 22 single executable
+ * Build the Node server as a Tauri sidecar: a Node 22.23.3 single executable
  * that includes the web UI and the better-sqlite3 native module.
  *
- * Output: src-tauri/binaries/ert-server-<target-triple>[.exe]
- * The `check` job does not run this script.
+ * A universal macOS target builds arm64 and x64 executables and combines them
+ * with lipo. The `check` job does not run this script.
+ *
+ * TODO(#130): when the encrypted race file lands, extract
+ * better-sqlite3-multiple-ciphers instead of better-sqlite3. Do not embed a
+ * development key.
  */
 import { execFileSync } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import { createRequire } from 'node:module'
 import path from 'node:path'
+import { Readable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import * as esbuild from 'esbuild'
+import { NODE_TARBALLS, NODE_VERSION, SEA_FUSE, assertHostNode, seaBuildKind } from './sidecar-plan.ts'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const nodeRequire = createRequire(import.meta.url)
@@ -27,64 +33,63 @@ function hostTriple(): string {
   return match[1]
 }
 
-function prebuildName(): string {
-  const arch = process.arch
+function hostPrebuild(): string {
   if (process.platform === 'linux') {
     const report = process.report?.getReport() as { header?: { glibcVersionRuntime?: string } } | undefined
     const musl = !report?.header?.glibcVersionRuntime
-    return `${musl ? 'linuxmusl' : 'linux'}-${arch}.node`
+    return `${musl ? 'linuxmusl' : 'linux'}-${process.arch}.node`
   }
-  if (process.platform === 'darwin' || process.platform === 'win32') return `${process.platform}-${arch}.node`
-  throw new Error(`No better-sqlite3 sidecar prebuild for ${process.platform}-${arch}`)
+  if (process.platform === 'darwin' || process.platform === 'win32') return `${process.platform}-${process.arch}.node`
+  throw new Error(`No better-sqlite3 sidecar prebuild for ${process.platform}-${process.arch}`)
 }
 
-function readTree(dir: string, prefix: string, files: Record<string, string>, accept: (rel: string) => boolean) {
+function readTree(dir: string, prefix: string, files: Record<string, Buffer>, accept: (rel: string) => boolean) {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
     const full = path.join(dir, entry.name)
     const rel = prefix ? `${prefix}/${entry.name}` : entry.name
     if (entry.isDirectory()) readTree(full, rel, files, accept)
-    else if (entry.isFile() && accept(rel)) files[rel] = fs.readFileSync(full).toString('base64')
+    else if (entry.isFile() && accept(rel)) files[rel] = fs.readFileSync(full)
   }
 }
 
-function hashFiles(files: Record<string, string>): string {
-  const hash = crypto.createHash('sha256')
-  for (const key of Object.keys(files).sort()) {
-    hash.update(key)
-    hash.update('\0')
-    hash.update(files[key] ?? '')
-    hash.update('\0')
+function embed(files: Record<string, Buffer>): { files: Record<string, string>; hashes: Record<string, string> } {
+  const encoded: Record<string, string> = {}
+  const hashes: Record<string, string> = {}
+  for (const [rel, bytes] of Object.entries(files)) {
+    encoded[rel] = bytes.toString('base64')
+    hashes[rel] = crypto.createHash('sha256').update(bytes).digest('hex')
   }
-  return hash.digest('hex').slice(0, 16)
+  return { files: encoded, hashes }
 }
 
-function sqliteFiles(): { hash: string; files: Record<string, string> } {
+function sqlitePayload(prebuilds: string[]): { files: Record<string, string>; hashes: Record<string, string> } {
   const pkgRoot = path.dirname(nodeRequire.resolve('better-sqlite3/package.json'))
-  const prebuild = prebuildName()
-  const native = path.join(pkgRoot, 'prebuilds', prebuild)
-  if (!fs.existsSync(native)) throw new Error(`Missing better-sqlite3 prebuild ${native}`)
-  const files: Record<string, string> = {}
+  const files: Record<string, Buffer> = {}
   readTree(path.join(pkgRoot, 'lib'), 'lib', files, (rel) => rel.endsWith('.js'))
-  files[`prebuilds/${prebuild}`] = fs.readFileSync(native).toString('base64')
+  for (const name of prebuilds) {
+    const native = path.join(pkgRoot, 'prebuilds', name)
+    if (!fs.existsSync(native)) throw new Error(`Missing better-sqlite3 prebuild ${native}`)
+    files[`prebuilds/${name}`] = fs.readFileSync(native)
+  }
   files['package.json'] = Buffer.from(JSON.stringify({
     name: 'better-sqlite3',
     main: 'lib/index.js',
     type: 'commonjs',
-  })).toString('base64')
-  return { hash: hashFiles(files), files }
+  }))
+  return embed(files)
 }
 
-function webFiles(): { hash: string; files: Record<string, string> } {
+function webPayload(): { files: Record<string, string>; hashes: Record<string, string> } {
   const dist = path.join(root, 'packages/web/dist')
   if (!fs.existsSync(path.join(dist, 'index.html'))) {
     throw new Error('packages/web/dist/index.html is missing. The web build did not run.')
   }
-  const files: Record<string, string> = {}
+  const files: Record<string, Buffer> = {}
   readTree(dist, '', files, () => true)
-  return { hash: hashFiles(files), files }
+  return embed(files)
 }
 
-function sqlitePlugin(payload: { hash: string; files: Record<string, string> }): esbuild.Plugin {
+function sqlitePlugin(payload: { files: Record<string, string>; hashes: Record<string, string> }): esbuild.Plugin {
   return {
     name: 'better-sqlite3-prebuild',
     setup(build) {
@@ -98,7 +103,13 @@ function sqlitePlugin(payload: { hash: string; files: Record<string, string> }):
           import path from 'node:path'
           import { pathToFileURL } from 'node:url'
           import { extractTree } from './sidecar-assets.ts'
-          const root = extractTree(path.join(os.tmpdir(), 'easy-race-timer', 'sqlite', ${JSON.stringify(payload.hash)}), ${JSON.stringify(payload.files)})
+          import { resolveDataDir } from '../packages/server/src/config.ts'
+          import { ensurePrivateDirectory } from '../packages/server/src/private-dir.ts'
+          const files = ${JSON.stringify(payload.files)}
+          const hashes = ${JSON.stringify(payload.hashes)}
+          const dataDir = resolveDataDir(process.env, process.platform, os.homedir())
+          ensurePrivateDirectory(dataDir)
+          const root = extractTree(path.join(dataDir, 'resources', 'sqlite'), files, hashes)
           const require = createRequire(pathToFileURL(process.execPath))
           export default require(path.join(root, 'lib', 'index.js'))
         `,
@@ -107,28 +118,87 @@ function sqlitePlugin(payload: { hash: string; files: Record<string, string> }):
   }
 }
 
-function webPlugin(payload: { hash: string; files: Record<string, string> }): esbuild.Plugin {
+function webPlugin(payload: { files: Record<string, string>; hashes: Record<string, string> }): esbuild.Plugin {
   return {
     name: 'web-assets',
     setup(build) {
       build.onResolve({ filter: /^virtual:web-assets$/ }, () => ({ path: 'virtual:web-assets', namespace: 'web-assets' }))
       build.onLoad({ filter: /.*/, namespace: 'web-assets' }, () => ({
         loader: 'js',
-        contents: `export const hash = ${JSON.stringify(payload.hash)}\nexport const files = ${JSON.stringify(payload.files)}\n`,
+        contents: `export const files = ${JSON.stringify(payload.files)}\nexport const hashes = ${JSON.stringify(payload.hashes)}\n`,
       }))
     },
   }
 }
 
-const host = hostTriple()
-const triple = process.env.TAURI_ENV_TARGET_TRIPLE?.trim() || host
-if (triple !== host) {
-  throw new Error(`This sidecar build only supports the host triple ${host}, not ${triple}`)
+async function downloadVerified(url: string, dest: string, sha256: string): Promise<void> {
+  const response = await fetch(url)
+  if (!response.ok || !response.body) throw new Error(`Failed to download ${url}: ${response.status}`)
+  const hash = crypto.createHash('sha256')
+  const file = fs.createWriteStream(dest)
+  const body = Readable.fromWeb(response.body)
+  for await (const chunk of body) {
+    const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+    hash.update(bytes)
+    if (!file.write(bytes)) await new Promise((resolve) => file.once('drain', resolve))
+  }
+  await new Promise<void>((resolve, reject) => file.end((error?: Error | null) => (error ? reject(error) : resolve())))
+  const actual = hash.digest('hex')
+  if (actual !== sha256) {
+    fs.rmSync(dest, { force: true })
+    throw new Error(`Checksum mismatch for ${url}`)
+  }
 }
 
+async function nodeBinary(platform: string, arch: string, destDir: string): Promise<string> {
+  const spec = NODE_TARBALLS[`${platform}-${arch}`]
+  if (!spec) throw new Error(`No pinned Node ${NODE_VERSION} tarball for ${platform}-${arch}`)
+  fs.mkdirSync(destDir, { recursive: true })
+  const archive = path.join(destDir, spec.file)
+  if (!fs.existsSync(archive)) {
+    await downloadVerified(`https://nodejs.org/dist/v${NODE_VERSION}/${spec.file}`, archive, spec.sha256)
+  } else {
+    const actual = crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex')
+    if (actual !== spec.sha256) {
+      fs.rmSync(archive, { force: true })
+      await downloadVerified(`https://nodejs.org/dist/v${NODE_VERSION}/${spec.file}`, archive, spec.sha256)
+    }
+  }
+  const extracted = path.join(destDir, `${platform}-${arch}`)
+  fs.rmSync(extracted, { recursive: true, force: true })
+  fs.mkdirSync(extracted, { recursive: true })
+  if (spec.file.endsWith('.zip')) run('unzip', ['-q', archive, '-d', extracted])
+  else run('tar', ['-xf', archive, '-C', extracted])
+  const binaryName = platform === 'win32' ? 'node.exe' : path.join('bin', 'node')
+  const matches = fs.readdirSync(extracted)
+  const top = matches.find((entry) => fs.existsSync(path.join(extracted, entry, binaryName)))
+  if (!top) throw new Error(`Node ${NODE_VERSION} archive did not contain ${binaryName}`)
+  return path.join(extracted, top, binaryName)
+}
+
+function injectSea(nodeBinary: string, blob: string, dest: string) {
+  fs.copyFileSync(nodeBinary, dest)
+  fs.chmodSync(dest, 0o755)
+  const macho = process.platform === 'darwin'
+  if (macho) run('codesign', ['--remove-signature', dest])
+  const args = ['exec', 'postject', dest, 'NODE_SEA_BLOB', blob, '--sentinel-fuse', SEA_FUSE]
+  if (macho) args.push('--macho-segment-name', 'NODE_SEA')
+  run('pnpm', args)
+  if (macho) run('codesign', ['--sign', '-', '--force', dest])
+  fs.chmodSync(dest, 0o755)
+}
+
+const host = hostTriple()
+const triple = process.env.TAURI_ENV_TARGET_TRIPLE?.trim() || host
+const plan = seaBuildKind(triple, host, process.platform)
+if (plan.kind === 'unsupported') throw new Error(plan.reason)
+
 run('pnpm', ['--filter', '@ert/web', 'build'])
-const sqlite = sqliteFiles()
-const web = webFiles()
+const prebuilds = plan.kind === 'universal-darwin'
+  ? ['darwin-arm64.node', 'darwin-x64.node']
+  : [hostPrebuild()]
+const sqlite = sqlitePayload(prebuilds)
+const web = webPayload()
 const outDir = path.join(root, 'dist/sidecar')
 fs.mkdirSync(outDir, { recursive: true })
 const bundle = path.join(outDir, 'server.cjs')
@@ -140,13 +210,18 @@ await esbuild.build({
       import path from 'node:path'
       import { extractTree } from './sidecar-assets.ts'
       import { startServer } from '../packages/server/src/index.ts'
-      import { files, hash } from 'virtual:web-assets'
+      import { resolveDataDir } from '../packages/server/src/config.ts'
+      import { ensurePrivateDirectory } from '../packages/server/src/private-dir.ts'
+      import { files, hashes } from 'virtual:web-assets'
+      if (!process.env.NODE_ENV) process.env.NODE_ENV = 'production'
       const configured = process.env.ERT_WEB_DIST?.trim()
       if (!configured) {
-        process.env.ERT_WEB_DIST = extractTree(path.join(os.tmpdir(), 'easy-race-timer', 'web', hash), files)
+        const dataDir = resolveDataDir(process.env, process.platform, os.homedir())
+        ensurePrivateDirectory(dataDir)
+        process.env.ERT_WEB_DIST = extractTree(path.join(dataDir, 'resources', 'web'), files, hashes)
       }
       startServer().catch((error) => {
-        console.error(error)
+        console.error(error instanceof Error ? error.message : error)
         process.exit(1)
       })
     `,
@@ -179,8 +254,20 @@ const extension = process.platform === 'win32' ? '.exe' : ''
 const binaries = path.join(root, 'src-tauri/binaries')
 fs.mkdirSync(binaries, { recursive: true })
 const sidecar = path.join(binaries, `ert-server-${triple}${extension}`)
-fs.copyFileSync(process.execPath, sidecar)
-fs.chmodSync(sidecar, 0o755)
-run('pnpm', ['exec', 'postject', sidecar, 'NODE_SEA_BLOB', blob, '--sentinel-fuse', 'NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2'])
-fs.chmodSync(sidecar, 0o755)
+
+if (plan.kind === 'universal-darwin') {
+  const arm = await nodeBinary('darwin', 'arm64', outDir)
+  const intel = await nodeBinary('darwin', 'x64', outDir)
+  const armSea = path.join(outDir, 'ert-server-arm64')
+  const intelSea = path.join(outDir, 'ert-server-x64')
+  injectSea(arm, blob, armSea)
+  injectSea(intel, blob, intelSea)
+  if (fs.existsSync(sidecar)) fs.rmSync(sidecar)
+  run('lipo', ['-create', armSea, intelSea, '-output', sidecar])
+  run('codesign', ['--sign', '-', '--force', sidecar])
+  fs.chmodSync(sidecar, 0o755)
+} else {
+  assertHostNode(process.version)
+  injectSea(process.execPath, blob, sidecar)
+}
 console.log(`sidecar ${sidecar}`)

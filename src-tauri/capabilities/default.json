@@ -1,19 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Main window. The shell plugin may spawn only the ert-server sidecar, with no arguments and no other commands.",
+  "description": "Main window. The shell starts the local server itself. This capability does not grant a shell or process API.",
   "windows": ["main"],
-  "permissions": [
-    "core:default",
-    {
-      "identifier": "shell:allow-spawn",
-      "allow": [
-        {
-          "name": "binaries/ert-server",
-          "sidecar": true,
-          "args": false
-        }
-      ]
-    }
-  ]
+  "permissions": ["core:default"]
 }

@@ -22,6 +22,10 @@ describe('ERT_READY line', () => {
     expect(parseReadyLine('ERT_READY {"url":"http://127.0.0.1:1"}')).toBeNull()
     expect(parseReadyLine('ERT_READY {"url":"http://127.0.0.1:1","dataDir":"","dbPath":"/tmp/ert.sqlite"}')).toBeNull()
     expect(parseReadyLine(`prefix ${formatReadyLine(payload)}`)).toBeNull()
+    const code = 'ab'.repeat(32)
+    expect(parseReadyLine(formatReadyLine({ ...payload, authCode: code }))?.authCode).toBe(code)
+    expect(parseReadyLine(formatReadyLine({ ...payload, authCode: 'nope' }))).toBeNull()
+    expect(parseReadyLine(`ERT_READY ${JSON.stringify({ ...payload, authCode: 'AB'.repeat(32) })}`)).toBeNull()
     for (const url of [
       'http://localhost:8080',
       'http://0.0.0.0:8080',
