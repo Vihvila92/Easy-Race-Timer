@@ -113,8 +113,14 @@ over every asset:
 - `sbom-npm.cdx.json` from the pnpm lockfile
 - `sbom-cargo.cdx.json` from `cargo cyclonedx` on `src-tauri/`
 
-Installers also get GitHub artifact attestations. Check them with
-`sha256sum -c checksums.txt` and
-`gh attestation verify <file> --repo Vihvila92/Easy-Race-Timer`.
+Installers, updater archives, `.sig` files and `latest.json` also get GitHub
+artifact attestations. Check them with `sha256sum -c checksums.txt` and
+`gh attestation verify`. The exact command, including the signer workflow and
+the tag ref, is in [docs/release.md](docs/release.md).
 The installers are not notarized and do not use a paid Windows certificate.
-See [docs/release.md](docs/release.md).
+
+The updater private key is not a repository secret. Only the `sign` job on a
+pushed `v*` tag can read it, from the GitHub Environment `release`. The matching
+public key is committed in `src-tauri/tauri.conf.json` and is still a placeholder
+until the admin generates the key pair. Loss and rotation of that key will be
+documented with the security review. See [docs/release.md](docs/release.md).

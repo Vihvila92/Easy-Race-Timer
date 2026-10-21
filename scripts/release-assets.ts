@@ -1,6 +1,11 @@
-import { createHash } from 'node:crypto'
+import { execFileSync } from 'node:child_process'
+import { createHash, createPublicKey, verify } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
+import { crc32 } from 'node:zlib'
+
+/** Committed stand-in. The admin replaces it with the minisign public key. CI never supplies one. */
+export const UPDATER_PUBKEY_PLACEHOLDER = 'TODO_REPLACE_WITH_UPDATER_PUBKEY'
 
 export const REPO = 'Vihvila92/Easy-Race-Timer'
 
@@ -27,9 +32,6 @@ export type OverlayInput = {
   eventName: string
   ref: string
   refName: string
-  hasPrivateKey: boolean
-  publicKeyFromEnv: string
-  publicKeyFromConfig: string
 }
 
 export function isTagRelease(eventName: string, ref: string): boolean {
@@ -41,20 +43,57 @@ export function versionFromTag(refName: string): string {
 }
 
 export function releaseOverlay(input: OverlayInput): Record<string, unknown> {
-  const overlay: Record<string, unknown> = {}
-  const tagged = isTagRelease(input.eventName, input.ref)
-  if (tagged) overlay.version = versionFromTag(input.refName)
+  if (!isTagRelease(input.eventName, input.ref)) return {}
+  // Version only. Updater archives are packed unsigned; the sign job writes .sig files.
+  // The public key stays the committed plugins.updater.pubkey and is not overlaid from CI.
+  return { version: versionFromTag(input.refName) }
+}
 
-  const pubkey = input.publicKeyFromEnv.trim() || input.publicKeyFromConfig.trim()
-  if (input.hasPrivateKey && pubkey) {
-    overlay.bundle = { createUpdaterArtifacts: true }
-    overlay.plugins = { updater: { pubkey } }
-  } else if (tagged) {
+export function assertRealUpdaterPubkey(pubkey: string): void {
+  const value = pubkey.trim()
+  if (!value || value === UPDATER_PUBKEY_PLACEHOLDER || value.includes('TODO')) {
     throw new Error(
-      'A v* tag release needs TAURI_SIGNING_PRIVATE_KEY, TAURI_SIGNING_PRIVATE_KEY_PASSWORD, and plugins.updater.pubkey (or TAURI_SIGNING_PUBLIC_KEY). Dry-run workflow_dispatch builds unsigned installers without those secrets.',
+      'plugins.updater.pubkey in src-tauri/tauri.conf.json is still a placeholder. Generate a key pair with `pnpm tauri signer generate`, commit the public key in place of TODO_REPLACE_WITH_UPDATER_PUBKEY, and store only the private key in the release GitHub environment. CI does not read the public key from a secret.',
     )
   }
-  return overlay
+  minisignPublicKey(value)
+}
+
+export function minisignPublicKey(tauriPubkey: string): { keyId: Buffer; key: Buffer } {
+  const text = Buffer.from(tauriPubkey.trim(), 'base64').toString('utf8')
+  const body = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line && !line.startsWith('untrusted comment:'))
+  if (!body) throw new Error('updater pubkey is not a minisign public key')
+  const raw = Buffer.from(body, 'base64')
+  if (raw.length < 42 || raw.subarray(0, 2).toString('utf8') !== 'Ed') {
+    throw new Error('updater pubkey is not an Ed25519 minisign public key')
+  }
+  return { keyId: raw.subarray(2, 10), key: raw.subarray(10, 42) }
+}
+
+export function updaterSignatureMatches(pubkey: string, fileBytes: Buffer, sigFile: string): boolean {
+  const publicKey = minisignPublicKey(pubkey)
+  const text = Buffer.from(sigFile.trim(), 'base64').toString('utf8')
+  const body = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => line && !line.startsWith('untrusted comment:') && !line.startsWith('trusted comment:'))
+  if (!body) return false
+  const raw = Buffer.from(body, 'base64')
+  if (raw.length < 74) return false
+  const algorithm = raw.subarray(0, 2).toString('utf8')
+  // "ED" is minisign's prehashed Ed25519 (Blake2b-512). "Ed" signs the bytes directly.
+  const signed =
+    algorithm === 'ED' ? createHash('blake2b512').update(fileBytes).digest() : algorithm === 'Ed' ? fileBytes : null
+  if (!signed) return false
+  const keyId = raw.subarray(2, 10)
+  const signature = raw.subarray(10, 74)
+  if (!publicKey.keyId.equals(keyId)) return false
+  const prefix = Buffer.from('302a300506032b6570032100', 'hex')
+  const key = createPublicKey({ key: Buffer.concat([prefix, publicKey.key]), format: 'der', type: 'spki' })
+  return verify(null, signed, key, signature)
 }
 
 export function bundleDir(targetDir: string, platform: string): string {
@@ -97,6 +136,91 @@ export function collectBundles(targetDir: string, destDir: string, platform: str
   }
   assertPlatformInstallers(names, platform)
   return names.sort()
+}
+
+export function createUpdaterArchives(targetDir: string, platform: string): string[] {
+  const root = bundleDir(targetDir, platform)
+  if (!existsSync(root)) throw new Error(`Tauri bundle directory not found: ${root}`)
+  const archives: string[] = []
+  const walk = (dir: string) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const full = path.join(dir, entry.name)
+      if (entry.isDirectory()) {
+        if (entry.name.endsWith('.app')) {
+          if (platform === 'macos') archives.push(writeTarGz(full))
+          continue
+        }
+        walk(full)
+        continue
+      }
+      if (!entry.isFile()) continue
+      if (platform === 'linux' && entry.name.endsWith('.AppImage')) archives.push(writeTarGz(full))
+      if (platform === 'windows' && entry.name.toLowerCase().endsWith('.exe') && path.basename(dir) === 'nsis') {
+        archives.push(writeStoredZip(full, entry.name.replace(/\.exe$/i, '.nsis.zip')))
+      }
+      if (platform === 'windows' && entry.name.toLowerCase().endsWith('.msi') && path.basename(dir) === 'msi') {
+        archives.push(writeStoredZip(full, entry.name.replace(/\.msi$/i, '.msi.zip')))
+      }
+    }
+  }
+  walk(root)
+  const names = archives.map((file) => path.basename(file)).sort()
+  const missing =
+    platform === 'linux'
+      ? names.some((name) => name.endsWith('.AppImage.tar.gz'))
+        ? []
+        : ['.AppImage.tar.gz']
+      : platform === 'macos'
+        ? names.some((name) => name.endsWith('.app.tar.gz'))
+          ? []
+          : ['.app.tar.gz']
+        : platform === 'windows'
+          ? ['.nsis.zip', '.msi.zip'].filter((suffix) => !names.some((name) => name.endsWith(suffix)))
+          : [`unknown platform ${platform}`]
+  if (missing.length) throw new Error(`${platform} updater archives are missing ${missing.join(', ')}`)
+  return names
+}
+
+function writeTarGz(source: string): string {
+  const dest = `${source}.tar.gz`
+  execFileSync('tar', ['-czf', dest, '-C', path.dirname(source), path.basename(source)], { stdio: 'pipe' })
+  return dest
+}
+
+export function storedZip(name: string, bytes: Buffer): Buffer {
+  const filename = Buffer.from(name)
+  const checksum = crc32(bytes) >>> 0
+  const local = Buffer.alloc(30)
+  local.writeUInt32LE(0x04034b50, 0)
+  local.writeUInt16LE(20, 4)
+  local.writeUInt16LE(0, 8)
+  local.writeUInt32LE(checksum, 14)
+  local.writeUInt32LE(bytes.length, 18)
+  local.writeUInt32LE(bytes.length, 22)
+  local.writeUInt16LE(filename.length, 26)
+  const central = Buffer.alloc(46)
+  central.writeUInt32LE(0x02014b50, 0)
+  central.writeUInt16LE((3 << 8) | 20, 4)
+  central.writeUInt16LE(20, 6)
+  central.writeUInt32LE(checksum, 16)
+  central.writeUInt32LE(bytes.length, 20)
+  central.writeUInt32LE(bytes.length, 24)
+  central.writeUInt16LE(filename.length, 28)
+  central.writeUInt32LE(0o755 << 16, 38)
+  const offset = 30 + filename.length + bytes.length
+  const end = Buffer.alloc(22)
+  end.writeUInt32LE(0x06054b50, 0)
+  end.writeUInt16LE(1, 8)
+  end.writeUInt16LE(1, 10)
+  end.writeUInt32LE(46 + filename.length, 12)
+  end.writeUInt32LE(offset, 16)
+  return Buffer.concat([local, filename, bytes, central, filename, end])
+}
+
+function writeStoredZip(source: string, archiveName: string): string {
+  const dest = path.join(path.dirname(source), archiveName)
+  writeFileSync(dest, storedZip(path.basename(source), readFileSync(source)))
+  return dest
 }
 
 function assertPlatformInstallers(names: string[], platform: string) {
@@ -287,9 +411,6 @@ function main() {
       eventName: process.env.GITHUB_EVENT_NAME ?? '',
       ref: process.env.GITHUB_REF ?? '',
       refName: process.env.GITHUB_REF_NAME ?? '',
-      hasPrivateKey: Boolean(process.env.TAURI_SIGNING_PRIVATE_KEY),
-      publicKeyFromEnv: process.env.TAURI_SIGNING_PUBLIC_KEY ?? '',
-      publicKeyFromConfig: readConfigPubkey(),
     })
     writeFileSync(out, `${JSON.stringify(overlay)}\n`)
     return
@@ -297,6 +418,28 @@ function main() {
   if (command === 'collect') {
     const names = collectBundles(arg('--target'), arg('--dest'), arg('--platform'))
     console.log(names.join('\n'))
+    return
+  }
+  if (command === 'pack') {
+    const names = createUpdaterArchives(arg('--target'), arg('--platform'))
+    console.log(names.join('\n'))
+    return
+  }
+  if (command === 'assert-pubkey') {
+    assertRealUpdaterPubkey(readConfigPubkey())
+    console.log('Committed updater public key is not a placeholder')
+    return
+  }
+  if (command === 'verify-signature') {
+    const pubkey = readConfigPubkey()
+    assertRealUpdaterPubkey(pubkey)
+    const file = readFileSync(arg('--file'))
+    const signature = readFileSync(arg('--sig'), 'utf8')
+    if (!updaterSignatureMatches(pubkey, file, signature)) {
+      console.error('The updater private key does not match plugins.updater.pubkey in src-tauri/tauri.conf.json')
+      process.exit(1)
+    }
+    console.log('Updater private key matches the committed public key')
     return
   }
   if (command === 'latest') {
@@ -342,7 +485,7 @@ function main() {
     console.log('Release assets are complete')
     return
   }
-  console.error('Usage: release-assets.ts overlay|collect|latest|checksums|assert')
+  console.error('Usage: release-assets.ts overlay|pack|collect|latest|checksums|assert|assert-pubkey|verify-signature')
   process.exit(1)
 }
 

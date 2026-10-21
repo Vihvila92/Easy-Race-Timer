@@ -1,16 +1,23 @@
+import { createHash, generateKeyPairSync, sign } from 'node:crypto'
+import { execFileSync } from 'node:child_process'
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import {
+  UPDATER_PUBKEY_PLACEHOLDER,
+  assertRealUpdaterPubkey,
   assertReleaseAssets,
   buildLatestJson,
   checksumText,
   collectBundles,
+  createUpdaterArchives,
   flattenReleaseDir,
   isTagRelease,
   releaseDownloadUrl,
   releaseOverlay,
+  storedZip,
+  updaterSignatureMatches,
   versionFromTag,
 } from './release-assets'
 
@@ -40,41 +47,27 @@ describe('release overlay', () => {
         eventName: 'workflow_dispatch',
         ref: 'refs/heads/feature',
         refName: 'feature',
-        hasPrivateKey: false,
-        publicKeyFromEnv: '',
-        publicKeyFromConfig: '',
       }),
     ).toEqual({})
   })
 
-  it('turns on updater artifacts when the signing key and pubkey are present', () => {
+  it('sets the tag version and does not take a public key from CI', () => {
     expect(
       releaseOverlay({
         eventName: 'push',
         ref: 'refs/tags/v0.2.0',
         refName: 'v0.2.0',
-        hasPrivateKey: true,
-        publicKeyFromEnv: '',
-        publicKeyFromConfig: 'PUB',
       }),
-    ).toEqual({
-      version: '0.2.0',
-      bundle: { createUpdaterArtifacts: true },
-      plugins: { updater: { pubkey: 'PUB' } },
-    })
+    ).toEqual({ version: '0.2.0' })
   })
 
-  it('refuses a tag release without updater signing material', () => {
-    expect(() =>
-      releaseOverlay({
-        eventName: 'push',
-        ref: 'refs/tags/v0.2.0',
-        refName: 'v0.2.0',
-        hasPrivateKey: false,
-        publicKeyFromEnv: '',
-        publicKeyFromConfig: 'PUB',
-      }),
-    ).toThrow(/TAURI_SIGNING_PRIVATE_KEY/)
+  it('rejects the placeholder updater public key', () => {
+    expect(() => assertRealUpdaterPubkey(UPDATER_PUBKEY_PLACEHOLDER)).toThrow(/placeholder/)
+    expect(() => assertRealUpdaterPubkey('')).toThrow(/placeholder/)
+    const config = JSON.parse(readFileSync('src-tauri/tauri.conf.json', 'utf8')) as {
+      plugins: { updater: { pubkey: string } }
+    }
+    expect(config.plugins.updater.pubkey).toBe(UPDATER_PUBKEY_PLACEHOLDER)
   })
 })
 
@@ -156,6 +149,69 @@ describe('latest.json', () => {
         files: [{ name: 'app.deb' }],
       }),
     ).toBeNull()
+  })
+})
+
+describe('updater archives', () => {
+  it('packs unsigned linux, macOS and windows updater archives', () => {
+    const root = tempDir()
+    const linux = path.join(root, 'linux', 'target')
+    mkdirSync(path.join(linux, 'release', 'bundle', 'appimage'), { recursive: true })
+    mkdirSync(path.join(linux, 'release', 'bundle', 'deb'), { recursive: true })
+    writeFileSync(path.join(linux, 'release', 'bundle', 'appimage', 'app_0.1.0_amd64.AppImage'), 'appimage')
+    writeFileSync(path.join(linux, 'release', 'bundle', 'deb', 'app_0.1.0_amd64.deb'), 'deb')
+    expect(createUpdaterArchives(linux, 'linux')).toEqual(['app_0.1.0_amd64.AppImage.tar.gz'])
+    const listed = execFileSync('tar', ['-tzf', path.join(linux, 'release', 'bundle', 'appimage', 'app_0.1.0_amd64.AppImage.tar.gz')], {
+      encoding: 'utf8',
+    })
+    expect(listed.trim()).toBe('app_0.1.0_amd64.AppImage')
+
+    const mac = path.join(root, 'mac', 'target')
+    const app = path.join(mac, 'universal-apple-darwin', 'release', 'bundle', 'macos', 'Easy Race Timer.app', 'Contents')
+    mkdirSync(app, { recursive: true })
+    writeFileSync(path.join(app, 'Info.plist'), 'plist')
+    expect(createUpdaterArchives(mac, 'macos')).toEqual(['Easy Race Timer.app.tar.gz'])
+
+    const win = path.join(root, 'win', 'target')
+    mkdirSync(path.join(win, 'release', 'bundle', 'nsis'), { recursive: true })
+    mkdirSync(path.join(win, 'release', 'bundle', 'msi'), { recursive: true })
+    const exe = 'Easy Race Timer_0.1.0_x64-setup.exe'
+    const msi = 'Easy Race Timer_0.1.0_x64_en-US.msi'
+    writeFileSync(path.join(win, 'release', 'bundle', 'nsis', exe), 'exe')
+    writeFileSync(path.join(win, 'release', 'bundle', 'msi', msi), 'msi')
+    expect(createUpdaterArchives(win, 'windows')).toEqual([
+      'Easy Race Timer_0.1.0_x64-setup.nsis.zip',
+      'Easy Race Timer_0.1.0_x64_en-US.msi.zip',
+    ])
+    const zip = readFileSync(path.join(win, 'release', 'bundle', 'nsis', 'Easy Race Timer_0.1.0_x64-setup.nsis.zip'))
+    expect(zip.readUInt16LE(8)).toBe(0)
+  })
+
+  it('writes a stored zip and accepts a matching minisign signature', () => {
+    const zip = storedZip('setup.exe', Buffer.from('exe'))
+    expect(zip.readUInt32LE(0)).toBe(0x04034b50)
+    expect(zip.readUInt16LE(8)).toBe(0)
+
+    const { publicKey, privateKey } = generateKeyPairSync('ed25519')
+    const der = publicKey.export({ format: 'der', type: 'spki' })
+    const raw = der.subarray(der.length - 32)
+    const keyId = Buffer.from([1, 2, 3, 4, 5, 6, 7, 8])
+    const pubkey = Buffer.from(`untrusted comment: minisign public key\n${Buffer.concat([Buffer.from('Ed'), keyId, raw]).toString('base64')}\n`).toString(
+      'base64',
+    )
+    const message = Buffer.from('nonce')
+    const signature = sign(null, message, privateKey)
+    const sigFile = Buffer.from(
+      `untrusted comment: signature from tauri secret key\n${Buffer.concat([Buffer.from('Ed'), keyId, signature]).toString('base64')}\ntrusted comment: timestamp:1\tfile:nonce\nAAAA\n`,
+    ).toString('base64')
+    expect(updaterSignatureMatches(pubkey, message, sigFile)).toBe(true)
+    expect(updaterSignatureMatches(pubkey, Buffer.from('other'), sigFile)).toBe(false)
+    const hashed = sign(null, createHash('blake2b512').update(message).digest(), privateKey)
+    const hashedFile = Buffer.from(
+      `untrusted comment: signature from tauri secret key\n${Buffer.concat([Buffer.from('ED'), keyId, hashed]).toString('base64')}\ntrusted comment: timestamp:1\tfile:nonce\tversion:0.1.0\nAAAA\n`,
+    ).toString('base64')
+    expect(updaterSignatureMatches(pubkey, message, hashedFile)).toBe(true)
+    assertRealUpdaterPubkey(pubkey)
   })
 })
 
