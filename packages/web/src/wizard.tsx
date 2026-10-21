@@ -4,6 +4,7 @@ import { kidsAndAdultsTemplate } from '@ert/sports'
 import { useState } from 'react'
 import { api } from './api.js'
 import { useApp } from './context.js'
+import { TextLink } from './ui/components.js'
 
 function todayLocal(): string {
   const now = new Date()
@@ -75,7 +76,7 @@ export function Wizard() {
       <p className="wizard-steps" aria-live="polite">{t('wizard.step', { step })}</p>
       <h1>{t('wizard.title')}</h1>
       <p className="lead">{t('wizard.lead')}</p>
-      <p><a href="#/import">{t('wizard.importFile')}</a></p>
+      <p><TextLink href="#/import" testId="wizard-import-file">{t('wizard.importFile')}</TextLink></p>
       {step === 1 && (
         <div className="card stack">
           <label className="stack" htmlFor="wizard-name">{t('wizard.name')}

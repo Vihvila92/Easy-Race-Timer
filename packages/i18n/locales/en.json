@@ -203,5 +203,7 @@
   "preview.rowDetail": "Bib 12",
   "preview.statusesTitle": "Statuses",
   "preview.clockTitle": "Clock",
-  "preview.clockLabel": "Sample time"
+  "preview.clockLabel": "Sample time",
+  "preview.linksTitle": "Links",
+  "preview.checkTitle": "Checkbox"
 }

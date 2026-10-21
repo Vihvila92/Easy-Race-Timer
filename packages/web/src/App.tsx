@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useState } from 'react'
 import { syncServerClock } from './api.js'
 import { useApp } from './context.js'
 import { flush } from './queue.js'
+import { TextLink } from './ui/components.js'
 import { Wizard } from './wizard.js'
 import { Audit, Clubs, Corrections, Entries, Finish, ImportView, Office, PrintView, Results, Start, Ties } from './views.js'
 
@@ -117,7 +118,7 @@ export function App() {
             <PreviewPage />
           </Suspense>
         ) : showWizard ? <Wizard /> : <View />}
-        <p className="footer"><a href="https://github.com/Vihvila92/Easy-Race-Timer">{t('common.source')}</a></p>
+        <p className="footer"><TextLink href="https://github.com/Vihvila92/Easy-Race-Timer" testId="source-link">{t('common.source')}</TextLink></p>
       </main>
     </div>
   )

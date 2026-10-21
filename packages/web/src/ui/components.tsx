@@ -1,6 +1,6 @@
 import type { MessageKey } from '@ert/i18n'
 import { useApp } from '../context.js'
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from 'react'
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger'
 
@@ -45,6 +45,41 @@ export function TextField({
         onChange={(event) => onChange(event.target.value)}
       />
     </div>
+  )
+}
+
+type TextLinkProps = AnchorHTMLAttributes<HTMLAnchorElement> & { testId?: string }
+
+/** Inline link with a 44 px target. Navigation items keep the nav-link treatment. */
+export function TextLink({ className, testId, children, ...rest }: TextLinkProps) {
+  const classes = ['ui-text-link', className].filter(Boolean).join(' ')
+  return <a className={classes} data-testid={testId} {...rest}><span>{children}</span></a>
+}
+
+export function Checkbox({
+  id,
+  label,
+  checked,
+  onChange,
+  testId,
+}: {
+  id: string
+  label: string
+  checked: boolean
+  onChange: (checked: boolean) => void
+  testId?: string
+}) {
+  return (
+    <label className="ui-check" htmlFor={id}>
+      <input
+        id={id}
+        type="checkbox"
+        checked={checked}
+        data-testid={testId}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span>{label}</span>
+    </label>
   )
 }
 

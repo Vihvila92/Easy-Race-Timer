@@ -1,5 +1,6 @@
 import { formatDate } from '@ert/i18n'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Checkbox, TextLink } from './ui/components.js'
 import { ApiError, api, clientNow, clockMs, createTapId, deviceNow, localDeviceId, nextTapLabel, readClockOffset, syncServerClock } from './api.js'
 import { useApp } from './context.js'
 import { flush, pendingCount, recordTap } from './queue.js'
@@ -40,7 +41,7 @@ export function Office() {
         </div>
       ) : null}
       {event && data.counts.entries === 0 && (
-        <p><a href="#/import" data-testid="wizard-next-import">{t('wizard.importNext')}</a></p>
+        <p><TextLink href="#/import" testId="wizard-next-import">{t('wizard.importNext')}</TextLink></p>
       )}
       <div className="card">
         <h2>{t('office.ageBasisTitle')}</h2>
@@ -272,7 +273,7 @@ export function Entries() {
           <span data-testid="late-club-hit">{clubHit}</span>
           <input aria-label={t('entries.changeRace')} data-testid="late-race" value={late.race} onChange={(event) => setLate({ ...late, race: event.target.value })} />
           <input aria-label={t('entries.bib')} data-testid="late-bib" value={late.bib} onChange={(event) => setLate({ ...late, bib: event.target.value })} />
-          <label><input data-testid="late-consent" type="checkbox" checked={late.consent} onChange={(event) => setLate({ ...late, consent: event.target.checked })} /> {t('entries.consentText')}</label>
+          <Checkbox id="late-consent" label={t('entries.consentText')} checked={late.consent} testId="late-consent" onChange={(consent) => setLate({ ...late, consent })} />
           <button type="button" data-testid="late-save" onClick={() => run(() => api('/api/v1/entries/late', { method: 'POST', body: JSON.stringify({ firstName: late.first, lastName: late.last, gender: late.gender, birthDate: late.birth, email: late.email, clubQuery: late.club, raceId: late.race, bib: Number(late.bib), consent: late.consent }) }))}>{t('action.save')}</button>
         </div>
       </div>
@@ -646,7 +647,7 @@ export function Results() {
         </select>
         <input aria-label={t('results.filter')} data-testid="results-filter" value={club} onChange={(event) => setClub(event.target.value)} />
         <span data-testid="results-count">{overall.length}</span>
-        <a href="/api/v1/results?format=csv">{t('results.csv')}</a>
+        <TextLink href="/api/v1/results?format=csv" testId="results-csv">{t('results.csv')}</TextLink>
         <button type="button" className="secondary" data-testid="offset-ranked" onClick={() => run(() => api('/api/v1/settings/offset-policy', { method: 'POST', body: JSON.stringify({ policy: 'ranked' }) }))}>{t('office.offset.ranked')}</button>
         <button type="button" className="secondary" data-testid="offset-unranked" onClick={() => run(() => api('/api/v1/settings/offset-policy', { method: 'POST', body: JSON.stringify({ policy: 'unranked' }) }))}>{t('office.offset.unranked')}</button>
         <button type="button" className="secondary" data-testid="offset-open_category" onClick={() => run(() => api('/api/v1/settings/offset-policy', { method: 'POST', body: JSON.stringify({ policy: 'open_category' }) }))}>{t('office.offset.open_category')}</button>
@@ -665,7 +666,7 @@ export function Results() {
             }
           }}>{t('results.lock')} {item.id}</button>
           <ul data-testid={`blockers-${item.id}`}>
-            {(blockers[item.id] ?? []).map((blocker) => <li key={blocker} data-testid="blocker"><a href={blocker.startsWith('tie:') ? '#/ties' : '#/entries'}>{blocker}</a></li>)}
+            {(blockers[item.id] ?? []).map((blocker) => <li key={blocker} data-testid="blocker"><TextLink href={blocker.startsWith('tie:') ? '#/ties' : '#/entries'}>{blocker}</TextLink></li>)}
           </ul>
         </div>
       ))}

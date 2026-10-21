@@ -203,5 +203,7 @@
   "preview.rowDetail": "Numero 12",
   "preview.statusesTitle": "Tilat",
   "preview.clockTitle": "Kello",
-  "preview.clockLabel": "Esimerkkiaika"
+  "preview.clockLabel": "Esimerkkiaika",
+  "preview.linksTitle": "Linkit",
+  "preview.checkTitle": "Valintaruutu"
 }

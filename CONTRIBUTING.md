@@ -50,7 +50,7 @@ Format dates and times with `formatDate`, `formatTime` and `formatDateTime` from
 
 ## User interface
 
-Shared controls live in [`packages/web/src/ui`](packages/web/src/ui). Use them for new views: `Button` (primary, secondary, danger), `TextField`, `Select`, `Banner`, `ListRow`, `StatusBadge`, `Clock` and `HintFrame`. Colors, type and spacing are CSS variables on `:root`. `[data-theme="dark"]` replaces them. The theme follows the system setting until the user chooses light or dark. Targets are at least 44 by 44 px, and both themes meet WCAG 2.2 AA contrast.
+Shared controls live in [`packages/web/src/ui`](packages/web/src/ui). Use them for new views: `Button` (primary, secondary, danger), `TextField`, `Select`, `Checkbox`, `TextLink`, `Banner`, `ListRow`, `StatusBadge`, `Clock` and `HintFrame`. Colors, type and spacing are CSS variables on `:root`. `[data-theme="dark"]` replaces them. The theme follows the system setting until the user chooses light or dark. Targets are at least 44 by 44 px (`--target`), including inline links and checkboxes, and both themes meet WCAG 2.2 AA contrast.
 
 `HintFrame` renders a `<view>.hint.<id>` string in the page flow only while guided mode is on. It is not a dialog. A dev build reviews the set at `#/preview`. That route is not part of the production build.
 

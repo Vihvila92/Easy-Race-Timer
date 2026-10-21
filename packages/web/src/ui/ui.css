@@ -167,10 +167,53 @@ button.ui-row,
   white-space: nowrap;
 }
 
+a.ui-text-link {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+  min-height: var(--target);
+  min-width: var(--target);
+  max-width: 100%;
+  padding: var(--space-2) var(--space-3);
+  color: var(--link);
+  text-decoration: underline;
+  white-space: normal;
+}
+
+a.ui-text-link > span {
+  min-width: 0;
+}
+
+.ui-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+  min-height: var(--target);
+  min-width: var(--target);
+  max-width: 100%;
+  padding: var(--space-2);
+  color: var(--text);
+}
+
+.ui-check input {
+  width: var(--target);
+  height: var(--target);
+  min-width: var(--target);
+  min-height: var(--target);
+  margin: 0;
+  padding: 0;
+  flex: 0 0 var(--target);
+  accent-color: var(--accent);
+}
+
 .ui-button:focus-visible,
 .ui-field input:focus-visible,
 .ui-field select:focus-visible,
-.ui-row:focus-visible {
+.ui-row:focus-visible,
+a.ui-text-link:focus-visible,
+.ui-check input:focus-visible {
   outline: 3px solid var(--focus);
   outline-offset: 2px;
 }
