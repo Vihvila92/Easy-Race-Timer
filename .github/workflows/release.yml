@@ -24,7 +24,8 @@ on:
 
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' }}
+  # A tag push must finish. A branch dry run replaces an older run on the same ref.
+  cancel-in-progress: ${{ github.event_name != 'push' || github.ref_type != 'tag' }}
 
 defaults:
   run:
@@ -135,7 +136,12 @@ jobs:
       - name: Pack unsigned updater archives
         run: pnpm exec tsx scripts/release-assets.ts pack --target src-tauri/target --platform ${{ matrix.platform }}
       - name: Collect installers
-        run: pnpm exec tsx scripts/release-assets.ts collect --target src-tauri/target --dest dist --platform ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          pnpm exec tsx scripts/release-assets.ts collect --target src-tauri/target --dest dist --platform ${{ matrix.platform }}
+          # dist/sidecar holds the Node trees used to build the SEA. Those
+          # headers share filenames across architectures and must not be published.
+          rm -rf dist/sidecar
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: installers-${{ matrix.platform }}

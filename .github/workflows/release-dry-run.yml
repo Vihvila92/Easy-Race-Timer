@@ -15,6 +15,11 @@ on:
     branches:
       - valtteriv/node-sidecar-6251
 
+# Replace an older dry run on this branch. The called workflow uses the same group.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   release:
     uses: ./.github/workflows/release.yml

@@ -31,6 +31,8 @@ describe('release workflow', () => {
     const plainModule = ['better', 'sqlite3'].join('-')
     expect(release).not.toContain(`pnpm rebuild ${plainModule} `)
     expect(release).toContain('pnpm build:sidecar')
+    expect(release).toContain('rm -rf dist/sidecar')
+    expect(release).toContain("cancel-in-progress: ${{ github.event_name != 'push' || github.ref_type != 'tag' }}")
     expect(release).toContain('TAURI_ENV_TARGET_TRIPLE: ${{ matrix.target }}')
     expect(release).toContain('ert-server-')
     expect(release).toContain('lipo -info')
