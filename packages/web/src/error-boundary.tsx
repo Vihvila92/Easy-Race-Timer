@@ -25,8 +25,8 @@ export class ErrorBoundary extends Component<Props, State> {
     console.error('Race program is unreachable', error, info.componentStack)
   }
 
-  private retry = (): void => {
-    void Promise.resolve(this.props.onRetry()).catch((caught: unknown) => {
+  private retry = (): Promise<void> => {
+    return Promise.resolve(this.props.onRetry()).catch((caught: unknown) => {
       console.error('Race program is unreachable', caught)
     }).finally(() => {
       this.setState({ error: null })

@@ -89,7 +89,7 @@ export function App() {
   const preview = import.meta.env.DEV && hash === '/preview' && PreviewPage != null
   if (!data && !preview) {
     if (unreachable) {
-      return <UnreachableView locale={locale} onRetry={() => { void reload().catch(() => undefined) }} />
+      return <UnreachableView locale={locale} onRetry={() => reload().catch(() => undefined)} />
     }
     return <div className="shell wizard-shell"><main className="main"><p>{t('common.loading')}</p></main></div>
   }

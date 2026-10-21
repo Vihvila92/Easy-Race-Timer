@@ -41,6 +41,70 @@ describe('UnreachableView', () => {
     expect(englishText).toContain('Try again')
     expect(englishText).not.toContain('Yritä uudelleen')
   })
+
+  it('shows the connecting label and ignores another press', async () => {
+    let release: () => void = () => undefined
+    const attempt = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let presses = 0
+    const { container, root } = mount(createElement(UnreachableView, {
+      locale: 'fi',
+      onRetry: () => {
+        presses += 1
+        return attempt
+      },
+    }))
+    const button = () => container.querySelector('[data-testid="unreachable-retry"]') as HTMLButtonElement
+    expect(button().textContent).toBe('Yritä uudelleen')
+    await act(async () => {
+      button().click()
+    })
+    expect(presses).toBe(1)
+    expect(button().textContent).toBe('Yhdistetään…')
+    expect(button().disabled).toBe(true)
+    expect(button().getAttribute('aria-busy')).toBe('true')
+    await act(async () => {
+      button().click()
+    })
+    expect(presses).toBe(1)
+    await act(async () => {
+      release()
+    })
+    expect(button().textContent).toBe('Yritä uudelleen')
+    expect(button().disabled).toBe(false)
+    expect(button().getAttribute('aria-busy')).not.toBe('true')
+    act(() => {
+      root.unmount()
+    })
+    container.remove()
+  })
+
+  it('uses the English connecting label while the retry is in progress', async () => {
+    let release: () => void = () => undefined
+    const attempt = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const { container, root } = mount(createElement(UnreachableView, {
+      locale: 'en',
+      onRetry: () => attempt,
+    }))
+    const button = container.querySelector('[data-testid="unreachable-retry"]') as HTMLButtonElement
+    await act(async () => {
+      button.click()
+    })
+    expect(button.textContent).toBe('Connecting…')
+    expect(button.disabled).toBe(true)
+    expect(button.getAttribute('aria-busy')).toBe('true')
+    await act(async () => {
+      release()
+    })
+    expect(button.textContent).toBe('Try again')
+    act(() => {
+      root.unmount()
+    })
+    container.remove()
+  })
 })
 
 describe('ErrorBoundary', () => {

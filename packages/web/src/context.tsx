@@ -91,7 +91,6 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [theme, locale])
 
   const reload = useCallback(async () => {
-    if (dataRef.current == null) setUnreachable(false)
     try {
       const health: unknown = await api('/api/v1/health')
       if (!healthHasPin(health)) {

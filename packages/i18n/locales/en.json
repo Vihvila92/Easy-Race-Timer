@@ -180,6 +180,7 @@
   "unreachable.title": "Cannot connect",
   "unreachable.message": "The timing program cannot be reached. Press Try again. If that does not help, close the program and open it again. If the problem continues, contact the club's technical support.",
   "unreachable.retry": "Try again",
+  "unreachable.connecting": "Connecting…",
   "a11y.menu": "Main navigation",
   "a11y.theme": "Theme",
   "a11y.language": "Language",
