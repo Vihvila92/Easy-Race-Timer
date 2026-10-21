@@ -2,8 +2,12 @@
 # exists on the default branch. workflow_dispatch stays the supported dry run.
 name: Release dry run
 
+# GitHub requires the caller to allow every permission a nested job declares,
+# including publish and verify, even when those jobs are skipped on a dry run.
 permissions:
-  contents: read
+  contents: write
+  id-token: write
+  attestations: write
 
 on:
   push:
