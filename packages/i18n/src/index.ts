@@ -86,15 +86,9 @@ export function formatDate(value: Date | string | number, locale: Locale): strin
   return formatWith(value, locale, calendarOptions(locale))
 }
 
-/**
- * Date typed into a field. Finnish uses `d.M.yyyy` (`12.6.2027`). English stays on
- * `formatDate` (`12/06/2027`). `formatDate` itself stays zero-padded.
- */
+/** Date typed into a field. Finnish `d.M.yyyy` (`12.6.2027`, `5.6.2026`). English `12/06/2027`. Both come from formatDate. */
 export function formatEditableDate(value: Date | string | number, locale: Locale): string {
-  if (locale === 'en') return formatDate(value, locale)
-  const date = toDate(value)
-  if (!date) return typeof value === 'string' ? value : ''
-  return `${date.getDate()}.${date.getMonth() + 1}.${date.getFullYear()}`
+  return formatDate(value, locale)
 }
 
 /** Parse a field back to `YYYY-MM-DD`. Accepts ISO in either locale, Finnish `d.M.yyyy`, or English `d/M/yyyy`. */

@@ -29,6 +29,11 @@
   max-width: 100%;
 }
 
+.ui-break {
+  overflow-wrap: anywhere;
+  max-width: 100%;
+}
+
 .ui-button {
   min-height: var(--target);
   min-width: var(--target);

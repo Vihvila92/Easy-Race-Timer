@@ -734,11 +734,11 @@ export function About() {
     <section data-testid="about">
       <h1>{t('about.title')}</h1>
       <p className="lead" data-testid="about-version">{t('about.version', { version: __ERT_VERSION__ })}</p>
-      <p data-testid="about-revision">{t('about.revision', { revision: __ERT_SOURCE_REF__ })}</p>
-      <p className="footer">
+      <p className="ui-break" data-testid="about-revision">{t('about.revision', { revision: __ERT_SOURCE_REF__ })}</p>
+      <div className="ui-actions">
         <TextLink href={sourceCodeUrl(__ERT_SOURCE_REF__)} rel="noreferrer" testId="about-source">{t('common.source')}</TextLink>
         <TextLink href={licenseUrl(__ERT_SOURCE_REF__)} rel="noreferrer" testId="about-license-link">{t('about.licenseLink')}</TextLink>
-      </p>
+      </div>
       <Banner tone="info" testId="about-license">{t('about.license')}</Banner>
     </section>
   )
