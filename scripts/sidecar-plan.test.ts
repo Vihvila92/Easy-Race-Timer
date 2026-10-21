@@ -7,8 +7,11 @@ import {
   assertHostNode,
   fileDescribesArch,
   lipoInfoHasBoth,
+  needsShell,
   nodeLaunchArgs,
+  quoteWindowsArg,
   seaBuildKind,
+  windowsCommandLine,
 } from './sidecar-plan.js'
 
 describe('sidecar build plan', () => {
@@ -62,5 +65,22 @@ describe('sidecar build plan', () => {
     expect(fileDescribesArch('Mach-O universal binary with 2 architectures: [x86_64] [arm64]', 'x64')).toBe(false)
     expect(lipoInfoHasBoth('Architectures in the fat file: x86_64 arm64')).toBe(true)
     expect(lipoInfoHasBoth('Non-fat file: arm64')).toBe(false)
+  })
+
+  it('runs pnpm through cmd.exe on Windows and quotes paths that contain spaces', () => {
+    expect(needsShell('pnpm', 'win32')).toBe(true)
+    expect(needsShell('pnpm', 'linux')).toBe(false)
+    expect(needsShell('pnpm', 'darwin')).toBe(false)
+    expect(needsShell('lipo', 'win32')).toBe(false)
+    expect(quoteWindowsArg('')).toBe('""')
+    expect(quoteWindowsArg('--filter')).toBe('--filter')
+    expect(quoteWindowsArg('C:\\Program Files\\ert-server.exe')).toBe('"C:\\Program Files\\ert-server.exe"')
+    expect(windowsCommandLine('pnpm', ['--filter', '@ert/web', 'build'])).toBe('pnpm --filter @ert/web build')
+    expect(windowsCommandLine('pnpm', ['exec', 'postject', 'C:\\a b\\ert-server.exe', 'NODE_SEA_BLOB'])).toBe(
+      'pnpm exec postject "C:\\a b\\ert-server.exe" NODE_SEA_BLOB',
+    )
+    const source = readFileSync(new URL('./build-sidecar.ts', import.meta.url), 'utf8')
+    expect(source).toContain('needsShell')
+    expect(source).toContain('windowsVerbatimArguments: true')
   })
 })

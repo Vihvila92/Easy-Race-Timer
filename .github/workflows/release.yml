@@ -83,7 +83,12 @@ jobs:
         run: |
           pnpm install --frozen-lockfile --ignore-scripts
           pnpm rebuild better-sqlite3 esbuild
+      # This step runs before `tauri build`, which is what normally sets
+      # TAURI_ENV_TARGET_TRIPLE. macOS must pass universal-apple-darwin here
+      # so the sidecar is both slices, not only the runner's arm64 host.
       - name: Build the Node sidecar
+        env:
+          TAURI_ENV_TARGET_TRIPLE: ${{ matrix.target }}
         run: |
           set -euo pipefail
           pnpm build:sidecar

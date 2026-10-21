@@ -25,14 +25,25 @@ import {
   assertHostNode,
   fileDescribesArch,
   lipoInfoHasBoth,
+  needsShell,
   nodeLaunchArgs,
   seaBuildKind,
+  windowsCommandLine,
 } from './sidecar-plan.ts'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const nodeRequire = createRequire(import.meta.url)
 
 function run(command: string, args: string[]) {
+  if (needsShell(command, process.platform)) {
+    execFileSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', windowsCommandLine(command, args)], {
+      cwd: root,
+      stdio: 'inherit',
+      windowsHide: true,
+      windowsVerbatimArguments: true,
+    })
+    return
+  }
   execFileSync(command, args, { cwd: root, stdio: 'inherit' })
 }
 

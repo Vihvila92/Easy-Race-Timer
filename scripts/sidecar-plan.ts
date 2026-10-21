@@ -87,3 +87,23 @@ export function fileDescribesArch(output: string, arch: 'arm64' | 'x64'): boolea
 export function lipoInfoHasBoth(output: string): boolean {
   return /\bx86_64\b/.test(output) && /\barm64\b/.test(output)
 }
+
+/**
+ * The Windows pnpm shim is `pnpm.cmd`. `execFile` does not run a `.cmd`
+ * unless the command goes through `cmd.exe`. Native tools stay direct.
+ */
+export function needsShell(command: string, platform: NodeJS.Platform): boolean {
+  return platform === 'win32' && command === 'pnpm'
+}
+
+/** Quote one argument for `cmd.exe /d /s /c`. */
+export function quoteWindowsArg(arg: string): string {
+  if (arg.length === 0) return '""'
+  if (!/[\s"&|<>^]/.test(arg)) return arg
+  return `"${arg.replaceAll('"', '""')}"`
+}
+
+/** One command line for `cmd.exe`, with paths that contain spaces left quoted. */
+export function windowsCommandLine(command: string, args: string[]): string {
+  return [command, ...args.map(quoteWindowsArg)].join(' ')
+}

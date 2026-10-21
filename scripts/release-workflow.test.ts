@@ -27,6 +27,7 @@ describe('release workflow', () => {
     expect(release).toContain('node-version: "22.23.3"')
     expect(release).toContain('pnpm rebuild better-sqlite3 esbuild')
     expect(release).toContain('pnpm build:sidecar')
+    expect(release).toContain('TAURI_ENV_TARGET_TRIPLE: ${{ matrix.target }}')
     expect(release).toContain('ert-server-')
     expect(release).toContain('lipo -info')
     expect(release).toContain('file ')
