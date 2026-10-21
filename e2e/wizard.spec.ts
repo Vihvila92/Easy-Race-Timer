@@ -6,6 +6,7 @@ import { screenshotDir } from './screenshot-dir.ts'
 import { killServer, startServer, type RunningServer } from './server.ts'
 
 test.describe('first run', () => {
+  test.use({ locale: 'en-US' })
   let server: RunningServer
 
   test.beforeAll(async () => {
@@ -36,7 +37,9 @@ test.describe('first run', () => {
     await page.getByTestId('lang-fi').click()
     await expect(page.getByRole('heading', { name: 'Luo kisa' })).toBeVisible()
     await page.getByTestId('wizard-name').fill('Kuulan hölkkä')
+    await expect(page.getByTestId('wizard-date')).toHaveAttribute('type', 'text')
     await page.getByTestId('wizard-date').fill('2026-10-15')
+    await expect(page.getByTestId('wizard-date')).toHaveValue('15.10.2026')
     await page.getByTestId('wizard-place').fill('Uurainen')
     await page.getByTestId('wizard-organizer').fill('Uuraisten Urheilijat')
     await page.getByTestId('wizard-next').click()
@@ -49,7 +52,16 @@ test.describe('first run', () => {
     await expect(page.getByTestId('wizard-date-display')).toHaveText('15.10.2026')
     await page.getByTestId('wizard-back').click()
     await page.getByTestId('wizard-back').click()
-    await page.getByTestId('wizard-date').fill('2027-06-12')
+    await page.getByTestId('wizard-date').fill('31.2.2027')
+    await expect(page.getByTestId('wizard-date')).toHaveValue('31.2.2027')
+    await expect(page.getByTestId('wizard-next')).toBeDisabled()
+    await page.getByTestId('wizard-date').fill('12.6.2027')
+    await expect(page.getByTestId('wizard-date')).toHaveValue('12.6.2027')
+    await page.getByTestId('lang-en').click()
+    await expect(page.getByTestId('wizard-date')).toHaveValue('12/06/2027')
+    await page.getByTestId('lang-fi').click()
+    await expect(page.getByTestId('wizard-date')).toHaveValue('12.6.2027')
+    await expect(page.getByTestId('wizard-next')).toBeEnabled()
     await page.getByTestId('wizard-next').click()
     await expect(page.getByTestId('wizard-start-R4')).toHaveValue('11:00')
     await expect(page.getByTestId('wizard-start-R8')).toHaveValue('11:30')
@@ -59,6 +71,10 @@ test.describe('first run', () => {
     await page.getByTestId('wizard-create').click()
     await expect(page.getByRole('heading', { level: 2, name: 'Kuulan hölkkä' })).toBeVisible()
     await expect(page.getByTestId('office-date')).toContainText('12.06.2027')
+    const stored = await page.request.get(`http://127.0.0.1:${server.port}/api/v1/bootstrap`)
+    expect(stored.ok()).toBeTruthy()
+    const workspace = await stored.json() as { event: { date_start: string } }
+    expect(workspace.event.date_start).toBe('2027-06-12')
     await page.getByTestId('lang-en').click()
     await expect(page.getByTestId('office-date')).toContainText('12/06/2027')
     await expect(page.getByRole('heading', { level: 1, name: 'Race office' })).toBeVisible()

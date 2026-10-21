@@ -1,6 +1,6 @@
-import type { MessageKey } from '@ert/i18n'
+import { commitEditableDate, formatEditableDate, type MessageKey } from '@ert/i18n'
+import { useState, type AnchorHTMLAttributes, type ButtonHTMLAttributes, type ReactNode } from 'react'
 import { useApp } from '../context.js'
-import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from 'react'
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger'
 
@@ -27,7 +27,7 @@ export function TextField({
   label: string
   value: string
   onChange: (value: string) => void
-  type?: 'text' | 'date' | 'time' | 'email'
+  type?: 'text' | 'time' | 'email'
   inputMode?: 'text' | 'numeric' | 'decimal' | 'tel' | 'email'
   autoComplete?: string
   testId?: string
@@ -45,6 +45,44 @@ export function TextField({
         onChange={(event) => onChange(event.target.value)}
       />
     </div>
+  )
+}
+
+export function DateField({
+  id,
+  label,
+  value,
+  onChange,
+  testId,
+}: {
+  id: string
+  label: string
+  /** Stored calendar date, `YYYY-MM-DD`, or empty while the text is incomplete. */
+  value: string
+  onChange: (iso: string) => void
+  testId?: string
+}) {
+  const { locale } = useApp()
+  const [text, setText] = useState(() => (value ? formatEditableDate(value, locale) : ''))
+  const [localeSeen, setLocaleSeen] = useState(locale)
+  if (locale !== localeSeen) {
+    setLocaleSeen(locale)
+    setText(value ? formatEditableDate(value, locale) : '')
+  }
+  return (
+    <TextField
+      id={id}
+      label={label}
+      value={text}
+      onChange={(next) => {
+        const committed = commitEditableDate(next, locale)
+        setText(committed.text)
+        onChange(committed.iso)
+      }}
+      autoComplete="off"
+      inputMode="text"
+      testId={testId}
+    />
   )
 }
 

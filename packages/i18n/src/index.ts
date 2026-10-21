@@ -79,6 +79,45 @@ export function formatDate(value: Date | string | number, locale: Locale): strin
   return formatWith(value, locale, { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
+/**
+ * Date typed into a field. Finnish uses `d.M.yyyy` (`12.6.2027`). English stays on
+ * `formatDate` (`12/06/2027`). `formatDate` itself stays zero-padded.
+ */
+export function formatEditableDate(value: Date | string | number, locale: Locale): string {
+  if (locale === 'en') return formatDate(value, locale)
+  const date = toDate(value)
+  if (!date) return typeof value === 'string' ? value : ''
+  return `${date.getDate()}.${date.getMonth() + 1}.${date.getFullYear()}`
+}
+
+/** Parse a field back to `YYYY-MM-DD`. Accepts ISO in either locale, Finnish `d.M.yyyy`, or English `d/M/yyyy`. */
+export function parseEditableDate(text: string, locale: Locale): string | null {
+  const trimmed = text.trim()
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(trimmed)
+  if (iso) return canonicalDate(Number(iso[1]), Number(iso[2]), Number(iso[3]))
+  const local = locale === 'en'
+    ? /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed)
+    : /^(\d{1,2})\.(\d{1,2})\.(\d{4})$/.exec(trimmed)
+  if (!local) return null
+  return canonicalDate(Number(local[3]), Number(local[2]), Number(local[1]))
+}
+
+/** Keep a complete date in the field format and as ISO. Incomplete text stays as typed and stores nothing. */
+export function commitEditableDate(text: string, locale: Locale): { text: string; iso: string } {
+  const iso = parseEditableDate(text, locale)
+  if (!iso) return { text, iso: '' }
+  return { text: formatEditableDate(iso, locale), iso }
+}
+
+function canonicalDate(year: number, month: number, day: number): string | null {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) return null
+  const date = new Date(year, month - 1, day)
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null
+  const monthText = String(month).padStart(2, '0')
+  const dayText = String(day).padStart(2, '0')
+  return `${year}-${monthText}-${dayText}`
+}
+
 /** Time of day in 24-hour clock. Finnish `09.05`, English `09:05`. */
 export function formatTime(value: Date | string | number, locale: Locale): string {
   return formatWith(value, locale, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })

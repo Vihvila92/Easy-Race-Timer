@@ -205,5 +205,6 @@
   "preview.clockTitle": "Kello",
   "preview.clockLabel": "Esimerkkiaika",
   "preview.linksTitle": "Linkit",
-  "preview.checkTitle": "Valintaruutu"
+  "preview.checkTitle": "Valintaruutu",
+  "preview.dateTitle": "Päivä"
 }

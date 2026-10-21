@@ -205,5 +205,6 @@
   "preview.clockTitle": "Clock",
   "preview.clockLabel": "Sample time",
   "preview.linksTitle": "Links",
-  "preview.checkTitle": "Checkbox"
+  "preview.checkTitle": "Checkbox",
+  "preview.dateTitle": "Date"
 }
