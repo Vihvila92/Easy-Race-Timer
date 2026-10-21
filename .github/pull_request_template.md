@@ -18,6 +18,7 @@ Closes #
 - [ ] Title follows Conventional Commits
 - [ ] Documentation updated in this PR, if behavior changed
 - [ ] Security-sensitive change noted for the security reviewer, if any
+- [ ] UI reuses design-system components/tokens; no duplicated styles or components
 
 ## Notes
 

@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { authorize, killServer, startServer, type RunningServer } from './server.ts'
 
-const duplicate = 'Lappu 105 on jo kirjattu – merkitty tarkistettavaksi'
-const unknown = 'Lappua 9999 ei löydy – merkitty tarkistettavaksi'
+const duplicate = 'Numero 105 on jo kirjattu – merkitty tarkistettavaksi'
+const unknown = 'Numeroa 9999 ei löydy – merkitty tarkistettavaksi'
 
 test.describe('finish review warnings', () => {
   let server: RunningServer
@@ -38,6 +38,7 @@ test.describe('finish review warnings', () => {
 
     await page.goto('/')
     await page.getByTestId('nav-finish').click()
+    await expect(page.getByTestId('finish-hint')).toHaveCount(0)
     await page.getByTestId('finish-bib').fill('105')
     await page.getByTestId('finish-tap').click()
     await expect(page.getByTestId('finish-recorded')).toContainText('Aika kirjattu')

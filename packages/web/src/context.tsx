@@ -1,13 +1,17 @@
-import { translate, type Locale, type MessageKey } from '@ert/i18n'
+import { parseLocale, translate, type Locale, type MessageKey } from '@ert/i18n'
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { ApiError, api, loadWorkspace } from './api.js'
 import type { Workspace } from './types.js'
+import { parseGuidance, parseThemeChoice, resolveColorScheme, type Guidance, type ThemeChoice } from './ui/preferences.js'
 
-export type Theme = 'light' | 'dark' | 'system'
+export type Theme = ThemeChoice
+export type { Guidance }
 
 interface AppContextValue {
   locale: Locale
   setLocale: (locale: Locale) => void
+  guidance: Guidance
+  setGuidance: (guidance: Guidance) => void
   theme: Theme
   setTheme: (theme: Theme) => void
   t: (key: MessageKey, vars?: Record<string, string | number>) => string
@@ -22,26 +26,39 @@ interface AppContextValue {
 
 const AppContext = createContext<AppContextValue | null>(null)
 
-function storedTheme(): Theme {
-  const value = localStorage.getItem('ert-theme')
-  return value === 'light' || value === 'dark' || value === 'system' ? value : 'system'
+function storedLocale(): Locale {
+  const raw = localStorage.getItem('ert-locale')
+  const locale = parseLocale(raw)
+  if (raw !== null && raw !== locale) localStorage.setItem('ert-locale', locale)
+  return locale
 }
 
-function resolveTheme(theme: Theme): 'light' | 'dark' {
-  if (theme !== 'system') return theme
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+function storedGuidance(): Guidance {
+  return parseGuidance(localStorage.getItem('ert-guidance'))
+}
+
+function storedTheme(): Theme {
+  return parseThemeChoice(localStorage.getItem('ert-theme'))
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
-  const [locale, setLocaleState] = useState<Locale>(() => (localStorage.getItem('ert-locale') === 'en' ? 'en' : 'fi'))
+  const [locale, setLocaleState] = useState<Locale>(storedLocale)
+  const [guidance, setGuidanceState] = useState<Guidance>(storedGuidance)
   const [theme, setThemeState] = useState<Theme>(storedTheme)
   const [data, setData] = useState<Workspace | null>(null)
   const [needsPin, setNeedsPin] = useState(false)
   const [error, setError] = useState('')
 
   const setLocale = useCallback((next: Locale) => {
-    localStorage.setItem('ert-locale', next)
-    setLocaleState(next)
+    const locale = parseLocale(next)
+    localStorage.setItem('ert-locale', locale)
+    setLocaleState(locale)
+  }, [])
+
+  const setGuidance = useCallback((next: Guidance) => {
+    const guidance = next === 'expert' ? 'expert' : 'guided'
+    localStorage.setItem('ert-guidance', guidance)
+    setGuidanceState(guidance)
   }, [])
 
   const setTheme = useCallback((next: Theme) => {
@@ -50,12 +67,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    const resolved = resolveTheme(theme)
-    document.documentElement.dataset.theme = resolved
-    document.documentElement.lang = locale
-    document.documentElement.style.colorScheme = resolved
-    const themeColor = document.querySelector('meta[name="theme-color"]')
-    themeColor?.setAttribute('content', resolved === 'dark' ? '#000000' : '#f2f2f7')
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const apply = () => {
+      const resolved = resolveColorScheme(theme, media.matches)
+      document.documentElement.dataset.theme = resolved
+      document.documentElement.lang = locale
+      document.documentElement.style.colorScheme = resolved
+      const themeColor = document.querySelector('meta[name="theme-color"]')
+      themeColor?.setAttribute('content', resolved === 'dark' ? '#000000' : '#f2f2f7')
+    }
+    apply()
+    media.addEventListener('change', apply)
+    return () => media.removeEventListener('change', apply)
   }, [theme, locale])
 
   const reload = useCallback(async () => {
@@ -106,6 +129,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppContextValue>(() => ({
     locale,
     setLocale,
+    guidance,
+    setGuidance,
     theme,
     setTheme,
     t: (key, vars) => translate(locale, key, vars),
@@ -116,7 +141,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     error,
     clearError: () => setError(''),
     run,
-  }), [locale, setLocale, theme, setTheme, data, needsPin, reload, login, error, run])
+  }), [locale, setLocale, guidance, setGuidance, theme, setTheme, data, needsPin, reload, login, error, run])
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }

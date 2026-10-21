@@ -34,7 +34,29 @@ pnpm e2e
 
 Module boundaries are enforced by dependency-cruiser. `core` and `i18n` do not import other workspace packages. The web app does not import the server or SQLite.
 
-Add Finnish and English strings together. `pnpm check:i18n` fails if a key is missing.
+See [Strings and guided-mode hints](#strings-and-guided-mode-hints).
+
+## Strings and guided-mode hints
+
+Add every new user-visible string to both [`packages/i18n/locales/fi.json`](packages/i18n/locales/fi.json) and [`packages/i18n/locales/en.json`](packages/i18n/locales/en.json) in the same change. Placeholders use `{name}`. `pnpm check:i18n` fails when a key exists in one file but not the other, and when a key is both a leaf and a prefix of another key. Do not hard-code user-visible copy in a view.
+
+Name keys `<view>.<element>` in camelCase, for example `finish.tap`. Shared, view-independent keys stay at the top level (`action.*`, `theme.*`, `lang.*`, `nav.*`). One extra level is only for an option set (`office.offset.ranked`, `entries.consent.yes`) or a guided-mode hint (`<view>.hint.<id>`, for example `finish.hint.keys`). A group label uses its own element name (`office.ageBasisTitle`) so it is not also the prefix of those options. A key ending in `Label` is an accessible name (`finish.tapLabel`), not the visible text.
+
+The language switch lives in settings. Finnish is the default. The choice is stored in local storage and applies immediately. Only `fi` and `en` are accepted; any other stored value falls back to Finnish.
+
+Guided mode is the default. A `<view>.hint.<id>` string is shown only while guided mode is on. Write the Finnish and English hint next to the other strings for that view. Do not put the hint sentence in the component.
+
+Format dates and times with `formatDate`, `formatTime` and `formatDateTime` from `@ert/i18n` (`fi-FI` and `en-GB`). A Finnish date looks like `15.10.2026`. Store a calendar date as `YYYY-MM-DD`.
+
+## User interface
+
+Shared controls live in [`packages/web/src/ui`](packages/web/src/ui). Use them for new views: `Button` (primary, secondary, danger), `TextField`, `Select`, `Banner`, `ListRow`, `StatusBadge`, `Clock` and `HintFrame`. Colors, type and spacing are CSS variables on `:root`. `[data-theme="dark"]` replaces them. The theme follows the system setting until the user chooses light or dark. Targets are at least 44 by 44 px, and both themes meet WCAG 2.2 AA contrast.
+
+`HintFrame` renders a `<view>.hint.<id>` string in the page flow only while guided mode is on. It is not a dialog. A dev build reviews the set at `#/preview`. That route is not part of the production build.
+
+## UI modularity
+
+Build each view from the shared components and design tokens of the [design foundation](docs/adr/0011-design-foundation.md): components in [`packages/web/src/ui`](packages/web/src/ui), tokens in [`packages/web/src/styles.css`](packages/web/src/styles.css). Do not add a view-local style or component that duplicates an existing one. Do not hard-code a color, spacing value or font size where a token exists. When the same pattern appears in two or more places, extract it into a shared component.
 
 ## Data and timing
 

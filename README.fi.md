@@ -9,7 +9,7 @@ Määrittely on [`docs/MAARITTELY.md`](docs/MAARITTELY.md). English: [`README.md
 ```
 packages/core            tuloslaskenta, sarjat, virheet
 packages/people          seurat, suostumus, anonymisointi
-packages/i18n            suomi ja englanti
+packages/i18n            suomi ja englanti (`locales/fi.json`, `locales/en.json`)
 packages/sports          juoksuprofiili
 packages/timing-sources  kosketusmaali
 packages/race-formats    yhteislähtö
@@ -35,7 +35,7 @@ pnpm build
 pnpm dev:server
 ```
 
-Avaa osoite, jonka prosessi tulostaa rivillä `ERT_READY`. Kehittäjän palvelin käyttää porttia 8080 ja kansiota `./data`. Käyttöliittymä on suomeksi ja englanniksi, vaaleana ja tummana. Ilman kisaa ensimmäinen näkymä on ohjattu luonti.
+Avaa osoite, jonka prosessi tulostaa rivillä `ERT_READY`. Kehittäjän palvelin käyttää porttia 8080 ja kansiota `./data`. Käyttöliittymä on suomeksi ja englanniksi, vaaleana ja tummana. Ilman kisaa ensimmäinen näkymä on ohjattu luonti. Kehitysversiossa yhteiset komponentit katsotaan osoitteessa `#/preview`. Tuotantoversio ei rekisteröi sitä reittiä.
 
 `pnpm dev` käynnistää Vite-käyttöliittymän välityspalvelimella. Se on vain kehitysapu, eikä osoite ole mukana rakennetussa käyttöliittymässä.
 

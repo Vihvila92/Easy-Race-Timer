@@ -5,7 +5,7 @@ info:
   description: |
     Local race-day API. One laptop, organization id always `local`.
     Clients create identifiers and finish times. Errors use the shape in ERROR_CODES.md.
-    Write routes, personal-data reads, `?view=internal`, and `/runtime` from a non-loopback address require a device token (`Authorization: Bearer` or the `ert_session` cookie). `POST /api/v1/settings/pin/check` issues that token.
+    Write routes, personal-data reads, `?view=internal`, and `/ws` require a device token (`Authorization: Bearer` or the `ert_session` cookie). `/runtime` from a non-loopback address requires one too. `POST /api/v1/settings/pin/check` issues that token.
     HTML (`format=html`) is a print export, not an application page.
     `Host` must be `localhost` or `127.0.0.1` on the listen port (421 otherwise).
     A browser `Origin`, when sent, must be that same loopback origin (403 otherwise). WebSocket upgrades always require it.
@@ -760,7 +760,10 @@ paths:
     get:
       tags: [sync]
       operationId: websocket
-      description: WebSocket protocol version 1. See docs/protocol/sync-v1.md.
+      description: |
+        WebSocket protocol version 1. See docs/protocol/sync-v1.md.
+        The handshake requires a device token and a loopback Origin (401 without a valid token, 403 for a missing or foreign Origin).
+        Messages are refresh notifications: a timing-event id, race id, start kind, or correction action. They omit names, bibs, entry ids, and correction reasons.
       responses:
         '101': { description: Switching protocols }
 components:
