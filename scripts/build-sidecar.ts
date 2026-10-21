@@ -34,7 +34,8 @@ const nodeRequire = createRequire(import.meta.url)
 
 function run(command: string, args: string[]) {
   if (needsShell(command, process.platform)) {
-    execFileSync(process.env.ComSpec ?? 'cmd.exe', ['/d', '/s', '/c', windowsCommandLine(command, args)], {
+    // `cmd.exe` is looked up on PATH. The build must not take the shell path from the environment.
+    execFileSync('cmd.exe', ['/d', '/s', '/c', windowsCommandLine(command, args)], {
       cwd: root,
       stdio: 'inherit',
       windowsHide: true,
