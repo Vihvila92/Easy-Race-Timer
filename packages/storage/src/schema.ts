@@ -1,11 +1,32 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+import { randomBytes } from 'node:crypto'
 import { ageOnReference } from '@ert/core'
+import type { SqliteDatabase } from './cipher.js'
 
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 
 export interface Migration {
   version: number
-  up: (raw: import('better-sqlite3').Database) => void
+  up: (raw: SqliteDatabase) => void
+}
+
+function columnNames(raw: SqliteDatabase, table: string): Set<string> {
+  const rows = raw.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
+  return new Set(rows.map((column) => column.name))
+}
+
+interface StoredPerson {
+  id: string
+  gender: 'F' | 'M' | 'X'
+  birth_date: string | null
+  birth_year: number | null
+  publication: string
+}
+
+function peopleForPublication(raw: SqliteDatabase): StoredPerson[] {
+  const columns = columnNames(raw, 'person')
+  const birthDate = columns.has('birth_date') ? 'birth_date' : 'NULL AS birth_date'
+  return raw.prepare(`SELECT id, gender, ${birthDate}, birth_year, publication FROM person`).all() as StoredPerson[]
 }
 
 /** Applied in order when schema_meta.schema_version is behind SCHEMA_VERSION. */
@@ -28,7 +49,7 @@ export const MIGRATIONS: Migration[] = [
       } catch {
         reference = event.date_start
       }
-      const people = raw.prepare('SELECT id, gender, birth_date, birth_year, publication FROM person').all() as { id: string; gender: 'F' | 'M' | 'X'; birth_date: string | null; birth_year: number | null; publication: string }[]
+      const people = peopleForPublication(raw)
       const update = raw.prepare(`UPDATE person SET publication = 'initials' WHERE id = ? AND publication = 'full'`)
       for (const person of people) {
         if (person.publication !== 'full') continue
@@ -59,7 +80,7 @@ export const MIGRATIONS: Migration[] = [
       } catch {
         reference = event.date_start
       }
-      const people = raw.prepare('SELECT id, gender, birth_date, birth_year, publication FROM person').all() as { id: string; gender: 'F' | 'M' | 'X'; birth_date: string | null; birth_year: number | null; publication: string }[]
+      const people = peopleForPublication(raw)
       const update = raw.prepare(`UPDATE person SET publication = 'initials' WHERE id = ? AND publication = 'full'`)
       for (const person of people) {
         if (person.publication !== 'full') continue
@@ -75,14 +96,66 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    version: 4,
+    up(raw) {
+      const person = columnNames(raw, 'person')
+      if (person.has('birth_date')) {
+        raw.exec(`UPDATE person
+          SET birth_year = CAST(substr(birth_date, 1, 4) AS INTEGER)
+          WHERE birth_year IS NULL AND birth_date IS NOT NULL AND length(birth_date) >= 4`)
+        raw.exec('ALTER TABLE person DROP COLUMN birth_date')
+      }
+      const entry = columnNames(raw, 'entry')
+      if (!entry.has('consent_date')) {
+        raw.exec(`ALTER TABLE entry ADD COLUMN consent_date TEXT NOT NULL DEFAULT '1970-01-01'`)
+        raw.exec(`UPDATE entry
+          SET consent_date = strftime('%Y-%m-%d', registered_at / 1000, 'unixepoch')
+          WHERE registered_at IS NOT NULL`)
+      }
+      if (!entry.has('dsq_reason')) {
+        raw.exec('ALTER TABLE entry ADD COLUMN dsq_reason TEXT')
+      }
+      raw.exec(ACCOUNT_TABLES)
+      raw.exec('DROP TABLE IF EXISTS key_slot')
+    },
+  },
 ]
+
+/**
+ * Accounts stay in the encrypted race file.
+ * Key slots do not. #131 stores wraps in the sidecar bound to schema_meta.file_id.
+ */
+const ACCOUNT_TABLES = `
+CREATE TABLE IF NOT EXISTS user_account (
+  id TEXT PRIMARY KEY,
+  org_id TEXT NOT NULL DEFAULT 'local',
+  display_name TEXT NOT NULL,
+  email TEXT,
+  role TEXT NOT NULL CHECK (role IN ('admin', 'clerk')),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+`
+
+/** 16 CSPRNG bytes, hex-encoded. Not secret. Stable for the life of the file, including rekey. */
+export function ensureFileId(raw: SqliteDatabase, preferred?: string): string {
+  const columns = columnNames(raw, 'schema_meta')
+  if (!columns.has('file_id')) raw.exec('ALTER TABLE schema_meta ADD COLUMN file_id TEXT')
+  const row = raw.prepare('SELECT file_id FROM schema_meta WHERE id = 1').get() as { file_id: string | null } | undefined
+  if (row?.file_id && /^[0-9a-f]{32}$/.test(row.file_id)) return row.file_id
+  const fileId = preferred && /^[0-9a-f]{32}$/.test(preferred) ? preferred : randomBytes(16).toString('hex')
+  raw.prepare('UPDATE schema_meta SET file_id = ? WHERE id = 1').run(fileId)
+  return fileId
+}
 
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS schema_meta (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   schema_version INTEGER NOT NULL,
   app_version TEXT NOT NULL,
-  installation_id TEXT NOT NULL
+  installation_id TEXT NOT NULL,
+  file_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS event (
@@ -149,7 +222,6 @@ CREATE TABLE IF NOT EXISTS person (
   first_name TEXT NOT NULL,
   last_name TEXT NOT NULL,
   gender TEXT NOT NULL,
-  birth_date TEXT,
   birth_year INTEGER,
   default_club_id TEXT,
   nationality TEXT,
@@ -232,6 +304,9 @@ CREATE TABLE IF NOT EXISTS entry (
   offset_ranking TEXT NOT NULL DEFAULT 'inherit',
   status TEXT NOT NULL DEFAULT 'registered',
   status_reason TEXT,
+  -- Internal. Export and print must not select dsq_reason. See INTERNAL_COLUMNS.
+  dsq_reason TEXT,
+  consent_date TEXT NOT NULL,
   race_change_note TEXT,
   warnings_json TEXT,
   result_order INTEGER,
@@ -333,4 +408,6 @@ CREATE TABLE IF NOT EXISTS sync_state (
   last_seq INTEGER NOT NULL,
   PRIMARY KEY (device_id, from_device_id)
 );
+
+${ACCOUNT_TABLES}
 `

@@ -34,7 +34,7 @@ import {
   type PrivacyEntrant,
 } from '@ert/people'
 import { massStart } from '@ert/race-formats'
-import { AppDb, ORG_ID, SCHEMA_VERSION, type Row } from '@ert/storage'
+import { AppDb, ORG_ID, SCHEMA_VERSION, deleteQuarantinedPlaintext, omitInternal, type Row } from '@ert/storage'
 import { ERTX_FORMAT_VERSION, packErtx } from '@ert/sync'
 import { previewErtx, readErtx, replaceFromErtx } from './ertx-import.js'
 import { touchButton } from '@ert/timing-sources'
@@ -81,7 +81,19 @@ interface EntryRow {
   start_offset_reason: string | null; offset_ranking: string; status: string; status_reason: string | null; race_change_note: string | null
   warnings_json: string | null; result_order: number | null; reg_seq: number; registered_at: number
 }
-interface PersonRow { id: string; first_name: string; last_name: string; gender: string; birth_date: string | null; birth_year: number | null; email: string | null; phone: string | null }
+interface PersonRow { id: string; first_name: string; last_name: string; gender: string; birth_year: number | null; email: string | null; phone: string | null }
+
+/** Year taken from an in-memory date. The date itself is not stored. */
+function yearOf(birthDate: string | null): number | null {
+  if (!birthDate || birthDate.length < 4) return null
+  const year = Number(birthDate.slice(0, 4))
+  return Number.isInteger(year) ? year : null
+}
+
+/** Calendar day of registration, from the server clock. The client does not send it. */
+function consentDate(nowMs: number): string {
+  return new Date(nowMs).toISOString().slice(0, 10)
+}
 interface ClubRow { id: string; abbreviation: string | null; name: string; municipality: string | null; official_id: string | null; status: 'active' | 'pending' | 'merged'; merged_into_id: string | null; source: string }
 interface TimingRow { id: string; race_id: string; timing_point_id: string; device_id: string; seq_no: number; source: string; device_time_ms: number; monotonic_ms: number | null; time_ms: number; bib: number | null; entry_id: string | null; mode: string | null; raw_json: string | null; created_at: number }
 interface CorrectionRow { id: string; target_type: string; target_id: string; action: string; old_value_json: string | null; new_value_json: string | null; reason: string; by_device_id: string | null; hlc: string; created_at: number }
@@ -391,10 +403,11 @@ export class RaceService {
     categoryId: string | null; warnings: CategoryWarning[]; consent: boolean; givenBy?: 'self' | 'guardian'
     channel: string; late: boolean; now: number; hlc: string
   }) {
+    const storedYear = input.birthYear ?? yearOf(input.birthDate)
     const dupBib = this.db.get('SELECT id FROM entry WHERE race_id = ? AND bib = ?', input.raceId, input.bib)
     if (dupBib) throw new AppError('BIB_IN_USE', `Bib ${input.bib} is already used`)
-    if (input.birthYear != null) {
-      const dup = this.db.get('SELECT id FROM person WHERE org_id = ? AND lower(first_name) = lower(?) AND lower(last_name) = lower(?) AND birth_year = ?', ORG_ID, input.firstName, input.lastName, input.birthYear)
+    if (storedYear != null) {
+      const dup = this.db.get('SELECT id FROM person WHERE org_id = ? AND lower(first_name) = lower(?) AND lower(last_name) = lower(?) AND birth_year = ?', ORG_ID, input.firstName, input.lastName, storedYear)
       if (dup) throw new AppError('ENTRY_EXISTS', 'Person already exists for this race identity')
     }
     const personId = createId()
@@ -410,9 +423,9 @@ export class RaceService {
       this.settings().age_basis,
     )
     this.db.run(
-      `INSERT INTO person (id, org_id, first_name, last_name, gender, birth_date, birth_year, email, default_club_id, created_at, updated_at, hlc, publication)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      personId, ORG_ID, input.firstName, input.lastName, input.gender, input.birthDate, input.birthYear, input.email, input.clubId, input.now, input.now, input.hlc, publication,
+      `INSERT INTO person (id, org_id, first_name, last_name, gender, birth_year, email, default_club_id, created_at, updated_at, hlc, publication)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      personId, ORG_ID, input.firstName, input.lastName, input.gender, storedYear, input.email, input.clubId, input.now, input.now, input.hlc, publication,
     )
     const givenBy = input.givenBy ?? ((age != null && age < 13) ? 'guardian' : 'self')
     this.db.run(
@@ -422,10 +435,10 @@ export class RaceService {
     )
     this.db.run(
       `INSERT INTO entry (id, org_id, race_id, person_id, category_id, category_source, bib, registered_at, late_registration, club_id, club_raw, club_abbr_raw,
-        display_name, birth_year_at_entry, gender_at_entry, start_offset_ms, offset_ranking, status, warnings_json, reg_seq, created_at, updated_at, hlc)
-       VALUES (?, ?, ?, ?, ?, 'auto', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'inherit', 'registered', ?, ?, ?, ?, ?)`,
+        display_name, birth_year_at_entry, gender_at_entry, start_offset_ms, offset_ranking, status, warnings_json, reg_seq, created_at, updated_at, hlc, consent_date)
+       VALUES (?, ?, ?, ?, ?, 'auto', ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'inherit', 'registered', ?, ?, ?, ?, ?, ?)`,
       entryId, ORG_ID, input.raceId, personId, input.categoryId, input.bib, input.now, input.late ? 1 : 0, input.clubId, input.clubRaw, input.clubAbbrRaw,
-      `${input.lastName} ${input.firstName}`, input.birthYear, input.gender, JSON.stringify(input.warnings), reg, input.now, input.now, input.hlc,
+      `${input.lastName} ${input.firstName}`, storedYear, input.gender, JSON.stringify(input.warnings), reg, input.now, input.now, input.hlc, consentDate(input.now),
     )
     this.bus.emit('ConsentChanged', { personId, granted: input.consent })
     return entryId
@@ -438,7 +451,7 @@ export class RaceService {
       if (!person || entry.anonymized_at) return null
       const suggestion = this.suggestFor({
         gender: person.gender as 'F' | 'M' | 'X',
-        birthDate: person.birth_date,
+        birthDate: null,
         birthYear: person.birth_year,
       }, entry.race_id, basis)
       return {
@@ -464,7 +477,7 @@ export class RaceService {
         if (entry.category_source === 'manual' || !entry.person_id || entry.anonymized_at) continue
         const person = this.db.get<PersonRow>('SELECT * FROM person WHERE id = ?', entry.person_id)
         if (!person) continue
-        const suggestion = this.suggestFor({ gender: person.gender as 'F' | 'M' | 'X', birthDate: person.birth_date, birthYear: person.birth_year }, entry.race_id, basis)
+        const suggestion = this.suggestFor({ gender: person.gender as 'F' | 'M' | 'X', birthDate: null, birthYear: person.birth_year }, entry.race_id, basis)
         this.db.run('UPDATE entry SET category_id = ?, warnings_json = ?, updated_at = ?, rev = rev + 1, hlc = ? WHERE id = ?',
           suggestion.categoryId || null, JSON.stringify(suggestion.warnings), now, hlc, entry.id)
       }
@@ -644,8 +657,12 @@ export class RaceService {
     }
     const { now, hlc } = this.stamp()
     this.db.tx(() => {
-      this.db.run('UPDATE entry SET status = ?, status_reason = ?, updated_at = ?, rev = rev + 1, hlc = ? WHERE id = ?', status, reason, now, hlc, entry.id)
-      this.correct('entry', entry.id, 'set_status', reason, { status: entry.status }, { status })
+      if (status === 'dsq') {
+        this.db.run('UPDATE entry SET status = ?, status_reason = NULL, dsq_reason = ?, updated_at = ?, rev = rev + 1, hlc = ? WHERE id = ?', status, reason, now, hlc, entry.id)
+      } else {
+        this.db.run('UPDATE entry SET status = ?, status_reason = ?, dsq_reason = NULL, updated_at = ?, rev = rev + 1, hlc = ? WHERE id = ?', status, reason, now, hlc, entry.id)
+      }
+      this.correct('entry', entry.id, 'set_status', status === 'dsq' ? 'set_status:dsq' : reason, { status: entry.status }, { status })
     })
   }
 
@@ -669,7 +686,7 @@ export class RaceService {
     this.assertUnlocked(target.id)
     const person = entry.person_id ? this.db.get<PersonRow>('SELECT * FROM person WHERE id = ?', entry.person_id) : undefined
     if (!person) throw new AppError('NOT_FOUND', 'Person missing')
-    const suggestion = this.suggestFor({ gender: person.gender as 'F' | 'M' | 'X', birthDate: person.birth_date, birthYear: person.birth_year }, target.id)
+    const suggestion = this.suggestFor({ gender: person.gender as 'F' | 'M' | 'X', birthDate: null, birthYear: person.birth_year }, target.id)
     if (!suggestion.categoryId) {
       throw new AppError('NO_MATCHING_CATEGORY', formatWarnings(suggestion.warnings, 'fi'), { warnings: suggestion.warnings })
     }
@@ -1249,6 +1266,16 @@ export class RaceService {
     return this.db.all<CorrectionRow>('SELECT * FROM correction ORDER BY created_at, id')
   }
 
+  /**
+   * Overwrite quarantined plaintext files and record the count.
+   * The correction row has the count only. It does not name the files.
+   */
+  deletePlaintextQuarantine(): { deleted: string[] } {
+    const deleted = deleteQuarantinedPlaintext(this.db.filePath)
+    this.correct('database', 'plaintext-quarantine', 'plaintext_quarantine_delete', `deleted ${deleted.length}`, null, { count: deleted.length })
+    return { deleted }
+  }
+
   consents() {
     return this.db.all<Row>('SELECT * FROM consent ORDER BY recorded_at')
   }
@@ -1337,14 +1364,15 @@ export class RaceService {
   private clearPerson(person: PersonRow, nowMs: number) {
     const names = [`${person.last_name} ${person.first_name}`, `${person.first_name} ${person.last_name}`]
     const emails = person.email ? [person.email] : []
-    const dates = person.birth_date ? [person.birth_date] : []
+    const dates: string[] = []
     const bibs: number[] = []
     const entries = this.db.all<EntryRow>('SELECT * FROM entry WHERE person_id = ?', person.id)
     for (const entry of entries) {
       if (entry.bib != null) bibs.push(entry.bib)
       this.db.run(
         `UPDATE entry SET person_id = NULL, display_name = NULL, birth_year_at_entry = NULL, bib = NULL, club_raw = NULL, club_abbr_raw = NULL,
-         anonymized_at = ?, status_reason = CASE WHEN status_reason IS NULL THEN NULL ELSE '[poistettu]' END, updated_at = ? WHERE id = ?`,
+         anonymized_at = ?, status_reason = CASE WHEN status_reason IS NULL THEN NULL ELSE '[poistettu]' END,
+         dsq_reason = CASE WHEN dsq_reason IS NULL THEN NULL ELSE '[poistettu]' END, updated_at = ? WHERE id = ?`,
         nowMs, nowMs, entry.id,
       )
       this.db.run('UPDATE timing_event SET bib = NULL WHERE entry_id = ?', entry.id)
@@ -1358,13 +1386,13 @@ export class RaceService {
     if (!event) return
     const settings = this.settings()
     const reference = settings.age_reference_date || event.date_start
-    const people = this.db.all<{ id: string; gender: 'F' | 'M' | 'X'; birth_date: string | null; birth_year: number | null; publication: string }>(
-      'SELECT id, gender, birth_date, birth_year, publication FROM person',
+    const people = this.db.all<{ id: string; gender: 'F' | 'M' | 'X'; birth_year: number | null; publication: string }>(
+      'SELECT id, gender, birth_year, publication FROM person',
     )
     for (const person of people) {
       if (person.publication !== 'full') continue
       const level = defaultPublication(
-        { gender: person.gender, birthDate: person.birth_date, birthYear: person.birth_year },
+        { gender: person.gender, birthDate: null, birthYear: person.birth_year },
         reference,
         settings.age_basis,
       )
@@ -1399,7 +1427,7 @@ export class RaceService {
   exportPerson(personId: string) {
     const person = this.db.get<PersonRow>('SELECT * FROM person WHERE id = ?', personId)
     if (!person) throw new AppError('NOT_FOUND', 'Person not found')
-    const entries = this.db.all<EntryRow>('SELECT * FROM entry WHERE person_id = ?', personId)
+    const entries = this.db.all<EntryRow>('SELECT * FROM entry WHERE person_id = ?', personId).map((entry) => omitInternal('entry', entry))
     const consents = this.db.all<Row>('SELECT * FROM consent WHERE person_id = ?', personId)
     return { person, entries, consents }
   }

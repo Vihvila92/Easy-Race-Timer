@@ -14,7 +14,7 @@ packages/sports          juoksuprofiili
 packages/timing-sources  kosketusmaali
 packages/race-formats    yhteislähtö
 packages/exporters       CSV ja A4-tuloste
-packages/storage         SQLite
+packages/storage         salattu SQLite (SQLCipher)
 packages/sync            .ertx
 packages/server          Fastify, composition root
 packages/web             React-PWA
@@ -30,7 +30,7 @@ Tarvitaan Node.js 22 ja pnpm 10.33. Nämä komennot ovat kehittäjälle. Seuran 
 
 ```bash
 pnpm install
-pnpm rebuild better-sqlite3 esbuild
+pnpm rebuild esbuild
 pnpm build
 pnpm dev:server
 ```
@@ -39,7 +39,7 @@ Avaa osoite, jonka prosessi tulostaa rivillä `ERT_READY`. Kehittäjän palvelin
 
 `pnpm dev` käynnistää Vite-käyttöliittymän välityspalvelimella. Se on vain kehitysapu, eikä osoite ole mukana rakennetussa käyttöliittymässä.
 
-`pnpm start` ilman muuttujia käyttäytyy kuin tuleva työpöytäkuori: vapaa paikallinen portti ja käyttöjärjestelmän käyttäjähakemisto.
+`pnpm dev:server` lukee tiedoston `config/dev.env`, jossa `ERT_DEV_KEY=1` sallii julkisen kehitysavaimen. Sitä ei käytetä oikeaan kisaan. `pnpm start` ei lue tätä tiedostoa eikä avaa kisatiedostoa ilman tietokanta-avainta.
 
 ## Työpöytäsovellus (Tauri, kehittäjäversio)
 

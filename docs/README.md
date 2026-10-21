@@ -8,7 +8,7 @@ Nykyinen ohjelma on Easy Race Timer v0.1: yksi kannettava, SQLite, React-PWA.
 | [roadmap.md](roadmap.md) | Tiekartta. Julkaisuputki rakentaa allekirjoittamattomat asentimet. |
 | [release.md](release.md) | Julkaisun tarkistus englanniksi: tarkistussummat, attestaatiot, Gatekeeper, SmartScreen. |
 | [release.fi.md](release.fi.md) | Sama suomeksi. |
-| [adr/](adr/) | Päätökset 0001–0011: SQLite, append-only-ajanotto, moduulirajat, offline, lisenssi, henkilö ja suostumus, seurat, anonymisointi, API, työpöytäsovellus, käyttöliittymän pohja. |
+| [adr/](adr/) | Päätökset 0001–0012 ja 0014: SQLite, append-only-ajanotto, moduulirajat, offline, lisenssi, henkilö ja suostumus, seurat, anonymisointi, API, työpöytäsovellus, käyttöliittymän pohja, SPDX-otsikot ja lähdekoodilinkki, salattu kisatiedosto. |
 | [api/ERROR_CODES.md](api/ERROR_CODES.md) | Virhekoodit ja HTTP-statukset. |
 | [api/openapi.yaml](api/openapi.yaml) | REST-sopimus v0.1. |
 | [protocol/sync-v1.md](protocol/sync-v1.md) | WebSocket `proto=1` ja `.ertx`. |

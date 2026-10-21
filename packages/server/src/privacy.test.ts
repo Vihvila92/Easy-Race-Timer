@@ -116,7 +116,6 @@ describe('public results privacy', () => {
       first_name: 'Vanha',
       last_name: 'Arkisto',
       gender: 'M',
-      birth_date: null,
       birth_year: null,
       publication: 'full',
       created_at: 1,

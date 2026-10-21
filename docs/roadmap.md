@@ -16,7 +16,7 @@ Kuori voi jäädä ohueksi, koska nämä ovat jo voimassa:
 
 - Selainikkuna ja API ovat sama origin. Käyttöliittymä kutsuu vain suhteellisia polkuja `/api` ja `/ws`. Siihen ei ole kirjoitettu konetta eikä porttia.
 - Jos `PORT` puuttuu, prosessi varaa vapaan paikallisen portin ja tulostaa yhden rivin: `ERT_READY {"url","dataDir","dbPath"}`. Kuori lukee rivin ja avaa ikkunan siihen osoitteeseen.
-- Tiedot ovat käyttöjärjestelmän käyttäjähakemistossa (`ERT_DATA_DIR` tai `ERT_DB` voi ohittaa sen). SQLite-tiedosto on `ert.sqlite`. Varmuuskopio kirjoitetaan `backups/`-kansioon viiden minuutin välein.
+- Tiedot ovat käyttöjärjestelmän käyttäjähakemistossa (`ERT_DATA_DIR` tai `ERT_DB` voi ohittaa sen). Kisatiedosto `ert.sqlite` on salattu SQLCipher-tiedosto. Varmuuskopio on sama salattu tiedosto ja se kirjoitetaan `backups/`-kansioon viiden minuutin välein.
 - Ensimmäinen näkymä on kolmen vaiheen ohjattu kisan luonti: nimi ja päivä, matkat, vahvistus. Sen jälkeen ohjelma ohjaa ilmoittautumisten tuontiin.
 - Kehittäjän `pnpm`-komennot jäävät tähän repoon. Ne eivät ole seuralaisen polku.
 
@@ -34,4 +34,4 @@ Päätös: [adr/0010-tyopoytasovellus.md](adr/0010-tyopoytasovellus.md).
 
 The open-source app is for club volunteers. The release workflow builds unsigned installers for Windows, macOS and Linux. Paid signing, notarization and the server sidecar come later. Verification: [release.md](release.md).
 
-The shell can stay thin. The UI uses same-origin relative URLs only. With `PORT` unset, the process binds a free local port and prints `ERT_READY` plus the URL and data directory. Data is an SQLite file in the OS user-data directory, with backups every five minutes. The first screen is a three-step wizard that creates the race. Volunteers do not use a terminal, Docker, or a separate server install.
+The shell can stay thin. The UI uses same-origin relative URLs only. With `PORT` unset, the process binds a free local port and prints `ERT_READY` plus the URL and data directory. Data is an encrypted SQLCipher file in the OS user-data directory, with encrypted backups every five minutes. The first screen is a three-step wizard that creates the race. Volunteers do not use a terminal, Docker, or a separate server install.

@@ -18,6 +18,8 @@ export async function startServer(port: number, dbFile: string): Promise<Running
       ...process.env,
       PORT: String(port),
       HOST: '127.0.0.1',
+      NODE_ENV: 'test',
+      ERT_DEV_KEY: '1',
       ERT_TEST_MODE: '1',
       ERT_DB: dbFile,
       ERT_WEB_DIST: path.join(root, 'packages/web/dist'),

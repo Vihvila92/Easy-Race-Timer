@@ -22,7 +22,7 @@ Commit messages and pull request titles follow [Conventional Commits](https://ww
 
 ```bash
 pnpm install
-pnpm rebuild better-sqlite3 esbuild
+pnpm rebuild esbuild
 pnpm lint
 pnpm depcruise
 pnpm check:i18n

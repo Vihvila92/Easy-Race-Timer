@@ -7,5 +7,10 @@ export default defineConfig({
     environment: 'node',
     testTimeout: 120000,
     hookTimeout: 120000,
+    env: {
+      NODE_ENV: 'test',
+      ERT_DEV_KEY: '1',
+      SQLITE_USE_URI: '1',
+    },
   },
 })
