@@ -5,13 +5,19 @@ import type { FastifyInstance } from 'fastify'
 import { describe, expect, it } from 'vitest'
 import { openDatabase } from '@ert/storage'
 import { createApp } from './app.js'
-import { issueToken, sessionSecret } from './session.js'
+import { issueToken, SESSION_TTL_SECONDS, sessionSecret, tokenExpiry } from './session.js'
+
+interface CloseInfo {
+  code: number
+  reason: string
+}
 
 interface Handshake {
   status: number
   body: string
   frames: string[]
   waitFor: (count: number) => Promise<void>
+  waitForClose: () => Promise<CloseInfo>
   close: () => void
 }
 
@@ -54,6 +60,7 @@ function connect(app: FastifyInstance, headers: Record<string, string | undefine
           body: Buffer.concat(chunks).toString('utf8'),
           frames: [],
           waitFor: async () => { throw new Error('connection was not upgraded') },
+          waitForClose: async () => { throw new Error('connection was not upgraded') },
           close: () => undefined,
         })
       })
@@ -66,13 +73,27 @@ function liveSocket(status: number, socket: Socket, head: Buffer): Handshake {
   const frames: string[] = []
   let buffer = Buffer.from(head)
   let pending: { count: number; done: () => void } | null = null
+  let closed: CloseInfo | null = null
+  let closePending: ((info: CloseInfo) => void) | null = null
+  const finishClose = (info: CloseInfo) => {
+    if (closed) return
+    closed = info
+    closePending?.(info)
+    closePending = null
+  }
   const take = () => {
     while (buffer.length >= 2) {
       const length = buffer[1] & 0x7f
       if (length >= 126) throw new Error('unexpected long websocket frame')
       if (buffer.length < 2 + length) return
       const opcode = buffer[0] & 0x0f
-      if (opcode === 0x1) frames.push(buffer.subarray(2, 2 + length).toString('utf8'))
+      const payload = buffer.subarray(2, 2 + length)
+      if (opcode === 0x1) frames.push(payload.toString('utf8'))
+      if (opcode === 0x8) {
+        const code = payload.length >= 2 ? payload.readUInt16BE(0) : 1005
+        const reason = payload.length > 2 ? payload.subarray(2).toString('utf8') : ''
+        finishClose({ code, reason })
+      }
       buffer = buffer.subarray(2 + length)
       if (pending && frames.length >= pending.count) {
         const current = pending
@@ -84,6 +105,9 @@ function liveSocket(status: number, socket: Socket, head: Buffer): Handshake {
   socket.on('data', (chunk: Buffer) => {
     buffer = Buffer.concat([buffer, chunk])
     take()
+  })
+  socket.on('end', () => {
+    if (!closed) finishClose({ code: 1006, reason: '' })
   })
   take()
   return {
@@ -100,6 +124,16 @@ function liveSocket(status: number, socket: Socket, head: Buffer): Handshake {
             clearTimeout(timer)
             resolve()
           },
+        }
+      })
+    },
+    waitForClose() {
+      if (closed) return Promise.resolve(closed)
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('timed out waiting for close')), 5000)
+        closePending = (info) => {
+          clearTimeout(timer)
+          resolve(info)
         }
       })
     },
@@ -228,6 +262,34 @@ describe('/ws handshake', () => {
       expect(wire).not.toContain(reason)
       expect(wire).not.toContain('90421')
       expect(wire).not.toContain(entry?.id ?? 'missing-entry')
+    } finally {
+      for (const socket of opened) socket.close()
+      await app.close()
+      db.raw.close()
+    }
+  })
+
+  it('closes an open socket when the device token expires', async () => {
+    const db = await openDatabase(':memory:')
+    const { app } = await createApp({ db, testMode: true })
+    const opened: Handshake[] = []
+    try {
+      await app.listen({ port: 0, host: '127.0.0.1' })
+      const secret = sessionSecret(db)
+      const lifetimeMs = 1500
+      const token = issueToken(secret, Date.now() - SESSION_TTL_SECONDS * 1000 + lifetimeMs)
+      expect(tokenExpiry(secret, token)).toBeGreaterThan(Date.now())
+      expect(tokenExpiry(secret, issueToken(secret, 0))).toBeNull()
+
+      const socket = await connect(app, { authorization: `Bearer ${token}` })
+      opened.push(socket)
+      expect(socket.status).toBe(101)
+      await socket.waitFor(1)
+      expect(JSON.parse(socket.frames[0])).toEqual({ type: 'device.status', payload: { proto: 1 } })
+      const closed = await socket.waitForClose()
+      expect(closed.code).toBe(4401)
+      expect(closed.reason).toBe('expired')
+      expect(closed.reason).not.toContain(token)
     } finally {
       for (const socket of opened) socket.close()
       await app.close()
