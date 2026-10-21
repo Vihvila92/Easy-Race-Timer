@@ -45,7 +45,7 @@ Avaa osoite, jonka prosessi tulostaa rivillä `ERT_READY`. Kehittäjän palvelin
 
 `src-tauri/` on pienin mahdollinen Tauri 2 -kuori rakennetun käyttöliittymän (`packages/web/dist`) ympärillä. Siinä ei ole omia komentoja, ja sillä on vain `core:default`-oikeus. Node-palvelin sidecarina (ADR 0010) ja päivittäjä (#136) tulevat myöhemmin, joten ikkuna näyttää toistaiseksi käyttöliittymän ilman taustapalvelua.
 
-Vaatimukset: Rust (stable) ja Linuxilla `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `librsvg2-dev` ja `libayatana-appindicator3-dev`. Windowsin ja macOS:n vaatimukset löytyvät Taurin ohjeesta.
+Vaatimukset: Rust 1.90 tai uudempi (CI asentaa 1.90.0) ja Linuxilla `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `librsvg2-dev` ja `libayatana-appindicator3-dev`. Windowsin ja macOS:n vaatimukset löytyvät Taurin ohjeesta.
 
 ```sh
 pnpm install
@@ -53,7 +53,7 @@ pnpm tauri dev                            # ikkuna, jossa Viten pikapäivitys
 pnpm tauri build --bundles appimage,deb   # Linux: AppImage + .deb
 ```
 
-Pakettimuodot: Windows `msi` ja `nsis`, macOS universal `dmg` (ad-hoc-allekirjoitus, ei notarisointia), Linux `appimage` ja `deb`. Asentimet ovat allekirjoittamattomia. Julkaisuversiot tekee julkaisuputki (#153), ei `check`-ajo.
+Pakettimuodot: Windows `msi` ja `nsis`, macOS universal `dmg` (ad-hoc-allekirjoitus, ei notarisointia), Linux `appimage` ja `deb`. Maksullista Applen tai Windowsin varmennetta ei ole. Release-työnkulku rakentaa asentimet ja `v*`-tagista GitHub-julkaisun. Pakollinen `check`-ajo ei rakenna asenninta. Tarkistus, Gatekeeper ja SmartScreen: [docs/release.fi.md](docs/release.fi.md).
 
 ## Testit
 
@@ -68,7 +68,7 @@ pnpm e2e
 
 ## Tiekartta
 
-v0.1 on tässä repossa. Seuraava seuralaiselle näkyvä julkaisu on allekirjoitettu yhden napsautuksen asennin. Sitä ei ole vielä tehty. [docs/roadmap.md](docs/roadmap.md). Päätökset: [`docs/adr/`](docs/adr/).
+v0.1 on tässä repossa. Tagattu julkaisu julkaisee allekirjoittamattomat asentimet Windowsille, macOS:lle ja Linuxille ([docs/release.fi.md](docs/release.fi.md)). Maksullinen allekirjoitus ja palvelimen sidecar tulevat myöhemmin. [docs/roadmap.md](docs/roadmap.md). Päätökset: [`docs/adr/`](docs/adr/).
 
 ## Osallistuminen
 

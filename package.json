@@ -25,6 +25,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.2",
+    "@cyclonedx/cdxgen": "12.8.6",
     "@eslint/js": "^9.36.0",
     "@playwright/test": "^1.56.1",
     "@tauri-apps/cli": "^2.12.3",
