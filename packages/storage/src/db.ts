@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import './sqlite-uri.js'
 import { randomBytes } from 'node:crypto'
 import fs from 'node:fs'

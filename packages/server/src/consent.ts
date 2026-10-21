@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { z } from 'zod'
 import { AppError, createId, type AgeInput } from '@ert/core'
 import { CONSENT_TEXT_VERSION, consentAge, validateConsentActor } from '@ert/people'

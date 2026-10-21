@@ -18,4 +18,4 @@ Jokaisessa juuritaulussa on `org_id`. v0.1:ssä arvo on aina `'local'`. SQL pide
 - Yksi komento käynnistää kisan. Selain avataan samalla koneella, joten PWA toimii ilman TLS-sertifikaattia.
 - Kuitattu painallus on levyllä ennen HTTP-vastausta. Tämä testataan `kill -9`:llä.
 - Lähiverkko ja Postgres eivät kuulu v0.1:een.
-- Tiedoston salaus, avain ja migraation atomisuus on päätetty ADR 0012:ssa. Tämä päätös kuvaa edelleen yhden prosessin, WAL-tilan ja `synchronous=FULL`.
+- Tiedoston salaus, avain ja migraation atomisuus on päätetty ADR 0014:ssa. Tämä päätös kuvaa edelleen yhden prosessin, WAL-tilan ja `synchronous=FULL`.

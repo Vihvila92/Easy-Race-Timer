@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import js from '@eslint/js'
 import tseslint from 'typescript-eslint'
 
@@ -13,6 +14,8 @@ export default tseslint.config(
       'playwright-report/**',
       'test-results/**',
       'coverage/**',
+      'src-tauri/target/**',
+      'src-tauri/gen/**',
     ],
   },
   js.configs.recommended,

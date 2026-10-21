@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import './sqlite-uri.js'
 import fs from 'node:fs'
 import path from 'node:path'

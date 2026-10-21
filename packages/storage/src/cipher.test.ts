@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import './sqlite-uri.js'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { spawn, spawnSync } from 'node:child_process'

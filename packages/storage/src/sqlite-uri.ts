@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 /**
  * The SQLCipher binding turns on URI filenames only when SQLITE_USE_URI is "1"
  * at addon load (sqlite3_config before the library is initialized).

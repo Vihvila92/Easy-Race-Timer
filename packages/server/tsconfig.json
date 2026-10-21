@@ -1,7 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "baseUrl": ".",
     "paths": {
       "better-sqlite3-multiple-ciphers": ["../storage/node_modules/better-sqlite3-multiple-ciphers/index.d.ts"]
     }

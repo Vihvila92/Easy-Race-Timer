@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 export type Access = 'public' | 'protected' | 'local'
 
 /** Routes that answer without a device token. Anything not listed is refused. */

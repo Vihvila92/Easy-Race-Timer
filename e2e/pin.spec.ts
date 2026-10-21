@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { expect, test } from '@playwright/test'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -32,6 +33,8 @@ test.describe('admin PIN', () => {
 
     await page.goto('/')
     await expect(page.getByTestId('pin-gate')).toBeVisible()
+    const source = await page.getByTestId('source-link').getAttribute('href')
+    expect(source).toMatch(/^https:\/\/github\.com\/Vihvila92\/Easy-Race-Timer\/(commit\/[0-9a-f]{40}|tree\/[A-Za-z0-9._-]+)$/)
     await page.getByTestId('pin-input').fill('0000')
     await page.getByTestId('pin-submit').click()
     await expect(page.getByTestId('form-error')).toContainText('PIN_REQUIRED')

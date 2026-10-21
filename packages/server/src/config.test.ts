@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { assertCanListen, resolveDataDir, resolveDbPath, resolveListenPort } from './config.js'

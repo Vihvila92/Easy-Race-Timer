@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-only */
 :root {
   color-scheme: light;
   --bg: #f2f2f7;
@@ -204,7 +205,6 @@ th { font-size: 0.8rem; color: var(--secondary); font-weight: 600; }
 .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .muted { color: var(--secondary); }
 .footer { margin-top: 28px; color: var(--secondary); font-size: 0.9rem; }
-.footer a { display: inline-flex; align-items: center; min-height: var(--target); min-width: var(--target); }
 .queue-note { font-variant-numeric: tabular-nums; }
 @media (max-width: 800px) {
   .shell { grid-template-columns: minmax(0, 1fr); }

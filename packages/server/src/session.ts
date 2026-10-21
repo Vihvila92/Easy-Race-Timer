@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import type { AppDb } from '@ert/storage'
 
@@ -22,6 +23,17 @@ export function issueToken(secret: string, now = Date.now()): string {
   return `${body}.${sig}`
 }
 
+function tokenPayload(token: string): { exp?: number } | null {
+  const dot = token.indexOf('.')
+  if (dot <= 0) return null
+  try {
+    const payload = JSON.parse(Buffer.from(token.slice(0, dot), 'base64url').toString()) as { exp?: number }
+    return payload && typeof payload === 'object' ? payload : null
+  } catch {
+    return null
+  }
+}
+
 export function verifyToken(secret: string, token: string | undefined, now = Date.now()): boolean {
   if (!token) return false
   const dot = token.indexOf('.')
@@ -32,16 +44,31 @@ export function verifyToken(secret: string, token: string | undefined, now = Dat
   const left = Buffer.from(sig)
   const right = Buffer.from(expected)
   if (left.length !== right.length || !timingSafeEqual(left, right)) return false
-  try {
-    const payload = JSON.parse(Buffer.from(body, 'base64url').toString()) as { exp?: number }
-    return typeof payload.exp === 'number' && payload.exp > now
-  } catch {
-    return false
-  }
+  const payload = tokenPayload(token)
+  return typeof payload?.exp === 'number' && payload.exp > now
+}
+
+/** Expiry of a token that is valid at `now`, or null when the token is missing, forged, or already expired. */
+export function tokenExpiry(secret: string, token: string | undefined, now = Date.now()): number | null {
+  if (!token || !verifyToken(secret, token, now)) return null
+  const exp = tokenPayload(token)?.exp
+  return typeof exp === 'number' ? exp : null
 }
 
 export function sessionCookie(token: string): string {
   return `${SESSION_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_TTL_SECONDS}`
+}
+
+function sessionCookieValue(cookie: string): string | undefined {
+  const match = new RegExp(`(?:^|;\\s*)${SESSION_COOKIE}=([^;]*)`).exec(cookie)
+  const raw = match?.[1]
+  if (!raw) return undefined
+  try {
+    return decodeURIComponent(raw)
+  } catch {
+    // A truncated or non-decodable cookie is not a token. Callers treat that as anonymous.
+    return undefined
+  }
 }
 
 export function tokenFromRequest(headers: { authorization?: string; cookie?: string }): string | undefined {
@@ -52,6 +79,5 @@ export function tokenFromRequest(headers: { authorization?: string; cookie?: str
   }
   const cookie = headers.cookie
   if (!cookie) return undefined
-  const match = new RegExp(`(?:^|;\\s*)${SESSION_COOKIE}=([^;]+)`).exec(cookie)
-  return match?.[1] ? decodeURIComponent(match[1]) : undefined
+  return sessionCookieValue(cookie)
 }

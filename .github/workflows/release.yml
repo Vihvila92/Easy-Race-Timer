@@ -1,0 +1,463 @@
+# Builds unsigned Tauri installers for a dry run (workflow_dispatch) and
+# publishes a GitHub Release for a pushed v* tag.
+#
+# Rust 1.90.0 is Tauri 2.12's minimum and is above the 1.89 floor.
+# macOS ad-hoc signing is signingIdentity "-" in src-tauri/tauri.conf.json.
+# Installer jobs pack unsigned updater archives (.app.tar.gz, .AppImage.tar.gz,
+# .nsis.zip, .msi.zip) and never see the updater private key. createUpdaterArtifacts
+# stays off so `tauri build` does not sign inside the build. The sign job, and
+# only that job, runs on a v* tag push and reads the private key from the
+# release GitHub environment. The public key is plugins.updater.pubkey.
+# A dry run does not use that environment and does not create a release.
+name: Release
+
+permissions:
+  contents: read
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  installers:
+    name: installers (${{ matrix.platform }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            os: ubuntu-22.04
+            bundles: appimage,deb
+            target: ""
+          - platform: macos
+            os: macos-15
+            # app keeps the .app. A dmg-only bundle deletes it, and the updater archive is that .app.
+            bundles: app,dmg
+            target: universal-apple-darwin
+          - platform: windows
+            os: windows-2022
+            bundles: msi,nsis
+            target: ""
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 10.33.4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: ${{ github.ref_type != 'tag' && 'pnpm' || '' }}
+          package-manager-cache: ${{ github.ref_type != 'tag' && 'true' || 'false' }}
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master @ 2026-10-09
+        with:
+          toolchain: "1.90.0"
+      - name: Add macOS universal targets
+        if: matrix.platform == 'macos'
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - name: Install Linux bundle dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2
+      # The desktop bundle only builds the web UI. better-sqlite3 is the Node
+      # server's native module and has no Visual Studio toolchain on this job.
+      - name: Install JavaScript dependencies
+        run: |
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm rebuild esbuild
+      - name: Build Tauri bundles
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          set -euo pipefail
+          overlay="${RUNNER_TEMP}/tauri-overlay.json"
+          pnpm exec tsx scripts/release-assets.ts overlay --out "$overlay"
+          args=(build --bundles "${{ matrix.bundles }}" --config "$overlay")
+          if [[ -n "${{ matrix.target }}" ]]; then
+            args+=(--target "${{ matrix.target }}")
+          fi
+          pnpm exec tauri "${args[@]}"
+      - name: Pack unsigned updater archives
+        run: pnpm exec tsx scripts/release-assets.ts pack --target src-tauri/target --platform ${{ matrix.platform }}
+      - name: Collect installers
+        run: pnpm exec tsx scripts/release-assets.ts collect --target src-tauri/target --dest dist --platform ${{ matrix.platform }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: installers-${{ matrix.platform }}
+          path: dist/
+          if-no-files-found: error
+
+  sbom:
+    name: sbom
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 10.33.4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: ${{ github.ref_type != 'tag' && 'pnpm' || '' }}
+          package-manager-cache: ${{ github.ref_type != 'tag' && 'true' || 'false' }}
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master @ 2026-10-09
+        with:
+          toolchain: "1.90.0"
+      - name: Install JavaScript dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: CycloneDX SBOM from the pnpm lockfile
+        run: |
+          set -euo pipefail
+          mkdir -p sbom
+          pnpm exec cdxgen -t pnpm -o sbom/sbom-npm.cdx.json --spec-version 1.6 --no-install-deps --author "Easy Race Timer contributors" .
+          node --input-type=module -e "import {readFileSync} from 'node:fs'; const bom=JSON.parse(readFileSync('sbom/sbom-npm.cdx.json','utf8')); if (bom.bomFormat!=='CycloneDX') process.exit(1)"
+      - name: CycloneDX SBOM from Cargo.lock
+        run: |
+          set -euo pipefail
+          cargo install cargo-cyclonedx --version 0.5.9 --locked
+          cargo cyclonedx --manifest-path src-tauri/Cargo.toml --format json --override-filename sbom-cargo --spec-version 1.5
+          if [[ -f src-tauri/sbom-cargo.cdx.json ]]; then
+            mv src-tauri/sbom-cargo.cdx.json sbom/sbom-cargo.cdx.json
+          elif [[ -f src-tauri/sbom-cargo.json ]]; then
+            mv src-tauri/sbom-cargo.json sbom/sbom-cargo.cdx.json
+          else
+            echo "cargo-cyclonedx did not write an SBOM" >&2
+            exit 1
+          fi
+          node --input-type=module -e "import {readFileSync} from 'node:fs'; const bom=JSON.parse(readFileSync('sbom/sbom-cargo.cdx.json','utf8')); if (bom.bomFormat!=='CycloneDX') process.exit(1)"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom
+          path: sbom/
+          if-no-files-found: error
+
+  # Tag pushes only. The private key exists solely in this job, from the
+  # release environment. This job does not install the repository's dependencies.
+  sign:
+    name: sign
+    needs: installers
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    environment: release
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Require the tag commit on main
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # The token stays in the environment. It is not a git argument.
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0=http.extraheader
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: bearer ${GITHUB_TOKEN}"
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: Reject a placeholder updater public key
+        run: node --experimental-strip-types scripts/release-assets.ts assert-pubkey
+      - name: Install the official Tauri CLI
+        working-directory: tools/tauri-signer
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: installers-*
+          path: unsigned
+          merge-multiple: true
+      - name: Sign updater archives
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          umask 077
+          signer="$GITHUB_WORKSPACE/tools/tauri-signer/node_modules/.bin/tauri"
+          tag="$GITHUB_REF_NAME"
+          version="${tag#v}"
+          nonce="$RUNNER_TEMP/updater-nonce.bin"
+          head -c 64 /dev/urandom > "$nonce"
+          "$signer" signer sign "$nonce" --app-version "$version"
+          node --experimental-strip-types scripts/release-assets.ts verify-signature --file "$nonce" --sig "$nonce.sig"
+          rm -f "$nonce" "$nonce.sig"
+          mkdir -p signatures
+          found=0
+          while IFS= read -r -d '' file; do
+            found=1
+            "$signer" signer sign "$file" --app-version "$version"
+            cp "${file}.sig" "signatures/$(basename "${file}.sig")"
+          done < <(find unsigned -type f \( -name '*.tar.gz' -o -name '*.nsis.zip' -o -name '*.msi.zip' \) -print0)
+          if [[ "$found" != 1 ]]; then
+            echo "No updater archives to sign" >&2
+            exit 1
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: updater-signatures
+          path: signatures/
+          if-no-files-found: error
+
+  bundle:
+    name: bundle
+    needs: [installers, sbom, sign]
+    if: always() && needs.installers.result == 'success' && needs.sbom.result == 'success' && (needs.sign.result == 'success' || needs.sign.result == 'skipped')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 10.33.4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: ${{ github.ref_type != 'tag' && 'pnpm' || '' }}
+          package-manager-cache: ${{ github.ref_type != 'tag' && 'true' || 'false' }}
+      - name: Install JavaScript dependencies
+        run: |
+          pnpm install --frozen-lockfile --ignore-scripts
+          pnpm rebuild esbuild
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          pattern: "*"
+          path: release
+          merge-multiple: true
+      - name: Write latest.json and checksums
+        run: |
+          set -euo pipefail
+          pnpm exec tsx scripts/release-assets.ts latest --dir release
+          pnpm exec tsx scripts/release-assets.ts checksums --dir release
+          args=(scripts/release-assets.ts assert --dir release)
+          if [[ "${GITHUB_EVENT_NAME}" == "push" && "${GITHUB_REF}" == refs/tags/v* ]]; then
+            args+=(--updater)
+          fi
+          pnpm exec tsx "${args[@]}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-assets
+          path: release/
+          if-no-files-found: error
+
+  publish:
+    name: publish
+    needs: bundle
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: release-assets
+          path: release
+      # Every release asset: installers, updater archives, .sig files,
+      # latest.json, checksums.txt and both SBOMs.
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            release/*.msi
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+            release/*.deb
+            release/*.tar.gz
+            release/*.zip
+            release/*.sig
+            release/latest.json
+            release/checksums.txt
+            release/sbom-npm.cdx.json
+            release/sbom-cargo.cdx.json
+      # Subjects are the installers and updater archives, not the SBOM files.
+      - uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-path: |
+            release/*.msi
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+            release/*.deb
+            release/*.tar.gz
+            release/*.zip
+          sbom-path: release/sbom-npm.cdx.json
+      - uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-path: |
+            release/*.msi
+            release/*.exe
+            release/*.dmg
+            release/*.AppImage
+            release/*.deb
+            release/*.tar.gz
+            release/*.zip
+          sbom-path: release/sbom-cargo.cdx.json
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag="$GITHUB_REF_NAME"
+          version="${tag#v}"
+          notes=$(cat <<'EOF'
+          Easy Race Timer VERSION
+
+          The installers are not notarized and do not use a paid Windows code-signing certificate.
+          On macOS, if Gatekeeper blocks the app, right-click it and choose Open.
+          On Windows, if SmartScreen appears, choose More info, then Run anyway.
+
+          Verify the download:
+
+              gh release download "TAG" --repo Vihvila92/Easy-Race-Timer
+              sha256sum -c checksums.txt
+              gh attestation verify FILE --repo Vihvila92/Easy-Race-Timer --signer-workflow Vihvila92/Easy-Race-Timer/.github/workflows/release.yml --source-ref "refs/tags/TAG"
+              gh attestation verify INSTALLER --repo Vihvila92/Easy-Race-Timer --signer-workflow Vihvila92/Easy-Race-Timer/.github/workflows/release.yml --source-ref "refs/tags/TAG" --predicate-type https://cyclonedx.org/bom
+
+          See docs/release.md in the repository.
+          EOF
+          )
+          notes="${notes//VERSION/$version}"
+          notes="${notes//TAG/$tag}"
+          printf '%s\n' "$notes" > release-notes.md
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release ${tag} already exists. Refusing to replace published assets." >&2
+            exit 1
+          fi
+          # Fail closed before anything is published. A placeholder pubkey or a bad .sig stops the release.
+          node --experimental-strip-types scripts/release-assets.ts verify-signatures --dir release
+          gh release create "$tag" release/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Easy Race Timer ${tag}" \
+            --notes-file release-notes.md
+
+  verify:
+    name: verify
+    needs: publish
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      attestations: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+      - name: Download the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$GITHUB_REF_NAME"
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir assets --clobber
+      - name: Check checksums
+        run: |
+          cd assets
+          sha256sum -c checksums.txt
+      - name: Verify updater signatures
+        run: node --experimental-strip-types scripts/release-assets.ts verify-signatures --dir assets
+      - name: Verify attestations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          tag="$GITHUB_REF_NAME"
+          verify_one() {
+            local asset="$1"
+            shift
+            local ok=0
+            local _attempt
+            for _attempt in 1 2 3 4 5 6; do
+              if gh attestation verify "$asset" \
+                --repo Vihvila92/Easy-Race-Timer \
+                --signer-workflow Vihvila92/Easy-Race-Timer/.github/workflows/release.yml \
+                --source-ref "refs/tags/${tag}" \
+                "$@"; then
+                ok=1
+                break
+              fi
+              sleep 15
+            done
+            if [[ "$ok" != 1 ]]; then
+              echo "Attestation check failed for $asset" >&2
+              exit 1
+            fi
+          }
+          files=(
+            assets/*.msi assets/*.exe assets/*.dmg assets/*.AppImage assets/*.deb
+            assets/*.tar.gz assets/*.zip assets/*.sig assets/latest.json
+            assets/checksums.txt assets/sbom-npm.cdx.json assets/sbom-cargo.cdx.json
+          )
+          if [[ "${#files[@]}" -eq 0 ]]; then
+            echo "No release assets were downloaded" >&2
+            exit 1
+          fi
+          for required in assets/latest.json assets/checksums.txt assets/sbom-npm.cdx.json assets/sbom-cargo.cdx.json; do
+            if [[ ! -f "$required" ]]; then
+              echo "Missing $required" >&2
+              exit 1
+            fi
+          done
+          sigs=(assets/*.sig)
+          archives=(assets/*.tar.gz assets/*.zip)
+          if [[ "${#sigs[@]}" -eq 0 || "${#archives[@]}" -eq 0 ]]; then
+            echo "Updater signatures or archives are missing" >&2
+            exit 1
+          fi
+          for asset in "${files[@]}"; do
+            verify_one "$asset"
+          done
+          bom=(
+            assets/*.msi assets/*.exe assets/*.dmg assets/*.AppImage assets/*.deb
+            assets/*.tar.gz assets/*.zip
+          )
+          if [[ "${#bom[@]}" -eq 0 ]]; then
+            echo "No installer or updater archive for the SBOM attestation" >&2
+            exit 1
+          fi
+          for asset in "${bom[@]}"; do
+            verify_one "$asset" --predicate-type https://cyclonedx.org/bom
+          done

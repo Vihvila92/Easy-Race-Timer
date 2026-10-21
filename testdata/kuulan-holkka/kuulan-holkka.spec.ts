@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 // Luonnos: Playwright-E2E Kuulan hölkälle. Tiedosto siirretään polkuun e2e/kuulan-holkka.spec.ts, kun web-sovellus on olemassa.
 // Valitsimet (data-testid) sovitaan toteutuksessa; tämä kuvaa testin rakenteen ja tarkistukset.
 import { test, expect } from '@playwright/test';

@@ -1,8 +1,11 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { parseLocale, translate, type Locale, type MessageKey } from '@ert/i18n'
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ApiError, api, loadWorkspace } from './api.js'
+import { LiveSession, openLiveSocket } from './live-session.js'
 import type { Workspace } from './types.js'
 import { parseGuidance, parseThemeChoice, resolveColorScheme, type Guidance, type ThemeChoice } from './ui/preferences.js'
+import { unreachableDetail, validateWorkspaceResponse } from './workspace.js'
 
 export type Theme = ThemeChoice
 export type { Guidance }
@@ -17,6 +20,7 @@ interface AppContextValue {
   t: (key: MessageKey, vars?: Record<string, string | number>) => string
   data: Workspace | null
   needsPin: boolean
+  unreachable: boolean
   reload: () => Promise<void>
   login: (pin: string) => Promise<void>
   error: string
@@ -41,13 +45,22 @@ function storedTheme(): Theme {
   return parseThemeChoice(localStorage.getItem('ert-theme'))
 }
 
+function healthHasPin(health: unknown): boolean {
+  if (typeof health !== 'object' || health === null || !('pinConfigured' in health)) return false
+  return Boolean((health as { pinConfigured?: unknown }).pinConfigured)
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(storedLocale)
   const [guidance, setGuidanceState] = useState<Guidance>(storedGuidance)
   const [theme, setThemeState] = useState<Theme>(storedTheme)
   const [data, setData] = useState<Workspace | null>(null)
+  const dataRef = useRef<Workspace | null>(null)
   const [needsPin, setNeedsPin] = useState(false)
+  const [unreachable, setUnreachable] = useState(false)
+  const [authenticated, setAuthenticated] = useState(false)
   const [error, setError] = useState('')
+  const sessionRef = useRef<LiveSession | null>(null)
 
   const setLocale = useCallback((next: Locale) => {
     const locale = parseLocale(next)
@@ -82,17 +95,33 @@ export function AppProvider({ children }: { children: ReactNode }) {
   }, [theme, locale])
 
   const reload = useCallback(async () => {
-    const health = await api<{ pinConfigured: boolean }>('/api/v1/health')
-    if (!health.pinConfigured) {
-      await api('/api/v1/settings/pin/check', { method: 'POST', body: '{}' })
-    }
     try {
-      setData(await loadWorkspace())
+      const health: unknown = await api('/api/v1/health')
+      if (!healthHasPin(health)) {
+        await api('/api/v1/settings/pin/check', { method: 'POST', body: '{}' })
+      }
+      const body: unknown = await loadWorkspace()
+      const result = validateWorkspaceResponse(body)
+      if (!result.ok) throw new ApiError('VALIDATION_ERROR', unreachableDetail(body))
+      dataRef.current = result.workspace
+      setData(result.workspace)
       setNeedsPin(false)
+      setUnreachable(false)
+      setAuthenticated(true)
     } catch (caught) {
       if (caught instanceof ApiError && caught.code === 'PIN_REQUIRED') {
+        dataRef.current = null
         setData(null)
         setNeedsPin(true)
+        setUnreachable(false)
+        setAuthenticated(false)
+        return
+      }
+      console.error('Race program is unreachable', caught instanceof Error ? caught : unreachableDetail(caught))
+      const failure = validateWorkspaceResponse(caught)
+      if (!failure.ok && dataRef.current == null) {
+        setUnreachable(true)
+        setAuthenticated(false)
         return
       }
       throw caught
@@ -106,13 +135,38 @@ export function AppProvider({ children }: { children: ReactNode }) {
       await reload()
     } catch (caught) {
       setNeedsPin(true)
+      setAuthenticated(false)
       setError(caught instanceof ApiError ? caught.code : 'VALIDATION_ERROR')
     }
   }, [reload])
 
   useEffect(() => {
-    reload().catch(() => setError('VALIDATION_ERROR'))
+    reload().catch(() => undefined)
   }, [reload])
+
+  useEffect(() => {
+    if (!authenticated) {
+      sessionRef.current?.stop()
+      sessionRef.current = null
+      return
+    }
+    const session = new LiveSession({
+      open: openLiveSocket,
+      onExpired: () => {
+        dataRef.current = null
+        setData(null)
+        setNeedsPin(true)
+        setUnreachable(false)
+        setAuthenticated(false)
+      },
+    })
+    sessionRef.current = session
+    session.start()
+    return () => {
+      session.stop()
+      if (sessionRef.current === session) sessionRef.current = null
+    }
+  }, [authenticated])
 
   const run = useCallback(async <T,>(fn: () => Promise<T>) => {
     setError('')
@@ -136,12 +190,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     t: (key, vars) => translate(locale, key, vars),
     data,
     needsPin,
+    unreachable,
     reload,
     login,
     error,
     clearError: () => setError(''),
     run,
-  }), [locale, setLocale, guidance, setGuidance, theme, setTheme, data, needsPin, reload, login, error, run])
+  }), [locale, setLocale, guidance, setGuidance, theme, setTheme, data, needsPin, unreachable, reload, login, error, run])
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }

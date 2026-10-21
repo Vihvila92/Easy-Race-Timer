@@ -1,4 +1,4 @@
-# ADR 0012: Encrypted race file
+# ADR 0014: Encrypted race file
 
 - Status: accepted for phase 1
 - Date: 2026-10-21

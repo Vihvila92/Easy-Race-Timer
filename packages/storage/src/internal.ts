@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 /**
  * Columns that stay inside the encrypted file.
  * Export, print and .ertx snapshots must not select them.

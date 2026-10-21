@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import path from 'node:path'
 import { existsSync } from 'node:fs'
 import Fastify, { type FastifyInstance } from 'fastify'
@@ -9,7 +10,7 @@ import { AppError, errorBody, resultProjection } from '@ert/core'
 import { AppDb, plaintextQuarantinePending } from '@ert/storage'
 import { isLoopbackAddress, routeAccess } from './access.js'
 import { allowedOriginsFromEnv, hostAllowed, jsonContentType, originAllowed } from './guard.js'
-import { issueToken, sessionCookie, sessionSecret, tokenFromRequest, verifyToken } from './session.js'
+import { issueToken, sessionCookie, sessionSecret, tokenExpiry, tokenFromRequest, verifyToken } from './session.js'
 import { Clock, RaceService } from './service.js'
 
 export interface DiscoveredRoute {
@@ -62,7 +63,17 @@ export async function createApp(options: AppOptions): Promise<{ app: FastifyInst
     const cookie = Array.isArray(request.headers.cookie) ? request.headers.cookie[0] : request.headers.cookie
     return verifyToken(secret, tokenFromRequest({ authorization: header, cookie }))
   }
-  const sockets = new Set<{ send: (data: string) => void }>()
+  type LiveSocket = {
+    send: (data: string) => void
+    close: (code?: number, reason?: string) => void
+    on: (event: 'close', listener: () => void) => void
+  }
+  const sockets = new Set<LiveSocket>()
+  const expiryTimers = new Set<ReturnType<typeof setTimeout>>()
+  app.addHook('onClose', async () => {
+    for (const timer of expiryTimers) clearTimeout(timer)
+    expiryTimers.clear()
+  })
   service.bus.on('TimingEventRecorded', (payload) => broadcast('timing_event.created', payload))
   service.bus.on('CorrectionApplied', (payload) => broadcast('correction.created', payload))
   service.bus.on('ResultsInvalidated', (payload) => broadcast('results.updated', payload))
@@ -366,10 +377,28 @@ export async function createApp(options: AppOptions): Promise<{ app: FastifyInst
 
   app.register(websocket)
   app.register(async (instance) => {
-    instance.get('/ws', { websocket: true }, (socket) => {
+    instance.get('/ws', { websocket: true }, (socket, request) => {
+      const authorization = typeof request.headers.authorization === 'string' ? request.headers.authorization : undefined
+      const cookie = typeof request.headers.cookie === 'string' ? request.headers.cookie : undefined
+      const exp = tokenExpiry(secret, tokenFromRequest({ authorization, cookie }))
+      // Handshake already rejected an invalid token. Close if it expired in the gap.
+      if (exp == null) {
+        socket.close(4401, 'expired')
+        return
+      }
       sockets.add(socket)
+      const timer = setTimeout(() => {
+        expiryTimers.delete(timer)
+        sockets.delete(socket)
+        socket.close(4401, 'expired')
+      }, Math.max(0, exp - Date.now()))
+      expiryTimers.add(timer)
+      socket.on('close', () => {
+        clearTimeout(timer)
+        expiryTimers.delete(timer)
+        sockets.delete(socket)
+      })
       socket.send(JSON.stringify({ type: 'device.status', payload: { proto: 1 } }))
-      socket.on('close', () => sockets.delete(socket))
     })
   })
 

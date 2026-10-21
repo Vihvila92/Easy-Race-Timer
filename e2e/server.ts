@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { spawn, type ChildProcess } from 'node:child_process'
 import path from 'node:path'
 import type { APIRequestContext } from '@playwright/test'

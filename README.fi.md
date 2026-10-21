@@ -35,11 +35,25 @@ pnpm build
 pnpm dev:server
 ```
 
-Avaa osoite, jonka prosessi tulostaa rivillä `ERT_READY`. Kehittäjän palvelin käyttää porttia 8080 ja kansiota `./data`. Käyttöliittymä on suomeksi ja englanniksi, vaaleana ja tummana. Ilman kisaa ensimmäinen näkymä on ohjattu luonti. Kehitysversiossa yhteiset komponentit katsotaan osoitteessa `#/preview`. Tuotantoversio ei rekisteröi sitä reittiä.
+Avaa osoite, jonka prosessi tulostaa rivillä `ERT_READY`. Kehittäjän palvelin käyttää porttia 8080 ja kansiota `./data`. Käyttöliittymä on suomeksi ja englanniksi, vaaleana ja tummana. Ilman kisaa ensimmäinen näkymä on ohjattu luonti. Jos ajanotto-ohjelmaan ei saada yhteyttä, näkymä kertoo sen valitulla kielellä ja tarjoaa painikkeen Yritä uudelleen. Kehitysversiossa yhteiset komponentit katsotaan osoitteessa `#/preview`. Tuotantoversio ei rekisteröi sitä reittiä.
 
 `pnpm dev` käynnistää Vite-käyttöliittymän välityspalvelimella. Se on vain kehitysapu, eikä osoite ole mukana rakennetussa käyttöliittymässä.
 
 `pnpm dev:server` lukee tiedoston `config/dev.env`, jossa `ERT_DEV_KEY=1` sallii julkisen kehitysavaimen. Sitä ei käytetä oikeaan kisaan. `pnpm start` ei lue tätä tiedostoa eikä avaa kisatiedostoa ilman tietokanta-avainta.
+
+## Työpöytäsovellus (Tauri, kehittäjäversio)
+
+`src-tauri/` on pienin mahdollinen Tauri 2 -kuori rakennetun käyttöliittymän (`packages/web/dist`) ympärillä. Siinä ei ole omia komentoja, ja sillä on vain `core:default`-oikeus. Node-palvelin sidecarina (ADR 0010) ja päivittäjä (#136) tulevat myöhemmin, joten ikkuna näyttää toistaiseksi käyttöliittymän ilman taustapalvelua.
+
+Vaatimukset: Rust 1.90 tai uudempi (CI asentaa 1.90.0) ja Linuxilla `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `librsvg2-dev` ja `libayatana-appindicator3-dev`. Windowsin ja macOS:n vaatimukset löytyvät Taurin ohjeesta.
+
+```sh
+pnpm install
+pnpm tauri dev                            # ikkuna, jossa Viten pikapäivitys
+pnpm tauri build --bundles appimage,deb   # Linux: AppImage + .deb
+```
+
+Pakettimuodot: Windows `msi` ja `nsis`, macOS universal `dmg` (ad-hoc-allekirjoitus, ei notarisointia), Linux `appimage` ja `deb`. Maksullista Applen tai Windowsin varmennetta ei ole. Release-työnkulku rakentaa asentimet ja `v*`-tagista GitHub-julkaisun. Pakollinen `check`-ajo ei rakenna asenninta. Tarkistus, Gatekeeper ja SmartScreen: [docs/release.fi.md](docs/release.fi.md).
 
 ## Testit
 
@@ -54,7 +68,7 @@ pnpm e2e
 
 ## Tiekartta
 
-v0.1 on tässä repossa. Seuraava seuralaiselle näkyvä julkaisu on allekirjoitettu yhden napsautuksen asennin. Sitä ei ole vielä tehty. [docs/roadmap.md](docs/roadmap.md). Päätökset: [`docs/adr/`](docs/adr/).
+v0.1 on tässä repossa. Tagattu julkaisu julkaisee allekirjoittamattomat asentimet Windowsille, macOS:lle ja Linuxille ([docs/release.fi.md](docs/release.fi.md)). Maksullinen allekirjoitus ja palvelimen sidecar tulevat myöhemmin. [docs/roadmap.md](docs/roadmap.md). Päätökset: [`docs/adr/`](docs/adr/).
 
 ## Osallistuminen
 

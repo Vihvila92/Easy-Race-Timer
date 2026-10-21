@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { strFromU8, strToU8, unzip, zipSync } from 'fflate'
 
 export const ERTX_FORMAT_VERSION = 1

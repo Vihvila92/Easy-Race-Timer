@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 /**
  * Child process for power-loss tests. The parent sends SIGKILL while this process waits.
  * Usage: node --import tsx packages/storage/src/kill-fixture.ts <migrate|save|encrypt-encrypting|encrypt-aside|encrypt-renamed> <directory>
