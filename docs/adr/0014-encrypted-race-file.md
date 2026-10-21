@@ -10,7 +10,7 @@ The race file holds names, emails, consent and, later, user accounts. A USB copy
 
 ## Decision
 
-One file, `ert.sqlite`, is a SQLCipher database opened with `better-sqlite3-multiple-ciphers` 13.0.3 (MIT, SQLite 3.53.4, SQLite3 Multiple Ciphers 2.4.0). The package ships prebuilt binaries. The app does not compile SQLCipher in CI.
+One file, `ert.sqlite`, is a SQLCipher database opened with `better-sqlite3-multiple-ciphers` 13.0.3 (MIT, SQLite 3.53.4, SQLite3 Multiple Ciphers 2.4.0). The package ships prebuilt binaries for development and tests. The desktop sidecar release build compiles the module again for each target architecture, including both macOS slices.
 
 The cipher is pinned before the key is set:
 

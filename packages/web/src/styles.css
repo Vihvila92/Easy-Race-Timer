@@ -205,6 +205,7 @@ th { font-size: 0.8rem; color: var(--secondary); font-weight: 600; }
 .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .muted { color: var(--secondary); }
 .footer { margin-top: 28px; color: var(--secondary); font-size: 0.9rem; }
+.print-frame { width: 100%; min-height: 70vh; border: 1px solid var(--line); border-radius: 16px; background: white; }
 .queue-note { font-variant-numeric: tabular-nums; }
 @media (max-width: 800px) {
   .shell { grid-template-columns: minmax(0, 1fr); }

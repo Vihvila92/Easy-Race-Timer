@@ -4,10 +4,9 @@
   "version": "0.1.0",
   "identifier": "fi.easyracetimer.app",
   "build": {
-    "frontendDist": "../packages/web/dist",
-    "devUrl": "http://localhost:5173",
-    "beforeDevCommand": "pnpm --filter @ert/web dev",
-    "beforeBuildCommand": "pnpm --filter @ert/web build"
+    "frontendDist": "shell",
+    "beforeDevCommand": "pnpm build:sidecar",
+    "beforeBuildCommand": "pnpm build:sidecar"
   },
   "app": {
     "withGlobalTauri": false,
@@ -18,11 +17,12 @@
         "width": 1200,
         "height": 800,
         "minWidth": 375,
-        "minHeight": 600
+        "minHeight": 600,
+        "visible": false
       }
     ],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ipc: http://ipc.localhost; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
+      "csp": "default-src 'none'; style-src 'self'",
       "freezePrototype": true
     }
   },
@@ -46,7 +46,8 @@
     },
     "linux": {
       "deb": { "section": "utils" }
-    }
+    },
+    "externalBin": ["binaries/ert-server"]
   },
   "plugins": {
     "updater": {

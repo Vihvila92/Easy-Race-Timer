@@ -3,13 +3,15 @@ import path from 'node:path'
 import { existsSync } from 'node:fs'
 import Fastify, { type FastifyInstance } from 'fastify'
 import { z } from 'zod'
+import helmet from '@fastify/helmet'
 import rateLimit from '@fastify/rate-limit'
 import fastifyStatic from '@fastify/static'
 import websocket from '@fastify/websocket'
 import { AppError, errorBody, resultProjection } from '@ert/core'
 import { AppDb, plaintextQuarantinePending } from '@ert/storage'
 import { isLoopbackAddress, routeAccess } from './access.js'
-import { allowedOriginsFromEnv, hostAllowed, jsonContentType, originAllowed } from './guard.js'
+import { allowedOriginsFromEnv, desktopHostAllowed, desktopOriginAllowed, hostAllowed, jsonContentType, originAllowed } from './guard.js'
+import { launchCookie, launchCredentialMatches, redactRequestUrl, type LaunchCodes } from './launch-auth.js'
 import { issueToken, sessionCookie, sessionSecret, tokenExpiry, tokenFromRequest, verifyToken } from './session.js'
 import { Clock, RaceService } from './service.js'
 
@@ -40,6 +42,10 @@ export interface AppOptions {
   /** Consistent backup. Lock, retention and import wait for it. */
   backup?: (reason: string) => Promise<unknown>
   rateLimit?: RateLimitSettings
+  /** Set when the shell passed a launch token on stdin. Static files stay open. */
+  launch?: { token: string; codes: LaunchCodes }
+  /** Test hook for the production request log. */
+  logStream?: NodeJS.WritableStream
 }
 
 export async function createApp(options: AppOptions): Promise<{ app: FastifyInstance; service: RaceService; clock: Clock; discovered: DiscoveredRoute[] }> {
@@ -47,7 +53,32 @@ export async function createApp(options: AppOptions): Promise<{ app: FastifyInst
   const service = new RaceService(options.db, clock)
   const secret = sessionSecret(options.db)
   const discovered: DiscoveredRoute[] = []
-  const app = Fastify({ logger: options.testMode ? false : { level: 'info' } })
+  const app = Fastify({
+    logger: options.testMode && !options.logStream
+      ? false
+      : {
+          level: 'info',
+          stream: options.logStream,
+          serializers: {
+            req(request: { method: string; url: string }) {
+              return { method: request.method, url: redactRequestUrl(request.url) }
+            },
+          },
+        },
+  })
+  // Helmet's default policy would add upgrade-insecure-requests. This server is
+  // plain HTTP on loopback, so that directive would break the UI and the API.
+  await app.register(helmet, {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        connectSrc: ["'self'"],
+        frameAncestors: ["'none'"],
+        upgradeInsecureRequests: null,
+      },
+    },
+    referrerPolicy: { policy: 'no-referrer' },
+  })
   const globalMax = options.rateLimit?.globalMax ?? DEFAULT_GLOBAL_MAX
   const strictMax = options.rateLimit?.strictMax ?? DEFAULT_STRICT_MAX
   const recordingMax = options.rateLimit?.recordingMax ?? DEFAULT_RECORDING_MAX
@@ -91,19 +122,30 @@ export async function createApp(options: AppOptions): Promise<{ app: FastifyInst
     }
   })
 
+  const desktop = Boolean(options.launch)
   app.addHook('onRequest', async (request, reply) => {
     const address = app.server.address()
     const listenPort = typeof address === 'object' && address ? address.port : null
-    if (!hostAllowed(request.headers.host, listenPort)) {
+    const hostOk = desktop
+      ? desktopHostAllowed(request.headers.host, listenPort)
+      : hostAllowed(request.headers.host, listenPort)
+    if (!hostOk) {
       return reply.status(421).send({ error: { code: 'VALIDATION_ERROR', message: 'Host not allowed' } })
     }
     const extras = allowedOriginsFromEnv()
     const origin = typeof request.headers.origin === 'string' ? request.headers.origin : undefined
-    // Origin is enforced in preHandler. Rejecting the upgrade here skips the websocket
-    // plugin's onRequest hook, so its onResponse hook never destroys the socket.
+    // Origin for /ws is enforced in preHandler, before the route handler upgrades.
+    // A reply in this hook would skip the websocket plugin's onRequest hook.
     if (request.headers.upgrade?.toLowerCase() === 'websocket' || request.url.split('?')[0] === '/ws') return
+    const originOk = desktop
+      ? desktopOriginAllowed(origin, listenPort)
+      : originAllowed(origin, listenPort, extras)
     if (request.method === 'GET' || request.method === 'HEAD' || request.method === 'OPTIONS') return
-    if (origin && !originAllowed(origin, listenPort, extras)) {
+    if (desktop) {
+      if (!originOk) {
+        return reply.status(403).send({ error: { code: 'VALIDATION_ERROR', message: 'Origin not allowed' } })
+      }
+    } else if (origin && !originOk) {
       return reply.status(403).send({ error: { code: 'VALIDATION_ERROR', message: 'Origin not allowed' } })
     }
     if (!jsonContentType(request.headers['content-type'])) {
@@ -137,11 +179,20 @@ export async function createApp(options: AppOptions): Promise<{ app: FastifyInst
       const address = app.server.address()
       const listenPort = typeof address === 'object' && address ? address.port : null
       const origin = typeof request.headers.origin === 'string' ? request.headers.origin : undefined
-      if (!originAllowed(origin, listenPort, allowedOriginsFromEnv())) {
+      const originOk = desktop
+        ? desktopOriginAllowed(origin, listenPort)
+        : originAllowed(origin, listenPort, allowedOriginsFromEnv())
+      if (!originOk) {
         return reply.status(403).send({ error: { code: 'VALIDATION_ERROR', message: 'Origin not allowed' } })
       }
     }
     if (!url || (!url.startsWith('/api/') && url !== '/ws')) return
+    if (options.launch && !launchCredentialMatches(options.launch.token, {
+      authorization: headerValue(request.headers.authorization),
+      cookie: headerValue(request.headers.cookie),
+    })) {
+      return reply.status(401).send({ error: { code: 'VALIDATION_ERROR', message: 'Unauthorized' } })
+    }
     const method = request.method === 'HEAD' ? 'GET' : request.method
     const access = routeAccess(method, url)
     if (!access) {
@@ -375,11 +426,35 @@ export async function createApp(options: AppOptions): Promise<{ app: FastifyInst
     return { ok: true }
   })
 
+  if (options.launch) {
+    const launch = options.launch
+    app.get('/auth', async (request, reply) => {
+      reply.header('cache-control', 'no-store')
+      const query = request.query as { code?: unknown }
+      const presented = typeof query.code === 'string' ? query.code : ''
+      if (!launch.codes.consume(presented)) {
+        return reply.status(404).send({ error: { code: 'NOT_FOUND', message: 'Not found' } })
+      }
+      reply.header('set-cookie', launchCookie(launch.token))
+      return reply.redirect('/')
+    })
+  }
+
   app.register(websocket)
   app.register(async (instance) => {
     instance.get('/ws', { websocket: true }, (socket, request) => {
-      const authorization = typeof request.headers.authorization === 'string' ? request.headers.authorization : undefined
-      const cookie = typeof request.headers.cookie === 'string' ? request.headers.cookie : undefined
+      const authorization = headerValue(request.headers.authorization)
+      const cookie = headerValue(request.headers.cookie)
+      if (options.launch) {
+        if (!launchCredentialMatches(options.launch.token, { authorization, cookie })) {
+          socket.close()
+          return
+        }
+        sockets.add(socket)
+        socket.send(JSON.stringify({ type: 'device.status', payload: { proto: 1 } }))
+        socket.on('close', () => sockets.delete(socket))
+        return
+      }
       const exp = tokenExpiry(secret, tokenFromRequest({ authorization, cookie }))
       // Handshake already rejected an invalid token. Close if it expired in the gap.
       if (exp == null) {
@@ -425,6 +500,10 @@ export async function createApp(options: AppOptions): Promise<{ app: FastifyInst
   }
 
   return { app, service, clock, discovered }
+}
+
+function headerValue(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value
 }
 
 const clockBody = z.object({ at: z.string().nullable().optional() })

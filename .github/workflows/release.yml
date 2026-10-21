@@ -22,7 +22,8 @@ on:
 
 concurrency:
   group: release-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'workflow_dispatch' }}
+  # A tag push must finish. workflow_dispatch replaces an older run on the same ref.
+  cancel-in-progress: ${{ github.event_name != 'push' || github.ref_type != 'tag' }}
 
 defaults:
   run:
@@ -60,7 +61,7 @@ jobs:
           version: 10.33.4
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: "22.23.3"
           cache: ${{ github.ref_type != 'tag' && 'pnpm' || '' }}
           package-manager-cache: ${{ github.ref_type != 'tag' && 'true' || 'false' }}
       - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master @ 2026-10-09
@@ -74,12 +75,50 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2
-      # The desktop bundle only builds the web UI. better-sqlite3 is the Node
-      # server's native module and has no Visual Studio toolchain on this job.
+      # --ignore-scripts skips lifecycle scripts. esbuild's binary comes from
+      # pnpm rebuild. build:sidecar compiles better-sqlite3-multiple-ciphers
+      # with node-gyp for the target, and on macOS once for each universal slice.
       - name: Install JavaScript dependencies
         run: |
           pnpm install --frozen-lockfile --ignore-scripts
           pnpm rebuild esbuild
+      # This step runs before `tauri build`, which is what normally sets
+      # TAURI_ENV_TARGET_TRIPLE. macOS must pass universal-apple-darwin here
+      # so the sidecar is both slices, not only the runner's arm64 host.
+      - name: Build the Node sidecar
+        env:
+          TAURI_ENV_TARGET_TRIPLE: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          pnpm build:sidecar
+          shopt -s nullglob
+          files=(src-tauri/binaries/ert-server-*)
+          if [[ ${#files[@]} -eq 0 ]]; then
+            echo "sidecar binary was not built" >&2
+            exit 1
+          fi
+      - name: Show the universal sidecar architectures
+        if: matrix.platform == 'macos'
+        run: |
+          set -euo pipefail
+          sidecar=src-tauri/binaries/ert-server-universal-apple-darwin
+          file "$sidecar"
+          lipo -info "$sidecar"
+          info="$(lipo -info "$sidecar")"
+          echo "$info" | grep -q 'x86_64'
+          echo "$info" | grep -q 'arm64'
+          thin="${RUNNER_TEMP}/sidecar-slices"
+          mkdir -p "$thin"
+          lipo -thin x86_64 "$sidecar" -output "$thin/x64"
+          lipo -thin arm64 "$sidecar" -output "$thin/arm64"
+          file "$thin/x64"
+          file "$thin/arm64"
+          file "$thin/x64" | grep -q 'x86_64'
+          file "$thin/arm64" | grep -q 'arm64'
+          if file "$thin/x64" | grep -q 'arm64'; then
+            echo "x64 slice was built as arm64" >&2
+            exit 1
+          fi
       - name: Build Tauri bundles
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
@@ -95,12 +134,49 @@ jobs:
       - name: Pack unsigned updater archives
         run: pnpm exec tsx scripts/release-assets.ts pack --target src-tauri/target --platform ${{ matrix.platform }}
       - name: Collect installers
-        run: pnpm exec tsx scripts/release-assets.ts collect --target src-tauri/target --dest dist --platform ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          pnpm exec tsx scripts/release-assets.ts collect --target src-tauri/target --dest dist --platform ${{ matrix.platform }}
+          # dist/sidecar holds the Node trees used to build the SEA. Those
+          # headers share filenames across architectures and must not be published.
+          rm -rf dist/sidecar
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: installers-${{ matrix.platform }}
           path: dist/
           if-no-files-found: error
+
+  smoke:
+    name: smoke (${{ matrix.platform }})
+    needs: installers
+    if: needs.installers.result == 'success'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos
+            os: macos-15
+          - platform: windows
+            os: windows-2022
+          - platform: linux
+            os: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22.23.3"
+          package-manager-cache: false
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: installers-${{ matrix.platform }}
+          path: dist
+      - name: Install, launch, and stop the packaged app
+        run: node scripts/desktop-smoke.mjs --platform ${{ matrix.platform }} --dist dist
 
   sbom:
     name: sbom
@@ -116,7 +192,7 @@ jobs:
           version: 10.33.4
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: "22.23.3"
           cache: ${{ github.ref_type != 'tag' && 'pnpm' || '' }}
           package-manager-cache: ${{ github.ref_type != 'tag' && 'true' || 'false' }}
       - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master @ 2026-10-09
@@ -179,7 +255,7 @@ jobs:
           git merge-base --is-ancestor "$GITHUB_SHA" origin/main
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: "22.23.3"
           package-manager-cache: false
       - name: Reject a placeholder updater public key
         run: node --experimental-strip-types scripts/release-assets.ts assert-pubkey
@@ -239,7 +315,7 @@ jobs:
           version: 10.33.4
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: "22.23.3"
           cache: ${{ github.ref_type != 'tag' && 'pnpm' || '' }}
           package-manager-cache: ${{ github.ref_type != 'tag' && 'true' || 'false' }}
       - name: Install JavaScript dependencies
@@ -284,7 +360,7 @@ jobs:
           fetch-depth: 1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: "22.23.3"
           package-manager-cache: false
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
@@ -384,7 +460,7 @@ jobs:
           fetch-depth: 1
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: "22.23.3"
           package-manager-cache: false
       - name: Download the release
         env:

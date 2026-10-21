@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 export * from './db.js'
+export * from './lock.js'
 export * from './schema.js'
 export * from './errors.js'
 export * from './key.js'

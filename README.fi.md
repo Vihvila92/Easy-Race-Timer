@@ -39,21 +39,31 @@ Avaa osoite, jonka prosessi tulostaa rivillä `ERT_READY`. Kehittäjän palvelin
 
 `pnpm dev` käynnistää Vite-käyttöliittymän välityspalvelimella. Se on vain kehitysapu, eikä osoite ole mukana rakennetussa käyttöliittymässä.
 
-`pnpm dev:server` lukee tiedoston `config/dev.env`, jossa `ERT_DEV_KEY=1` sallii julkisen kehitysavaimen. Sitä ei käytetä oikeaan kisaan. `pnpm start` ei lue tätä tiedostoa eikä avaa kisatiedostoa ilman tietokanta-avainta.
+`pnpm dev:server` lukee tiedoston `config/dev.env`, jossa `ERT_DEV_KEY=1` sallii julkisen kehitysavaimen. Sitä ei käytetä oikeaan kisaan. `pnpm start` ei lue tätä tiedostoa eikä avaa kisatiedostoa ilman tietokanta-avainta. Ilman muuttujia se käyttää vapaata paikallista porttia ja käyttöjärjestelmän käyttäjähakemistoa.
 
-## Työpöytäsovellus (Tauri, kehittäjäversio)
+## Työpöytäsovellus (Tauri)
 
-`src-tauri/` on pienin mahdollinen Tauri 2 -kuori rakennetun käyttöliittymän (`packages/web/dist`) ympärillä. Siinä ei ole omia komentoja, ja sillä on vain `core:default`-oikeus. Node-palvelin sidecarina (ADR 0010) ja päivittäjä (#136) tulevat myöhemmin, joten ikkuna näyttää toistaiseksi käyttöliittymän ilman taustapalvelua.
+`src-tauri/` on Tauri 2 -kuori. Käynnistyksessä se tyhjentää ympäristön ja asettaa `HOST=127.0.0.1`, `PORT=0`, `ERT_DATA_DIR` (käyttöjärjestelmän sovellusdatahakemisto) ja `NODE_ENV=production`. Unixilla se asettaa myös `LANG`. Windowsilla se säilyttää kuoren `SystemRoot`- ja `WINDIR`-muuttujat ja jättää muut muuttujat asettamatta. Kisatiedosto on SQLCipher. Kunnes #131 käärii data-avaimen, työpöydän sidecar luo tiedoston `desktop-data.key` (32 tavua, oikeudet 0600) kisatiedoston viereen eikä lue avainta ympäristöstä, argv:stä tai `ERT_READY`-riviltä. `pnpm start` ei luo tuota tiedostoa ja kieltäytyy yhä avaamasta kisatiedostoa. Se kirjoittaa käynnistyskohtaisen tunnisteen sidecarin vakiosyötteeseen. Se odottaa enintään 20 sekuntia yhtä stdout-riviä: `ERT_READY` ja JSON. Sitten se avaa osoitteen `http://127.0.0.1:<port>/auth?code=…`. Koodi on kertakäyttöinen. `/auth` vastaa `Cache-Control: no-store` ja asettaa HttpOnly-istuntoevästeen (`ert_launch`, ei `Max-Age`- eikä `Expires`-arvoa). API ja websocket vaativat evästeen tai bearer-tunnisteen. Tunnistamaton `/ws` saa HTTP 401:n ennen protokollan vaihtoa. Ikkunalla ei ole shell- tai prosessirajapintaa. Ikkunan sulkeminen sulkee sidecarin vakiosyötteen, ja sidecar päättyy myös, jos kuoriprosessi katoaa.
 
-Vaatimukset: Rust 1.90 tai uudempi (CI asentaa 1.90.0) ja Linuxilla `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `librsvg2-dev` ja `libayatana-appindicator3-dev`. Windowsin ja macOS:n vaatimukset löytyvät Taurin ohjeesta.
+Paketin käyttöliittymätiedostot ja tietokantamoduuli tallennetaan sovellusdatahakemistoon ja tarkistetaan sidecariin upotetuilla SHA-256-tiivisteillä. Windowsilla käyttäjäkohtainen `%APPDATA%` on raja: sidecar ei tarkista siellä hakemiston omistajaa eikä oikeuksia. Jokainen käynnistys tarkistaa silti jokaisen puretun tiedoston SHA-256-tiivisteen upotettuja tiivisteitä vasten ja korvaa tiedoston, joka ei täsmää. Toinen instanssi nostaa esiin jo avatun ikkunan. Sidecar pitää myös yksinoikeudella lukkoa datahakemistossa, kun käynnistystunniste on asetettu.
+
+Jos sidecar epäonnistuu tai valmisriviä ei tule, ikkuna näyttää staattisen suomen- ja englanninkielisen virhesivun tyhjän näkymän sijaan. Kuoren sivun CSP on `default-src 'none'; style-src 'self'`.
+
+Jokainen palvelimen vastaus, myös HTML-tulokset, lähettää otsakkeet `Content-Security-Policy` (mukana `default-src 'self'`, `connect-src 'self'` ja `frame-ancestors 'none'`), `X-Content-Type-Options: nosniff` ja `Referrer-Policy: no-referrer`.
+
+`pnpm build:sidecar` rakentaa käyttöliittymän ja pakkaa `packages/server`-palvelimen Node 22.23.3 -yhdeksi suoritettavaksi. Se kääntää `better-sqlite3-multiple-ciphers`-moduulin sillä Nodella. macOS:n universal-käännös kääntää moduulin uudelleen arm64- ja x64-arkkitehtuureille, ja kummankin viipaleen SEA-blobin tuottaa sen arkkitehtuurin Node-binääri (x64-viipale käyttää x64-Nodea Rosettan kautta, ei arm64-Nodea). `lipo` yhdistää viipaleet tiedostoksi `src-tauri/binaries/ert-server-universal-apple-darwin` ja tulos ad-hoc-allekirjoitetaan. Tauri paketoi ohuet tiedostot `ert-server-aarch64-apple-darwin` ja `ert-server-x86_64-apple-darwin`. Muut kohteet kirjoittavat `src-tauri/binaries/ert-server-<target-triple>` (Windowsissa `.exe`). Sitä ei commitoida. `pnpm tauri build` ajaa skriptin ensin. `check`-ajo ei rakenna sitä. Release-työnkulku ajaa saman käännöksen ja tulostaa universal-binäärille `file`- ja `lipo -info` -tarkistukset ennen asenninten rakentamista.
+
+Vaatimukset: Node.js 22.23.3 ja Rust 1.90 tai uudempi (`rust-toolchain.toml`; CI asentaa 1.90.0). Linuxilla tarvitaan myös `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `librsvg2-dev`, `patchelf` ja `libayatana-appindicator3-dev`. Windowsin ja macOS:n muut vaatimukset löytyvät Taurin ohjeesta.
 
 ```sh
 pnpm install
-pnpm tauri dev                            # ikkuna, jossa Viten pikapäivitys
+pnpm rebuild esbuild
+pnpm build:sidecar
+pnpm tauri dev
 pnpm tauri build --bundles appimage,deb   # Linux: AppImage + .deb
 ```
 
-Pakettimuodot: Windows `msi` ja `nsis`, macOS universal `dmg` (ad-hoc-allekirjoitus, ei notarisointia), Linux `appimage` ja `deb`. Maksullista Applen tai Windowsin varmennetta ei ole. Release-työnkulku rakentaa asentimet ja `v*`-tagista GitHub-julkaisun. Pakollinen `check`-ajo ei rakenna asenninta. Tarkistus, Gatekeeper ja SmartScreen: [docs/release.fi.md](docs/release.fi.md).
+Pakettimuodot: Windows `msi` ja `nsis`, macOS universal `dmg` (ad-hoc-allekirjoitus, ei notarisointia), Linux `appimage` ja `deb`. Maksullista Applen tai Windowsin varmennetta ei ole. Release-työnkulku rakentaa asentimet ja `v*`-tagista GitHub-julkaisun. Pakollinen `check`-ajo ei rakenna sidecar-tiedostoa eikä asenninta. Tarkistus, Gatekeeper ja SmartScreen: [docs/release.fi.md](docs/release.fi.md). Päivittäjä (#136) ei kuulu tähän kuoreen.
 
 ## Testit
 
@@ -68,7 +78,7 @@ pnpm e2e
 
 ## Tiekartta
 
-v0.1 on tässä repossa. Tagattu julkaisu julkaisee allekirjoittamattomat asentimet Windowsille, macOS:lle ja Linuxille ([docs/release.fi.md](docs/release.fi.md)). Maksullinen allekirjoitus ja palvelimen sidecar tulevat myöhemmin. [docs/roadmap.md](docs/roadmap.md). Päätökset: [`docs/adr/`](docs/adr/).
+v0.1 on tässä repossa. Tagattu julkaisu julkaisee allekirjoittamattomat asentimet Windowsille, macOS:lle ja Linuxille ([docs/release.fi.md](docs/release.fi.md)). Maksullinen allekirjoitus ei ole käytössä. Node-palvelin kulkee työpöytäsovelluksen sidecarina. [docs/roadmap.md](docs/roadmap.md). Päätökset: [`docs/adr/`](docs/adr/).
 
 ## Osallistuminen
 
