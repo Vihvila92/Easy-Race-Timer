@@ -77,9 +77,19 @@ export function Select({
 
 type BannerTone = 'info' | 'warning' | 'danger' | 'ok'
 
-export function Banner({ tone, children, testId }: { tone: BannerTone; children: ReactNode; testId?: string }) {
+export function Banner({
+  tone,
+  children,
+  testId,
+  role,
+}: {
+  tone: BannerTone
+  children: ReactNode
+  testId?: string
+  role?: 'alert' | 'status'
+}) {
   return (
-    <p className={`ui-banner ui-banner-${tone}`} data-testid={testId}>
+    <p className={`ui-banner ui-banner-${tone}`} role={role} data-testid={testId}>
       {children}
     </p>
   )
