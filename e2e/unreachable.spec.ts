@@ -5,8 +5,8 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { killServer, startServer, type RunningServer } from './server.ts'
 
-const fiMessage = 'Ajanotto-ohjelmaan ei saada yhteyttä. Sulje ohjelma ja avaa se uudelleen. Jos ongelma jatkuu, ota yhteys seuran tekniseen tukeen.'
-const enMessage = 'The timing program cannot be reached. Close the program and open it again. If the problem continues, contact the club\'s technical support.'
+const fiMessage = 'Ajanotto-ohjelmaan ei saada yhteyttä. Paina Yritä uudelleen. Jos se ei auta, sulje ohjelma ja avaa se uudelleen. Jos ongelma jatkuu, ota yhteys seuran tekniseen tukeen.'
+const enMessage = 'The timing program cannot be reached. Press Try again. If that does not help, close the program and open it again. If the problem continues, contact the club\'s technical support.'
 
 test.describe('unreachable race program', () => {
   let server: RunningServer

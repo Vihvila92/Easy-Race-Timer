@@ -178,7 +178,7 @@
   "common.offline": "Offline queue",
   "common.source": "Source code",
   "unreachable.title": "Cannot connect",
-  "unreachable.message": "The timing program cannot be reached. Close the program and open it again. If the problem continues, contact the club's technical support.",
+  "unreachable.message": "The timing program cannot be reached. Press Try again. If that does not help, close the program and open it again. If the problem continues, contact the club's technical support.",
   "unreachable.retry": "Try again",
   "a11y.menu": "Main navigation",
   "a11y.theme": "Theme",
