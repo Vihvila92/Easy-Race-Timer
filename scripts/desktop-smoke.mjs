@@ -223,11 +223,19 @@ async function smokeMac(dmg) {
   }
 }
 
+/**
+ * NSIS silent flags. `/D=` is last and stays unquoted.
+ * Spawn the setup exe directly. `cmd.exe /c` with a quoted path that contains
+ * spaces produced `'"...\Easy Race Timer_...-setup.exe"' is not recognized`.
+ */
+export function windowsInstallerArgs(dest) {
+  return ['/S', `/D=${dest}`]
+}
+
 function installWindows(setup) {
   const dest = 'C:\\ert-smoke'
   rmSync(dest, { recursive: true, force: true })
-  const command = `"${setup}" /S /D=${dest}`
-  const installed = spawnSync('cmd.exe', ['/d', '/c', command], { encoding: 'utf8' })
+  const installed = spawnSync(setup, windowsInstallerArgs(dest), { encoding: 'utf8' })
   if (installed.status !== 0) throw new Error(installed.stderr || installed.stdout || 'NSIS install failed')
   const exe = filesUnder(dest).find((file) => path.basename(file).toLowerCase() === 'easy-race-timer.exe')
   if (!exe) throw new Error(`easy-race-timer.exe was not installed under ${dest}`)

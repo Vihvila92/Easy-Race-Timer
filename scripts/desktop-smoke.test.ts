@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from 'vitest'
-import { chooseInstaller, healthCaptureProvesReady, packagedRaceFile, redactSecrets, sqliteHeaderIsEncrypted, tasklistShowsImage } from './desktop-smoke.mjs'
+import { chooseInstaller, healthCaptureProvesReady, packagedRaceFile, redactSecrets, sqliteHeaderIsEncrypted, tasklistShowsImage, windowsInstallerArgs } from './desktop-smoke.mjs'
 
 describe('desktop smoke', () => {
   it('picks the dmg and the NSIS installer', () => {
     expect(chooseInstaller('macos', ['Easy Race Timer_0.1.0_universal.dmg', 'Easy Race Timer.app.tar.gz'])).toMatch(/\.dmg$/)
     expect(chooseInstaller('windows', ['Easy Race Timer_0.1.0_x64-setup.exe', 'Easy Race Timer_0.1.0_x64_en-US.msi'])).toMatch(/-setup\.exe$/)
     expect(chooseInstaller('linux', ['Easy Race Timer_0.1.0_amd64.AppImage', 'Easy Race Timer_0.1.0_amd64.deb'])).toMatch(/\.AppImage$/)
+  })
+
+  it('passes NSIS silent flags without a shell quote around the setup path', () => {
+    expect(windowsInstallerArgs('C:\\ert-smoke')).toEqual(['/S', '/D=C:\\ert-smoke'])
   })
 
   it('treats the health JSON on the loopback capture as a 200 and hides tokens', () => {
