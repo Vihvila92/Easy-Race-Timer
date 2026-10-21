@@ -1,6 +1,15 @@
-import { commitEditableDate, formatEditableDate, type MessageKey } from '@ert/i18n'
-import { useState, type AnchorHTMLAttributes, type ButtonHTMLAttributes, type ReactNode } from 'react'
+import type { MessageKey } from '@ert/i18n'
+import { useState, type AnchorHTMLAttributes, type ButtonHTMLAttributes, type FocusEventHandler, type ReactNode } from 'react'
 import { useApp } from '../context.js'
+import {
+  dateFieldInvalid,
+  dateFieldOnBlur,
+  dateFieldOnFocus,
+  dateFieldOnInput,
+  dateFieldOnValue,
+  dateFieldShown,
+  initialDateDraft,
+} from './date-field.js'
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger'
 
@@ -22,6 +31,10 @@ export function TextField({
   inputMode,
   autoComplete,
   testId,
+  hint,
+  error,
+  onBlur,
+  onFocus,
 }: {
   id: string
   label: string
@@ -31,7 +44,14 @@ export function TextField({
   inputMode?: 'text' | 'numeric' | 'decimal' | 'tel' | 'email'
   autoComplete?: string
   testId?: string
+  hint?: string
+  error?: string
+  onBlur?: FocusEventHandler<HTMLInputElement>
+  onFocus?: FocusEventHandler<HTMLInputElement>
 }) {
+  const hintId = hint ? `${id}-hint` : undefined
+  const errorId = error ? `${id}-error` : undefined
+  const describedBy = [hintId, errorId].filter(Boolean).join(' ')
   return (
     <div className="ui-field">
       <label htmlFor={id}>{label}</label>
@@ -42,8 +62,14 @@ export function TextField({
         inputMode={inputMode}
         autoComplete={autoComplete}
         data-testid={testId}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy || undefined}
+        onBlur={onBlur}
+        onFocus={onFocus}
         onChange={(event) => onChange(event.target.value)}
       />
+      {hint ? <p className="ui-field-hint" id={hintId} data-testid={testId ? `${testId}-hint` : undefined}>{hint}</p> : null}
+      {error ? <p className="ui-field-error" id={errorId} role="alert" data-testid={testId ? `${testId}-error` : undefined}>{error}</p> : null}
     </div>
   )
 }
@@ -51,34 +77,41 @@ export function TextField({
 export function DateField({
   id,
   label,
+  hint,
+  errorMessage,
   value,
   onChange,
   testId,
 }: {
   id: string
   label: string
+  hint: string
+  errorMessage: string
   /** Stored calendar date, `YYYY-MM-DD`, or empty while the text is incomplete. */
   value: string
   onChange: (iso: string) => void
   testId?: string
 }) {
   const { locale } = useApp()
-  const [text, setText] = useState(() => (value ? formatEditableDate(value, locale) : ''))
-  const [localeSeen, setLocaleSeen] = useState(locale)
-  if (locale !== localeSeen) {
-    setLocaleSeen(locale)
-    setText(value ? formatEditableDate(value, locale) : '')
-  }
+  const [draft, setDraft] = useState(() => initialDateDraft(value))
+  const synced = value === draft.valueSeen ? draft : dateFieldOnValue(draft, value)
+  if (synced !== draft) setDraft(synced)
+  const shown = dateFieldShown(value, locale, synced)
+  const invalid = dateFieldInvalid(shown, locale, synced)
   return (
     <TextField
       id={id}
       label={label}
-      value={text}
+      hint={hint}
+      error={invalid ? errorMessage : undefined}
+      value={shown}
       onChange={(next) => {
-        const committed = commitEditableDate(next, locale)
-        setText(committed.text)
-        onChange(committed.iso)
+        const result = dateFieldOnInput(synced, next, locale)
+        setDraft(result.draft)
+        onChange(result.iso)
       }}
+      onFocus={() => setDraft((current) => dateFieldOnFocus(current))}
+      onBlur={() => setDraft((current) => dateFieldOnBlur(current))}
       autoComplete="off"
       inputMode="text"
       testId={testId}

@@ -1,5 +1,6 @@
 import { formatDate } from '@ert/i18n'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { blockerLink } from './blockers.js'
 import { Checkbox, TextLink } from './ui/components.js'
 import { ApiError, api, clientNow, clockMs, createTapId, deviceNow, localDeviceId, nextTapLabel, readClockOffset, syncServerClock } from './api.js'
 import { useApp } from './context.js'
@@ -666,7 +667,10 @@ export function Results() {
             }
           }}>{t('results.lock')} {item.id}</button>
           <ul data-testid={`blockers-${item.id}`}>
-            {(blockers[item.id] ?? []).map((blocker) => <li key={blocker} data-testid="blocker"><TextLink href={blocker.startsWith('tie:') ? '#/ties' : '#/entries'}>{blocker}</TextLink></li>)}
+            {(blockers[item.id] ?? []).map((blocker) => {
+              const link = blockerLink(blocker, locale)
+              return <li key={blocker} data-testid="blocker"><TextLink href={link.href}>{link.text}</TextLink></li>
+            })}
           </ul>
         </div>
       ))}

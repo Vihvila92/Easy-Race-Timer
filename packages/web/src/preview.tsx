@@ -83,7 +83,7 @@ export function PreviewPage() {
         </section>
         <section className="ui-section" aria-labelledby="preview-date-title">
           <h2 id="preview-date-title">{t('preview.dateTitle')}</h2>
-          <DateField id="preview-date" label={t('wizard.date')} value={date} onChange={setDate} testId="preview-date" />
+          <DateField id="preview-date" label={t('wizard.date')} hint={t('wizard.dateHint')} errorMessage={t('wizard.dateError')} value={date} onChange={setDate} testId="preview-date" />
         </section>
       </HintFrame>
     </section>

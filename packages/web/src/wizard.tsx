@@ -82,7 +82,7 @@ export function Wizard() {
           <label className="stack" htmlFor="wizard-name">{t('wizard.name')}
             <input id="wizard-name" data-testid="wizard-name" value={name} onChange={(event) => setName(event.target.value)} autoComplete="off" />
           </label>
-          <DateField id="wizard-date" label={t('wizard.date')} value={date} onChange={setDate} testId="wizard-date" />
+          <DateField id="wizard-date" label={t('wizard.date')} hint={t('wizard.dateHint')} errorMessage={t('wizard.dateError')} value={date} onChange={setDate} testId="wizard-date" />
           <label className="stack" htmlFor="wizard-place">{t('wizard.place')}
             <input id="wizard-place" data-testid="wizard-place" value={place} onChange={(event) => setPlace(event.target.value)} />
           </label>

@@ -34,7 +34,9 @@
   "wizard.lead": "Kolme lyhyttä vaihetta. Sen jälkeen tuot ilmoittautuneet.",
   "wizard.step": "Vaihe {step} / 3",
   "wizard.name": "Kisan nimi",
-  "wizard.date": "Päivä",
+  "wizard.date": "Päivämäärä",
+  "wizard.dateHint": "Muoto 12.6.2027",
+  "wizard.dateError": "Päivämäärä ei kelpaa. Käytä muotoa 12.6.2027.",
   "wizard.place": "Paikka",
   "wizard.organizer": "Järjestävä seura",
   "wizard.next": "Seuraava",
@@ -154,6 +156,10 @@
   "results.lock": "Lukitse tulokset",
   "results.unlock": "Avaa lukitus",
   "results.blocked": "Lukitus estyy",
+  "results.blocker.noResult": "Numerolla {bib} ei ole tulosta",
+  "results.blocker.unassigned": "Ajalla {id} ei ole numeroa",
+  "results.blocker.beforeStart": "Aika {id} on ennen lähtöä",
+  "results.blocker.tie": "Ratkaisematon tasatilanne, {race}, {time}",
   "results.empty": "Ei tuloksia vielä",
   "results.behind": "Ero",
   "results.note": "Merkinnät",
@@ -206,5 +212,5 @@
   "preview.clockLabel": "Esimerkkiaika",
   "preview.linksTitle": "Linkit",
   "preview.checkTitle": "Valintaruutu",
-  "preview.dateTitle": "Päivä"
+  "preview.dateTitle": "Päivämäärä"
 }

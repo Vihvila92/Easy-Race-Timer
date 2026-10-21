@@ -48,7 +48,7 @@ Guided mode is the default. A `<view>.hint.<id>` string is shown only while guid
 
 Format dates and times with `formatDate`, `formatTime` and `formatDateTime` from `@ert/i18n` (`fi-FI` and `en-GB`). A Finnish date looks like `15.10.2026`. Store a calendar date as `YYYY-MM-DD`.
 
-Do not use `<input type="date">` for a date a volunteer reads. The browser paints that control in the browser language, not the app language. Use `DateField`: Finnish shows `d.M.yyyy` (for example `12.6.2027`) and English shows the `formatDate` value (`12/06/2027`). The field still stores `YYYY-MM-DD`. `formatDate` stays zero-padded.
+Do not use `<input type="date">` for a date a volunteer reads. The browser paints that control in the browser language, not the app language. Use `DateField`: Finnish shows `d.M.yyyy` (for example `12.6.2027`) and English shows the `formatDate` value (`12/06/2027`). The field still stores `YYYY-MM-DD`. `formatDate` stays zero-padded. `DateField` passes a format hint and, after blur, an error through `TextField` (`aria-invalid` and `aria-describedby`). Lock-blocker ids stay in the API; the results view shows `results.blocker.*` instead of the raw id.
 
 ## User interface
 
