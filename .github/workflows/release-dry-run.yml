@@ -1,0 +1,19 @@
+# Branch push so this pull request can link a dry run before release.yml
+# exists on the default branch. workflow_dispatch stays the supported dry run.
+name: Release dry run
+
+# GitHub requires the caller to allow every permission a nested job declares,
+# including publish and verify, even when those jobs are skipped on a dry run.
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+on:
+  push:
+    branches:
+      - valtteriv/ci-release-installers-90bd
+
+jobs:
+  release:
+    uses: ./.github/workflows/release.yml
