@@ -81,10 +81,10 @@ test.describe('first run', () => {
     await expect(page.getByTestId('wizard-start-R8')).toHaveValue('11:30')
     await page.getByTestId('wizard-next').click()
     await expect(page.getByTestId('wizard-summary')).toContainText('Kuulan hölkkä')
-    await expect(page.getByTestId('wizard-date-display')).toHaveText('12.06.2027')
+    await expect(page.getByTestId('wizard-date-display')).toHaveText('12.6.2027')
     await page.getByTestId('wizard-create').click()
     await expect(page.getByRole('heading', { level: 2, name: 'Kuulan hölkkä' })).toBeVisible()
-    await expect(page.getByTestId('office-date')).toContainText('12.06.2027')
+    await expect(page.getByTestId('office-date')).toContainText('12.6.2027')
     const stored = await page.request.get(`http://127.0.0.1:${server.port}/api/v1/bootstrap`)
     expect(stored.ok()).toBeTruthy()
     const workspace = await stored.json() as { event: { date_start: string } }
