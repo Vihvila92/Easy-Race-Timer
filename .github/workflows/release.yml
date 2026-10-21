@@ -19,12 +19,10 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
-  # Same-branch dry run calls this workflow before the file is on the default branch.
-  workflow_call:
 
 concurrency:
   group: release-${{ github.ref }}
-  # A tag push must finish. A branch dry run replaces an older run on the same ref.
+  # A tag push must finish. workflow_dispatch replaces an older run on the same ref.
   cancel-in-progress: ${{ github.event_name != 'push' || github.ref_type != 'tag' }}
 
 defaults:

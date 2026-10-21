@@ -23,6 +23,7 @@ describe('release workflow', () => {
 
   it('builds on tags and workflow_dispatch, and only publish can write', () => {
     expect(release).toContain('workflow_dispatch:')
+    expect(release).not.toContain('workflow_call:')
     expect(release).toMatch(/tags:\n\s+- ['"]v\*['"]/)
     expect(release).toMatch(/toolchain: ['"]1\.90\.0['"]/)
     expect(release).toContain('node-version: "22.23.3"')
