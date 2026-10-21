@@ -1,7 +1,7 @@
 import { formatTime } from '@ert/i18n'
 import { useState } from 'react'
 import { useApp } from './context.js'
-import { Banner, Button, Clock, HintFrame, ListRow, Select, StatusBadge, TextField } from './ui/components.js'
+import { Banner, Button, Checkbox, Clock, DateField, HintFrame, ListRow, Select, StatusBadge, TextField, TextLink } from './ui/components.js'
 
 const SAMPLE = new Date(2026, 9, 15, 14, 30)
 
@@ -11,6 +11,8 @@ export function PreviewPage() {
   const [distance, setDistance] = useState('short')
   const [continued, setContinued] = useState(false)
   const [rowPressed, setRowPressed] = useState(false)
+  const [consent, setConsent] = useState(false)
+  const [date, setDate] = useState('2027-06-12')
   return (
     <section data-testid="component-preview">
       <h1>{t('preview.title')}</h1>
@@ -70,6 +72,18 @@ export function PreviewPage() {
         <section className="ui-section" aria-labelledby="preview-clock-title">
           <h2 id="preview-clock-title">{t('preview.clockTitle')}</h2>
           <Clock label={t('preview.clockLabel')} value={formatTime(SAMPLE, locale)} testId="preview-clock" />
+        </section>
+        <section className="ui-section" aria-labelledby="preview-links-title">
+          <h2 id="preview-links-title">{t('preview.linksTitle')}</h2>
+          <TextLink href="https://github.com/Vihvila92/Easy-Race-Timer" testId="preview-link">{t('common.source')}</TextLink>
+        </section>
+        <section className="ui-section" aria-labelledby="preview-check-title">
+          <h2 id="preview-check-title">{t('preview.checkTitle')}</h2>
+          <Checkbox id="preview-check" label={t('entries.consentText')} checked={consent} onChange={setConsent} testId="preview-check" />
+        </section>
+        <section className="ui-section" aria-labelledby="preview-date-title">
+          <h2 id="preview-date-title">{t('preview.dateTitle')}</h2>
+          <DateField id="preview-date" label={t('wizard.date')} hint={t('wizard.dateHint')} errorMessage={t('wizard.dateError')} value={date} onChange={setDate} testId="preview-date" />
         </section>
       </HintFrame>
     </section>

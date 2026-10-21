@@ -16,7 +16,7 @@ Jokainen virhevastaus on JSON:
 | `BIB_IN_USE` | 409 | Lappu on jo käytössä samalla matkalla. |
 | `RACE_NOT_STARTED` | 409 | Maali ennen lähtöä. |
 | `EVENT_LOCKED` | 423 | Matka on lukittu. |
-| `LOCK_BLOCKED` | 409 | Lukitus estyy. `details.blockers` luettelee syyt (`entry:<lappu>:no_result`, `tie:<matka>:<näyttöaika>`). |
+| `LOCK_BLOCKED` | 409 | Lukitus estyy. `details.blockers` luettelee syyt (`entry:<lappu>:no_result`, `time:<id>:unassigned`, `time:<id>:before_start`, `tie:<matka>:<näyttöaika>`). Rajapinta palauttaa tunnisteet. Tulokset-näkymä näyttää niistä käännetyn tekstin. |
 | `PIN_REQUIRED` | 401 | PIN puuttuu tai on väärä. |
 | `NO_MATCHING_CATEGORY` | 422 | Ikä ja sukupuoli eivät sovi millekään kohdematkan sarjalle. |
 | `TIE_UNCONFIRMED` | 409 | Tasatulosta ei ole vahvistettu. |
