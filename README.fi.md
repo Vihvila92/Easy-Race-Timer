@@ -41,6 +41,20 @@ Avaa osoite, jonka prosessi tulostaa rivillä `ERT_READY`. Kehittäjän palvelin
 
 `pnpm start` ilman muuttujia käyttäytyy kuin tuleva työpöytäkuori: vapaa paikallinen portti ja käyttöjärjestelmän käyttäjähakemisto.
 
+## Työpöytäsovellus (Tauri, kehittäjäversio)
+
+`src-tauri/` on pienin mahdollinen Tauri 2 -kuori rakennetun käyttöliittymän (`packages/web/dist`) ympärillä. Siinä ei ole omia komentoja, ja sillä on vain `core:default`-oikeus. Node-palvelin sidecarina (ADR 0010) ja päivittäjä (#136) tulevat myöhemmin, joten ikkuna näyttää toistaiseksi käyttöliittymän ilman taustapalvelua.
+
+Vaatimukset: Rust (stable) ja Linuxilla `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `librsvg2-dev` ja `libayatana-appindicator3-dev`. Windowsin ja macOS:n vaatimukset löytyvät Taurin ohjeesta.
+
+```sh
+pnpm install
+pnpm tauri dev                            # ikkuna, jossa Viten pikapäivitys
+pnpm tauri build --bundles appimage,deb   # Linux: AppImage + .deb
+```
+
+Pakettimuodot: Windows `msi` ja `nsis`, macOS universal `dmg` (ad-hoc-allekirjoitus, ei notarisointia), Linux `appimage` ja `deb`. Asentimet ovat allekirjoittamattomia. Julkaisuversiot tekee julkaisuputki (#153), ei `check`-ajo.
+
 ## Testit
 
 ```bash
