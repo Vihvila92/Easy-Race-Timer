@@ -406,6 +406,7 @@ export async function createApp(options: AppOptions): Promise<{ app: FastifyInst
   if (options.launch) {
     const launch = options.launch
     app.get('/auth', async (request, reply) => {
+      reply.header('cache-control', 'no-store')
       const query = request.query as { code?: unknown }
       const presented = typeof query.code === 'string' ? query.code : ''
       if (!launch.codes.consume(presented)) {

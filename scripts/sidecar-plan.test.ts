@@ -1,6 +1,15 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { NODE_TARBALLS, NODE_VERSION, SEA_FUSE, assertHostNode, seaBuildKind } from './sidecar-plan.js'
+import {
+  NODE_TARBALLS,
+  NODE_VERSION,
+  SEA_FUSE,
+  assertHostNode,
+  fileDescribesArch,
+  lipoInfoHasBoth,
+  nodeLaunchArgs,
+  seaBuildKind,
+} from './sidecar-plan.js'
 
 describe('sidecar build plan', () => {
   it('builds a universal macOS sidecar on darwin and refuses it elsewhere', () => {
@@ -32,11 +41,26 @@ describe('sidecar build plan', () => {
     const source = readFileSync(new URL('./build-sidecar.ts', import.meta.url), 'utf8')
     const plan = readFileSync(new URL('./sidecar-plan.ts', import.meta.url), 'utf8')
     expect(source).toContain('lipo')
+    expect(source).toContain('lipo -info')
+    expect(source).toContain('--force_build=1')
     expect(source).toContain('--macho-segment-name')
     expect(source).toContain('SEA_FUSE')
     expect(plan).toContain(SEA_FUSE)
     expect(source).toContain("'--sign', '-'")
     expect(source).toContain('darwin-arm64.node')
     expect(source).toContain('darwin-x64.node')
+  })
+
+  it('runs the x64 SEA config with the x64 Node, not the arm64 host', () => {
+    expect(nodeLaunchArgs('/node/x64', 'x64', 'arm64', 'darwin')).toEqual(['arch', '-x86_64', '/node/x64'])
+    expect(nodeLaunchArgs('/node/arm64', 'arm64', 'arm64', 'darwin')).toEqual(['/node/arm64'])
+    expect(nodeLaunchArgs('/node/arm64', 'arm64', 'x64', 'darwin')).toEqual(['arch', '-arm64', '/node/arm64'])
+    expect(nodeLaunchArgs('/usr/bin/node', 'x64', 'x64', 'linux')).toEqual(['/usr/bin/node'])
+    expect(fileDescribesArch('Mach-O 64-bit executable x86_64', 'x64')).toBe(true)
+    expect(fileDescribesArch('Mach-O 64-bit executable x86_64', 'arm64')).toBe(false)
+    expect(fileDescribesArch('Mach-O 64-bit executable arm64', 'arm64')).toBe(true)
+    expect(fileDescribesArch('Mach-O universal binary with 2 architectures: [x86_64] [arm64]', 'x64')).toBe(false)
+    expect(lipoInfoHasBoth('Architectures in the fat file: x86_64 arm64')).toBe(true)
+    expect(lipoInfoHasBoth('Non-fat file: arm64')).toBe(false)
   })
 })

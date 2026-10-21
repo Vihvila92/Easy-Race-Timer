@@ -19,6 +19,8 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+  # Same-branch dry run calls this workflow before the file is on the default branch.
+  workflow_call:
 
 concurrency:
   group: release-${{ github.ref }}
@@ -74,8 +76,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2
-      # --ignore-scripts skips better-sqlite3's postinstall. The prebuilds are
-      # already in the package; rebuild them (and esbuild) before the sidecar.
+      # --ignore-scripts skips lifecycle scripts. esbuild's binary comes from
+      # pnpm rebuild. build:sidecar compiles better-sqlite3 with node-gyp for
+      # the target, and on macOS once for each universal slice.
       - name: Install JavaScript dependencies
         run: |
           pnpm install --frozen-lockfile --ignore-scripts
@@ -88,6 +91,28 @@ jobs:
           files=(src-tauri/binaries/ert-server-*)
           if [[ ${#files[@]} -eq 0 ]]; then
             echo "sidecar binary was not built" >&2
+            exit 1
+          fi
+      - name: Show the universal sidecar architectures
+        if: matrix.platform == 'macos'
+        run: |
+          set -euo pipefail
+          sidecar=src-tauri/binaries/ert-server-universal-apple-darwin
+          file "$sidecar"
+          lipo -info "$sidecar"
+          info="$(lipo -info "$sidecar")"
+          echo "$info" | grep -q 'x86_64'
+          echo "$info" | grep -q 'arm64'
+          thin="${RUNNER_TEMP}/sidecar-slices"
+          mkdir -p "$thin"
+          lipo -thin x86_64 "$sidecar" -output "$thin/x64"
+          lipo -thin arm64 "$sidecar" -output "$thin/arm64"
+          file "$thin/x64"
+          file "$thin/arm64"
+          file "$thin/x64" | grep -q 'x86_64'
+          file "$thin/arm64" | grep -q 'arm64'
+          if file "$thin/x64" | grep -q 'arm64'; then
+            echo "x64 slice was built as arm64" >&2
             exit 1
           fi
       - name: Build Tauri bundles
@@ -111,6 +136,36 @@ jobs:
           name: installers-${{ matrix.platform }}
           path: dist/
           if-no-files-found: error
+
+  smoke:
+    name: smoke (${{ matrix.platform }})
+    needs: installers
+    if: needs.installers.result == 'success'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos
+            os: macos-15
+          - platform: windows
+            os: windows-2022
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22.23.3"
+          package-manager-cache: false
+      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: installers-${{ matrix.platform }}
+          path: dist
+      - name: Install, launch, and stop the packaged app
+        run: node scripts/desktop-smoke.mjs --platform ${{ matrix.platform }} --dist dist
 
   sbom:
     name: sbom

@@ -60,3 +60,30 @@ export function assertHostNode(version: string): void {
     throw new Error(`The sidecar copies Node ${NODE_VERSION}; this process is ${version}`)
   }
 }
+
+/**
+ * Command prefix that runs `binary` as `arch`.
+ * On Apple Silicon the x64 slice must be `arch -x86_64` plus the x64 Node,
+ * never the arm64 `process.execPath`.
+ */
+export function nodeLaunchArgs(binary: string, arch: string, hostArch: string, platform: NodeJS.Platform): string[] {
+  if (platform === 'darwin' && arch !== hostArch) {
+    const flag = arch === 'x64' ? '-x86_64' : arch === 'arm64' ? '-arm64' : ''
+    if (!flag) throw new Error(`No Node launch prefix for ${arch}`)
+    return ['arch', flag, binary]
+  }
+  return [binary]
+}
+
+/** `file` text for one thin Mach-O, not a universal binary that contains both. */
+export function fileDescribesArch(output: string, arch: 'arm64' | 'x64'): boolean {
+  const arm = /\barm64\b/.test(output)
+  const intel = /\bx86_64\b/.test(output)
+  if (arch === 'arm64') return arm && !intel
+  return intel && !arm
+}
+
+/** `lipo -info` on the universal sidecar lists both slices. */
+export function lipoInfoHasBoth(output: string): boolean {
+  return /\bx86_64\b/.test(output) && /\barm64\b/.test(output)
+}

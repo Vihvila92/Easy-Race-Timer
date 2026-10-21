@@ -2,8 +2,9 @@
  * Build the Node server as a Tauri sidecar: a Node 22.23.3 single executable
  * that includes the web UI and the better-sqlite3 native module.
  *
- * A universal macOS target builds arm64 and x64 executables and combines them
- * with lipo. The `check` job does not run this script.
+ * A universal macOS target compiles better-sqlite3 for arm64 and for x64,
+ * generates each SEA blob with that architecture's Node, and combines the
+ * executables with lipo. The `check` job does not run this script.
  *
  * TODO(#130): when the encrypted race file lands, extract
  * better-sqlite3-multiple-ciphers instead of better-sqlite3. Do not embed a
@@ -17,7 +18,16 @@ import path from 'node:path'
 import { Readable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import * as esbuild from 'esbuild'
-import { NODE_TARBALLS, NODE_VERSION, SEA_FUSE, assertHostNode, seaBuildKind } from './sidecar-plan.ts'
+import {
+  NODE_TARBALLS,
+  NODE_VERSION,
+  SEA_FUSE,
+  assertHostNode,
+  fileDescribesArch,
+  lipoInfoHasBoth,
+  nodeLaunchArgs,
+  seaBuildKind,
+} from './sidecar-plan.ts'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const nodeRequire = createRequire(import.meta.url)
@@ -33,14 +43,14 @@ function hostTriple(): string {
   return match[1]
 }
 
-function hostPrebuild(): string {
-  if (process.platform === 'linux') {
+function prebuildName(platform: string, arch: string): string {
+  if (platform === 'linux') {
     const report = process.report?.getReport() as { header?: { glibcVersionRuntime?: string } } | undefined
     const musl = !report?.header?.glibcVersionRuntime
-    return `${musl ? 'linuxmusl' : 'linux'}-${process.arch}.node`
+    return `${musl ? 'linuxmusl' : 'linux'}-${arch}.node`
   }
-  if (process.platform === 'darwin' || process.platform === 'win32') return `${process.platform}-${process.arch}.node`
-  throw new Error(`No better-sqlite3 sidecar prebuild for ${process.platform}-${process.arch}`)
+  if (platform === 'darwin' || platform === 'win32') return `${platform}-${arch}.node`
+  throw new Error(`No better-sqlite3 sidecar prebuild for ${platform}-${arch}`)
 }
 
 function readTree(dir: string, prefix: string, files: Record<string, Buffer>, accept: (rel: string) => boolean) {
@@ -62,14 +72,13 @@ function embed(files: Record<string, Buffer>): { files: Record<string, string>; 
   return { files: encoded, hashes }
 }
 
-function sqlitePayload(prebuilds: string[]): { files: Record<string, string>; hashes: Record<string, string> } {
+function sqlitePayload(natives: { name: string; file: string }[]): { files: Record<string, string>; hashes: Record<string, string> } {
   const pkgRoot = path.dirname(nodeRequire.resolve('better-sqlite3/package.json'))
   const files: Record<string, Buffer> = {}
   readTree(path.join(pkgRoot, 'lib'), 'lib', files, (rel) => rel.endsWith('.js'))
-  for (const name of prebuilds) {
-    const native = path.join(pkgRoot, 'prebuilds', name)
-    if (!fs.existsSync(native)) throw new Error(`Missing better-sqlite3 prebuild ${native}`)
-    files[`prebuilds/${name}`] = fs.readFileSync(native)
+  for (const native of natives) {
+    if (!fs.existsSync(native.file)) throw new Error(`Missing better-sqlite3 build ${native.file}`)
+    files[`prebuilds/${native.name}`] = fs.readFileSync(native.file)
   }
   files['package.json'] = Buffer.from(JSON.stringify({
     name: 'better-sqlite3',
@@ -176,36 +185,101 @@ async function nodeBinary(platform: string, arch: string, destDir: string): Prom
   return path.join(extracted, top, binaryName)
 }
 
-function injectSea(nodeBinary: string, blob: string, dest: string) {
-  fs.copyFileSync(nodeBinary, dest)
-  fs.chmodSync(dest, 0o755)
-  const macho = process.platform === 'darwin'
-  if (macho) run('codesign', ['--remove-signature', dest])
-  const args = ['exec', 'postject', dest, 'NODE_SEA_BLOB', blob, '--sentinel-fuse', SEA_FUSE]
-  if (macho) args.push('--macho-segment-name', 'NODE_SEA')
-  run('pnpm', args)
-  if (macho) run('codesign', ['--sign', '-', '--force', dest])
-  fs.chmodSync(dest, 0o755)
+function runNode(binary: string, arch: string, args: string[], cwd = root) {
+  const launch = nodeLaunchArgs(binary, arch, process.arch, process.platform)
+  const [command, ...prefix] = launch
+  if (!command) throw new Error('missing node binary')
+  execFileSync(command, [...prefix, ...args], { cwd, stdio: 'inherit', env: process.env })
 }
 
-const host = hostTriple()
-const triple = process.env.TAURI_ENV_TARGET_TRIPLE?.trim() || host
-const plan = seaBuildKind(triple, host, process.platform)
-if (plan.kind === 'unsupported') throw new Error(plan.reason)
+function captureNode(binary: string, arch: string, args: string[]): string {
+  const launch = nodeLaunchArgs(binary, arch, process.arch, process.platform)
+  const [command, ...prefix] = launch
+  if (!command) throw new Error('missing node binary')
+  return execFileSync(command, [...prefix, ...args], { cwd: root, encoding: 'utf8' }).trim()
+}
 
-run('pnpm', ['--filter', '@ert/web', 'build'])
-const prebuilds = plan.kind === 'universal-darwin'
-  ? ['darwin-arm64.node', 'darwin-x64.node']
-  : [hostPrebuild()]
-const sqlite = sqlitePayload(prebuilds)
-const web = webPayload()
-const outDir = path.join(root, 'dist/sidecar')
-fs.mkdirSync(outDir, { recursive: true })
-const bundle = path.join(outDir, 'server.cjs')
+function assertFileArch(file: string, arch: 'arm64' | 'x64') {
+  const output = execFileSync('file', [file], { encoding: 'utf8' })
+  console.log(output.trim())
+  if (!fileDescribesArch(output, arch)) throw new Error(`${file} is not a ${arch} binary`)
+}
 
-await esbuild.build({
-  stdin: {
-    contents: `
+function ensureRosetta(arch: string) {
+  if (process.platform !== 'darwin' || arch === process.arch) return
+  const flag = arch === 'x64' ? '-x86_64' : '-arm64'
+  try {
+    execFileSync('arch', [flag, 'true'], { stdio: 'ignore' })
+  } catch {
+    run('softwareupdate', ['--install-rosetta', '--agree-to-license'])
+  }
+}
+
+/** Compile better-sqlite3 with the Node that will run this slice, then keep that `.node`. */
+function rebuildNative(nodeBin: string, arch: string): { name: string; file: string } {
+  ensureRosetta(arch)
+  const pkgRoot = path.dirname(nodeRequire.resolve('better-sqlite3/package.json'))
+  const nodeGyp = nodeRequire.resolve('node-gyp/bin/node-gyp.js')
+  const buildDir = path.join(pkgRoot, 'build')
+  fs.rmSync(buildDir, { recursive: true, force: true })
+  const name = prebuildName(process.platform, arch)
+  console.log(`rebuilding better-sqlite3 for ${process.platform}-${arch} with ${nodeBin}`)
+  const launch = nodeLaunchArgs(nodeBin, arch, process.arch, process.platform)
+  const [command, ...prefix] = launch
+  if (!command) throw new Error('missing node binary')
+  execFileSync(command, [...prefix, nodeGyp, 'rebuild', '--release', '--force_build=1'], {
+    cwd: pkgRoot,
+    stdio: 'inherit',
+    env: { ...process.env, npm_config_arch: arch },
+  })
+  const built = path.join(buildDir, 'Release', 'better_sqlite3.node')
+  if (!fs.existsSync(built)) throw new Error(`better-sqlite3 rebuild did not produce ${built}`)
+  const destDir = path.join(root, 'dist/sidecar/native')
+  fs.mkdirSync(destDir, { recursive: true })
+  const dest = path.join(destDir, name)
+  fs.copyFileSync(built, dest)
+  fs.rmSync(buildDir, { recursive: true, force: true })
+  if (process.platform === 'darwin') assertFileArch(dest, arch === 'x64' ? 'x64' : 'arm64')
+  else {
+    try {
+      console.log(execFileSync('file', [dest], { encoding: 'utf8' }).trim())
+    } catch {
+      console.log(`native ${dest}`)
+    }
+  }
+  return { name, file: dest }
+}
+
+function assertSliceNode(nodeBin: string, arch: string) {
+  const version = captureNode(nodeBin, arch, ['-p', 'process.version'])
+  const reported = captureNode(nodeBin, arch, ['-p', 'process.arch'])
+  assertHostNode(version)
+  if (reported !== arch) throw new Error(`Node ${nodeBin} reported ${reported}, expected ${arch}`)
+  if (process.platform === 'darwin') assertFileArch(nodeBin, arch === 'x64' ? 'x64' : 'arm64')
+  console.log(`sea node ${arch} ${version} ${nodeLaunchArgs(nodeBin, arch, process.arch, process.platform).join(' ')}`)
+}
+
+function generateBlob(nodeBin: string, arch: string, bundle: string, blob: string) {
+  const seaConfig = blob.replace(/\.blob$/, '.json')
+  fs.writeFileSync(seaConfig, `${JSON.stringify({
+    main: bundle,
+    output: blob,
+    disableExperimentalSEAWarning: true,
+    useSnapshot: false,
+    useCodeCache: false,
+  }, null, 2)}\n`)
+  console.log(`experimental-sea-config via ${nodeLaunchArgs(nodeBin, arch, process.arch, process.platform).join(' ')}`)
+  runNode(nodeBin, arch, ['--experimental-sea-config', seaConfig])
+}
+
+async function buildBundle(
+  outfile: string,
+  native: { name: string; file: string },
+  web: { files: Record<string, string>; hashes: Record<string, string> },
+) {
+  await esbuild.build({
+    stdin: {
+      contents: `
       import os from 'node:os'
       import path from 'node:path'
       import { extractTree } from './sidecar-assets.ts'
@@ -225,30 +299,43 @@ await esbuild.build({
         process.exit(1)
       })
     `,
-    resolveDir: path.join(root, 'scripts'),
-    sourcefile: 'sidecar-entry.ts',
-    loader: 'ts',
-  },
-  bundle: true,
-  platform: 'node',
-  format: 'cjs',
-  target: 'node22',
-  outfile: bundle,
-  legalComments: 'eof',
-  plugins: [sqlitePlugin(sqlite), webPlugin(web)],
-  logLevel: 'info',
-})
+      resolveDir: path.join(root, 'scripts'),
+      sourcefile: 'sidecar-entry.ts',
+      loader: 'ts',
+    },
+    bundle: true,
+    platform: 'node',
+    format: 'cjs',
+    target: 'node22',
+    outfile,
+    legalComments: 'eof',
+    plugins: [sqlitePlugin(sqlitePayload([native])), webPlugin(web)],
+    logLevel: 'info',
+  })
+}
 
-const seaConfig = path.join(outDir, 'sea-config.json')
-const blob = path.join(outDir, 'sea-prep.blob')
-fs.writeFileSync(seaConfig, `${JSON.stringify({
-  main: bundle,
-  output: blob,
-  disableExperimentalSEAWarning: true,
-  useSnapshot: false,
-  useCodeCache: false,
-}, null, 2)}\n`)
-run(process.execPath, ['--experimental-sea-config', seaConfig])
+function injectSea(nodeBinary: string, blob: string, dest: string) {
+  fs.copyFileSync(nodeBinary, dest)
+  fs.chmodSync(dest, 0o755)
+  const macho = process.platform === 'darwin'
+  if (macho) run('codesign', ['--remove-signature', dest])
+  const args = ['exec', 'postject', dest, 'NODE_SEA_BLOB', blob, '--sentinel-fuse', SEA_FUSE]
+  if (macho) args.push('--macho-segment-name', 'NODE_SEA')
+  run('pnpm', args)
+  if (macho) run('codesign', ['--sign', '-', '--force', dest])
+  fs.chmodSync(dest, 0o755)
+}
+
+const host = hostTriple()
+const triple = process.env.TAURI_ENV_TARGET_TRIPLE?.trim() || host
+const plan = seaBuildKind(triple, host, process.platform)
+if (plan.kind === 'unsupported') throw new Error(plan.reason)
+
+assertHostNode(process.version)
+run('pnpm', ['--filter', '@ert/web', 'build'])
+const web = webPayload()
+const outDir = path.join(root, 'dist/sidecar')
+fs.mkdirSync(outDir, { recursive: true })
 
 const extension = process.platform === 'win32' ? '.exe' : ''
 const binaries = path.join(root, 'src-tauri/binaries')
@@ -256,18 +343,48 @@ fs.mkdirSync(binaries, { recursive: true })
 const sidecar = path.join(binaries, `ert-server-${triple}${extension}`)
 
 if (plan.kind === 'universal-darwin') {
-  const arm = await nodeBinary('darwin', 'arm64', outDir)
-  const intel = await nodeBinary('darwin', 'x64', outDir)
-  const armSea = path.join(outDir, 'ert-server-arm64')
-  const intelSea = path.join(outDir, 'ert-server-x64')
-  injectSea(arm, blob, armSea)
-  injectSea(intel, blob, intelSea)
+  const slices = [
+    { arch: 'arm64' as const, prebuild: 'darwin-arm64.node' },
+    { arch: 'x64' as const, prebuild: 'darwin-x64.node' },
+  ]
+  const seas: string[] = []
+  for (const slice of slices) {
+    const nodeBin = await nodeBinary('darwin', slice.arch, outDir)
+    assertSliceNode(nodeBin, slice.arch)
+    const native = rebuildNative(nodeBin, slice.arch)
+    if (native.name !== slice.prebuild) throw new Error(`Expected ${slice.prebuild}, built ${native.name}`)
+    const bundle = path.join(outDir, `server-${slice.arch}.cjs`)
+    const blob = path.join(outDir, `sea-prep-${slice.arch}.blob`)
+    const sea = path.join(outDir, `ert-server-${slice.arch}`)
+    await buildBundle(bundle, native, web)
+    generateBlob(nodeBin, slice.arch, bundle, blob)
+    injectSea(nodeBin, blob, sea)
+    assertFileArch(sea, slice.arch)
+    seas.push(sea)
+  }
+  const [armSea, intelSea] = seas
+  if (!armSea || !intelSea) throw new Error('universal sidecar slices were not built')
   if (fs.existsSync(sidecar)) fs.rmSync(sidecar)
   run('lipo', ['-create', armSea, intelSea, '-output', sidecar])
   run('codesign', ['--sign', '-', '--force', sidecar])
   fs.chmodSync(sidecar, 0o755)
+  const info = execFileSync('lipo', ['-info', sidecar], { encoding: 'utf8' })
+  console.log(`lipo -info ${info.trim()}`)
+  if (!lipoInfoHasBoth(info)) throw new Error(`lipo -info is missing an architecture: ${info.trim()}`)
+  const described = execFileSync('file', [sidecar], { encoding: 'utf8' })
+  console.log(described.trim())
 } else {
-  assertHostNode(process.version)
+  const arch = process.arch
+  const native = rebuildNative(process.execPath, arch)
+  const bundle = path.join(outDir, 'server.cjs')
+  const blob = path.join(outDir, 'sea-prep.blob')
+  await buildBundle(bundle, native, web)
+  generateBlob(process.execPath, arch, bundle, blob)
   injectSea(process.execPath, blob, sidecar)
+  try {
+    console.log(execFileSync('file', [sidecar], { encoding: 'utf8' }).trim())
+  } catch {
+    console.log(`sidecar ${sidecar}`)
+  }
 }
 console.log(`sidecar ${sidecar}`)

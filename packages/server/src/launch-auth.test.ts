@@ -1,3 +1,4 @@
+import http from 'node:http'
 import { Writable } from 'node:stream'
 import { PassThrough } from 'node:stream'
 import fs from 'node:fs'
@@ -136,12 +137,16 @@ describe('launch token', () => {
     expect(cookie).toContain('HttpOnly')
     expect(cookie).toContain('SameSite=Strict')
     expect(cookie).not.toContain('Secure')
+    expect(cookie).not.toMatch(/max-age/i)
+    expect(cookie).not.toMatch(/expires/i)
     expect(cookie).not.toContain(code)
+    expect(String(first.headers['cache-control'])).toMatch(/no-store/i)
     expect(first.body).not.toContain(code)
 
     const second = await app.inject({ method: 'GET', url: `/auth?code=${code}`, headers: { host: '127.0.0.1:80' } })
     expect(second.statusCode).toBe(404)
     expect(second.body).not.toContain(code)
+    expect(String(second.headers['cache-control'])).toMatch(/no-store/i)
 
     const expired = new LaunchCodes('ef'.repeat(32), Date.now() - AUTH_CODE_TTL_MS - 1)
     const { app: stale } = await createApp({
@@ -164,5 +169,56 @@ describe('launch token', () => {
     await app.close()
     await stale.close()
     fs.rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('rejects an unauthenticated websocket with 401 before the upgrade', async () => {
+    const db = await openDatabase(':memory:')
+    const codes = new LaunchCodes(code)
+    const { app } = await createApp({
+      db,
+      testMode: true,
+      launch: { token, codes },
+    })
+    await app.listen({ host: '127.0.0.1', port: 0 })
+    const address = app.server.address()
+    if (!address || typeof address === 'string') throw new Error('sidecar test server has no port')
+    const port = address.port
+    const headers = {
+      host: `127.0.0.1:${port}`,
+      origin: `http://127.0.0.1:${port}`,
+      connection: 'Upgrade',
+      upgrade: 'websocket',
+      'sec-websocket-key': Buffer.from('easy-race-timer!').toString('base64'),
+      'sec-websocket-version': '13',
+    }
+
+    const refused = await new Promise<number>((resolve, reject) => {
+      const request = http.request({ host: '127.0.0.1', port, path: '/ws', headers, agent: false }, (response) => {
+        response.resume()
+        response.socket?.destroy()
+        resolve(response.statusCode ?? 0)
+      })
+      request.on('upgrade', (response) => {
+        response.socket.destroy()
+        reject(new Error(`unauthenticated /ws upgraded with ${response.statusCode}`))
+      })
+      request.setTimeout(5_000, () => {
+        request.destroy()
+        reject(new Error('unauthenticated /ws timed out'))
+      })
+      request.on('error', reject)
+      request.end()
+    })
+    expect(refused).toBe(401)
+    expect(refused).not.toBe(101)
+
+    db.raw.close()
+    // The upgrade listener keeps the server open after a raw socket 401.
+    app.server.closeAllConnections()
+    app.server.unref()
+    await Promise.race([
+      app.close(),
+      new Promise((resolve) => setTimeout(resolve, 500)),
+    ])
   })
 })

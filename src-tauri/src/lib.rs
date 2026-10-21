@@ -86,12 +86,8 @@ async fn launch(app: tauri::AppHandle) -> Result<(), String> {
     let token = launch_token()?;
 
     let mut command = Command::new(&program);
+    configure_sidecar(&mut command, &data_dir);
     command
-        .env_clear()
-        .env("HOST", "127.0.0.1")
-        .env("PORT", "0")
-        .env("ERT_DATA_DIR", &data_dir)
-        .env("NODE_ENV", "production")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -100,10 +96,6 @@ async fn launch(app: tauri::AppHandle) -> Result<(), String> {
                 .parent()
                 .ok_or_else(|| "sidecar directory is missing".to_string())?,
         );
-    #[cfg(unix)]
-    {
-        command.env("LANG", "C.UTF-8");
-    }
     #[cfg(target_os = "linux")]
     unsafe {
         use std::os::unix::process::CommandExt;
@@ -229,6 +221,48 @@ fn with_stderr(message: &str, stderr: &Mutex<String>) -> String {
     message.to_string()
 }
 
+/// Child environment after `env_clear`.
+/// Windows copies only `SystemRoot` and `WINDIR` from the parent.
+/// Every other parent variable stays unset.
+fn sidecar_environment(
+    parent: &[(&str, &str)],
+    windows: bool,
+    data_dir: &str,
+) -> Vec<(String, String)> {
+    let mut env = vec![
+        ("HOST".to_string(), "127.0.0.1".to_string()),
+        ("PORT".to_string(), "0".to_string()),
+        ("ERT_DATA_DIR".to_string(), data_dir.to_string()),
+        ("NODE_ENV".to_string(), "production".to_string()),
+    ];
+    if windows {
+        for key in ["SystemRoot", "WINDIR"] {
+            if let Some(value) = parent
+                .iter()
+                .find(|(name, _)| name.eq_ignore_ascii_case(key))
+                .map(|(_, value)| *value)
+            {
+                env.push((key.to_string(), value.to_string()));
+            }
+        }
+    } else {
+        env.push(("LANG".to_string(), "C.UTF-8".to_string()));
+    }
+    env
+}
+
+fn configure_sidecar(command: &mut Command, data_dir: &str) {
+    command.env_clear();
+    let parent: Vec<(String, String)> = std::env::vars().collect();
+    let borrowed: Vec<(&str, &str)> = parent
+        .iter()
+        .map(|(key, value)| (key.as_str(), value.as_str()))
+        .collect();
+    for (key, value) in sidecar_environment(&borrowed, cfg!(windows), data_dir) {
+        command.env(key, value);
+    }
+}
+
 fn launch_token() -> Result<String, String> {
     let mut bytes = [0u8; 32];
     getrandom::getrandom(&mut bytes).map_err(|error| error.to_string())?;
@@ -321,6 +355,81 @@ fn stop_sidecar(app: &tauri::AppHandle) {
         eprintln!("Easy Race Timer: failed to stop sidecar pid {pid}: {error}");
     }
     let _ = process.child.wait();
+}
+
+#[cfg(test)]
+mod env_tests {
+    use super::sidecar_environment;
+
+    #[test]
+    fn windows_keeps_system_roots_and_drops_the_rest() {
+        let parent = [
+            ("SystemRoot", r"C:\Windows"),
+            ("WINDIR", r"C:\Windows"),
+            ("PATH", r"C:\evil"),
+            ("NODE_OPTIONS", "--inspect"),
+            ("ERT_DB_KEY", "secret"),
+            ("HTTP_PROXY", "http://127.0.0.1:9"),
+            ("USERPROFILE", r"C:\Users\runner"),
+        ];
+        let env = sidecar_environment(&parent, true, r"C:\data");
+        let keys: Vec<&str> = env.iter().map(|(key, _)| key.as_str()).collect();
+        assert_eq!(
+            keys,
+            [
+                "HOST",
+                "PORT",
+                "ERT_DATA_DIR",
+                "NODE_ENV",
+                "SystemRoot",
+                "WINDIR"
+            ]
+        );
+        assert!(env
+            .iter()
+            .all(|(key, _)| *key != "PATH" && *key != "NODE_OPTIONS" && *key != "ERT_DB_KEY"));
+        assert_eq!(
+            env.iter()
+                .find(|(key, _)| *key == "ERT_DATA_DIR")
+                .map(|(_, value)| value.as_str()),
+            Some(r"C:\data")
+        );
+    }
+
+    #[test]
+    fn windows_accepts_either_spelling_and_omits_a_missing_root() {
+        let parent = [("SYSTEMROOT", r"D:\Windows"), ("windir", r"D:\Windows")];
+        let env = sidecar_environment(&parent, true, r"D:\data");
+        assert!(env
+            .iter()
+            .any(|(key, value)| key == "SystemRoot" && value == r"D:\Windows"));
+        assert!(env
+            .iter()
+            .any(|(key, value)| key == "WINDIR" && value == r"D:\Windows"));
+        let empty = sidecar_environment(&[], true, r"C:\data");
+        assert!(empty
+            .iter()
+            .all(|(key, _)| key != "SystemRoot" && key != "WINDIR"));
+    }
+
+    #[test]
+    fn unix_sets_lang_and_does_not_copy_the_parent() {
+        let parent = [
+            ("SystemRoot", r"C:\Windows"),
+            ("PATH", "/tmp"),
+            ("HOME", "/home/a"),
+            ("NODE_OPTIONS", "--inspect"),
+        ];
+        let env = sidecar_environment(&parent, false, "/data");
+        let keys: Vec<&str> = env.iter().map(|(key, _)| key.as_str()).collect();
+        assert_eq!(keys, ["HOST", "PORT", "ERT_DATA_DIR", "NODE_ENV", "LANG"]);
+        assert_eq!(
+            env.iter()
+                .find(|(key, _)| *key == "LANG")
+                .map(|(_, value)| value.as_str()),
+            Some("C.UTF-8")
+        );
+    }
 }
 
 #[cfg(windows)]

@@ -1,7 +1,6 @@
 import { timingSafeEqual } from 'node:crypto'
 
 export const LAUNCH_COOKIE = 'ert_launch'
-export const LAUNCH_TTL_SECONDS = 12 * 60 * 60
 export const AUTH_CODE_TTL_MS = 15_000
 
 /** 32 bytes, hex encoded. Used for the stdin launch token and the one-time auth code. */
@@ -17,8 +16,9 @@ export function tokensEqual(left: string, right: string): boolean {
   return timingSafeEqual(a, b)
 }
 
+/** Session cookie: no Max-Age and no Expires, so it ends with the browser session. */
 export function launchCookie(token: string): string {
-  return `${LAUNCH_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${LAUNCH_TTL_SECONDS}`
+  return `${LAUNCH_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/`
 }
 
 export function redactRequestUrl(url: string): string {
