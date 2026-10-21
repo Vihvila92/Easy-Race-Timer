@@ -47,5 +47,10 @@
     "linux": {
       "deb": { "section": "utils" }
     }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "TODO_REPLACE_WITH_UPDATER_PUBKEY"
+    }
   }
 }

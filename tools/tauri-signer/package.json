@@ -1,0 +1,8 @@
+{
+  "name": "easy-race-timer-tauri-signer",
+  "private": true,
+  "description": "Exact @tauri-apps/cli pin for the release sign job. Installed with npm ci --ignore-scripts from package-lock.json.",
+  "dependencies": {
+    "@tauri-apps/cli": "2.12.3"
+  }
+}

@@ -20,6 +20,7 @@ const allowed = new Set([
   'BlueOak-1.0.0',
   'Python-2.0',
   'MPL-2.0',
+  'CC-BY-3.0',
   'CC-BY-4.0',
   'UNLICENSED',
 ])
