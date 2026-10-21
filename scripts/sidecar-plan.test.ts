@@ -52,6 +52,8 @@ describe('sidecar build plan', () => {
     expect(source).toContain("'--sign', '-'")
     expect(source).toContain('darwin-arm64.node')
     expect(source).toContain('darwin-x64.node')
+    expect(source).toContain('aarch64-apple-darwin')
+    expect(source).toContain('x86_64-apple-darwin')
   })
 
   it('runs the x64 SEA config with the x64 Node, not the arm64 host', () => {

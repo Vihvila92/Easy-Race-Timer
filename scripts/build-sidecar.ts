@@ -354,9 +354,11 @@ fs.mkdirSync(binaries, { recursive: true })
 const sidecar = path.join(binaries, `ert-server-${triple}${extension}`)
 
 if (plan.kind === 'universal-darwin') {
+  // Tauri compiles each arch on its own and looks up externalBin by that
+  // triple. The fat file is what the release log checks with lipo.
   const slices = [
-    { arch: 'arm64' as const, prebuild: 'darwin-arm64.node' },
-    { arch: 'x64' as const, prebuild: 'darwin-x64.node' },
+    { arch: 'arm64' as const, prebuild: 'darwin-arm64.node', triple: 'aarch64-apple-darwin' },
+    { arch: 'x64' as const, prebuild: 'darwin-x64.node', triple: 'x86_64-apple-darwin' },
   ]
   const seas: string[] = []
   for (const slice of slices) {
@@ -366,7 +368,7 @@ if (plan.kind === 'universal-darwin') {
     if (native.name !== slice.prebuild) throw new Error(`Expected ${slice.prebuild}, built ${native.name}`)
     const bundle = path.join(outDir, `server-${slice.arch}.cjs`)
     const blob = path.join(outDir, `sea-prep-${slice.arch}.blob`)
-    const sea = path.join(outDir, `ert-server-${slice.arch}`)
+    const sea = path.join(binaries, `ert-server-${slice.triple}`)
     await buildBundle(bundle, native, web)
     generateBlob(nodeBin, slice.arch, bundle, blob)
     injectSea(nodeBin, blob, sea)

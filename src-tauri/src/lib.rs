@@ -460,13 +460,15 @@ mod job {
         OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE,
     };
 
-    pub struct KillOnCloseJob(pub HANDLE);
+    /// Owned job-object handle. Stored as an integer so Tauri can keep it in
+    /// app state, which requires `Send`. `CloseHandle` runs only from `Drop`.
+    pub struct KillOnCloseJob(isize);
 
     impl Drop for KillOnCloseJob {
         fn drop(&mut self) {
-            if !self.0.is_null() {
+            if self.0 != 0 {
                 unsafe {
-                    CloseHandle(self.0);
+                    CloseHandle(self.0 as HANDLE);
                 }
             }
         }
@@ -502,7 +504,7 @@ mod job {
                 CloseHandle(job);
                 return Err(error.to_string());
             }
-            Ok(KillOnCloseJob(job))
+            Ok(KillOnCloseJob(job as isize))
         }
     }
 }
