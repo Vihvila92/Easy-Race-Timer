@@ -117,8 +117,9 @@ Installers, updater archives, `.sig` files, `latest.json`, `checksums.txt` and
 both SBOMs get GitHub build-provenance attestations. The CycloneDX attestations
 use the installers and updater archives as the subject, so
 `gh attestation verify --predicate-type https://cyclonedx.org/bom` checks those
-files. A tag release also verifies every `.sig` against the public key committed
-in `src-tauri/tauri.conf.json` and fails if that key is still the placeholder.
+files. A tag release verifies every `.sig` against the public key committed
+in `src-tauri/tauri.conf.json` immediately before the GitHub Release is created,
+and again after it exists. It fails if that key is still the placeholder.
 Check downloads with `sha256sum -c checksums.txt` and `gh attestation verify`.
 The exact commands, including the signer workflow and the tag ref, are in
 [docs/release.md](docs/release.md).
