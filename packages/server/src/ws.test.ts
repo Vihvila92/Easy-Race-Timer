@@ -134,14 +134,18 @@ describe('/ws handshake', () => {
       const badSignature = await connect(app, { authorization: `Bearer ${forged}` })
       const stale = await connect(app, { authorization: `Bearer ${expired}` })
       const badCookie = await connect(app, { cookie: 'ert_session=nope' })
-      opened.push(foreign, foreignWithToken, missingOrigin, anonymous, malformed, badSignature, stale, badCookie)
+      const brokenCookie = await connect(app, { cookie: 'ert_session=%' })
+      const truncatedCookie = await connect(app, { cookie: `ert_session=${token.slice(0, 12)}` })
+      const partialEscape = await connect(app, { cookie: 'ert_session=%E0%A4' })
+      opened.push(foreign, foreignWithToken, missingOrigin, anonymous, malformed, badSignature, stale, badCookie, brokenCookie, truncatedCookie, partialEscape)
 
       expect(foreign.status).toBe(403)
       expect(foreignWithToken.status).toBe(403)
       expect(missingOrigin.status).toBe(403)
-      for (const rejected of [anonymous, malformed, badSignature, stale, badCookie]) {
+      for (const rejected of [anonymous, malformed, badSignature, stale, badCookie, brokenCookie, truncatedCookie, partialEscape]) {
         expect(rejected.status).toBe(401)
-        expect(JSON.parse(rejected.body).error.code).toBe('PIN_REQUIRED')
+        expect(JSON.parse(rejected.body).error).toEqual({ code: 'PIN_REQUIRED', message: 'PIN required' })
+        expect(rejected.body).not.toMatch(/URIError|SyntaxError|stack|decodeURI/i)
       }
     } finally {
       for (const socket of opened) socket.close()

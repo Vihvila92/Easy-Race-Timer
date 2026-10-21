@@ -44,6 +44,18 @@ export function sessionCookie(token: string): string {
   return `${SESSION_COOKIE}=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${SESSION_TTL_SECONDS}`
 }
 
+function sessionCookieValue(cookie: string): string | undefined {
+  const match = new RegExp(`(?:^|;\\s*)${SESSION_COOKIE}=([^;]*)`).exec(cookie)
+  const raw = match?.[1]
+  if (!raw) return undefined
+  try {
+    return decodeURIComponent(raw)
+  } catch {
+    // A truncated or non-decodable cookie is not a token. Callers treat that as anonymous.
+    return undefined
+  }
+}
+
 export function tokenFromRequest(headers: { authorization?: string; cookie?: string }): string | undefined {
   const header = headers.authorization
   if (header?.startsWith('Bearer ')) {
@@ -52,6 +64,5 @@ export function tokenFromRequest(headers: { authorization?: string; cookie?: str
   }
   const cookie = headers.cookie
   if (!cookie) return undefined
-  const match = new RegExp(`(?:^|;\\s*)${SESSION_COOKIE}=([^;]+)`).exec(cookie)
-  return match?.[1] ? decodeURIComponent(match[1]) : undefined
+  return sessionCookieValue(cookie)
 }

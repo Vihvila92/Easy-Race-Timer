@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { openDatabase } from '@ert/storage'
 import { LOCAL_ROUTES, PROTECTED_ROUTES, PUBLIC_ROUTES, routeAccess } from './access.js'
 import { createApp } from './app.js'
+import { issueToken, sessionSecret, tokenFromRequest } from './session.js'
 
 async function tokenFor(app: FastifyInstance, pin?: string): Promise<string> {
   const response = await app.inject({
@@ -131,5 +132,42 @@ describe('device token', () => {
     expect(bootstrap.statusCode).toBe(200)
     db.raw.close()
     await app.close()
+  })
+
+  it('returns 401 for a malformed, truncated, or non-decodable session cookie', async () => {
+    const db = await openDatabase(':memory:')
+    const { app } = await createApp({ db, testMode: true })
+    await app.ready()
+    const token = issueToken(sessionSecret(db))
+    const undecodable = ['%', '%2', '%E0%A4', '%FF', `${token.slice(0, 8)}%2`]
+    const truncated = token.slice(0, 12)
+    try {
+      for (const cookie of undecodable) {
+        expect(tokenFromRequest({ cookie: `ert_session=${cookie}` }), cookie).toBeUndefined()
+      }
+      expect(tokenFromRequest({ cookie: `ert_session=${truncated}` })).toBe(truncated)
+      for (const cookie of [...undecodable, truncated]) {
+        const response = await app.inject({
+          method: 'GET',
+          url: '/api/v1/bootstrap',
+          headers: { cookie: `ert_session=${cookie}` },
+        })
+        expect(response.statusCode, cookie).toBe(401)
+        expect(response.json(), cookie).toEqual({ error: { code: 'PIN_REQUIRED', message: 'PIN required' } })
+        expect(response.body, cookie).not.toMatch(/URIError|SyntaxError|stack|decodeURI/i)
+        expect(response.body, cookie).not.toContain(cookie)
+      }
+      const encodedDot = await app.inject({
+        method: 'GET',
+        url: '/api/v1/bootstrap',
+        headers: { cookie: 'ert_session=abc%2Edef' },
+      })
+      expect(tokenFromRequest({ cookie: 'ert_session=abc%2Edef' })).toBe('abc.def')
+      expect(encodedDot.statusCode).toBe(401)
+      expect(encodedDot.json()).toEqual({ error: { code: 'PIN_REQUIRED', message: 'PIN required' } })
+    } finally {
+      db.raw.close()
+      await app.close()
+    }
   })
 })

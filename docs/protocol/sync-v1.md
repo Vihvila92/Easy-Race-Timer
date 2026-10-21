@@ -6,7 +6,7 @@ v0.1 siirtää dataa vain `.ertx`-tiedostona ja paikallisena WebSocket-ilmoituks
 
 ## WebSocket
 
-`GET /ws` (protocol 1). The handshake uses the same device token as the other protected routes (`Authorization: Bearer` or the `ert_session` cookie) and requires a loopback `Origin`. A missing or invalid token is rejected with 401. A missing or foreign `Origin` is rejected with 403, including when a valid token is sent.
+`GET /ws` (protocol 1). The handshake uses the same device token as the other protected routes (`Authorization: Bearer` or the `ert_session` cookie) and requires a loopback `Origin`. A missing or invalid token is rejected with 401. A malformed, truncated, or non-decodable `ert_session` cookie is an invalid token: HTTP routes and the `/ws` handshake respond with 401 and the usual `PIN_REQUIRED` body, with no stack trace or parser detail. A missing or foreign `Origin` is rejected with 403, including when a valid token is sent.
 
 After the handshake the server sends:
 
