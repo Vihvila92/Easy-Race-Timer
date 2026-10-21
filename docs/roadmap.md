@@ -10,7 +10,7 @@ Yksi kannettava ajaa kisan. Kehittäjä käynnistää sen tästä reposta. Seura
 
 Avoin versio on seuratoimitsijoille, jotka osaavat selata verkkoa ja käyttää sähköpostia. Heille ei tule komentoriviä, Dockeria eikä erillistä palvelimen asennusta.
 
-Release-työnkulku rakentaa allekirjoittamattomat asentimet Windowsille (msi ja nsis), macOS:lle (universal dmg, ad-hoc) ja Linuxille (AppImage ja deb). Maksullinen allekirjoitus ja notarisointi eivät ole käytössä. Palvelin sidecar-prosessina tulee myöhemmin. Tarkistusohje: [release.fi.md](release.fi.md).
+Release-työnkulku rakentaa allekirjoittamattomat asentimet Windowsille (msi ja nsis), macOS:lle (universal dmg, ad-hoc) ja Linuxille (AppImage ja deb). Maksullinen allekirjoitus ja notarisointi eivät ole käytössä. Node-palvelin kulkee mukana sidecarina. Tarkistusohje: [release.fi.md](release.fi.md).
 
 Kuori voi jäädä ohueksi, koska nämä ovat jo voimassa:
 
@@ -32,6 +32,6 @@ Päätös: [adr/0010-tyopoytasovellus.md](adr/0010-tyopoytasovellus.md).
 
 ## Desktop app
 
-The open-source app is for club volunteers. The release workflow builds unsigned installers for Windows, macOS and Linux. Paid signing, notarization and the server sidecar come later. Verification: [release.md](release.md).
+The open-source app is for club volunteers. The release workflow builds unsigned installers for Windows, macOS and Linux, and the Node server ships as a sidecar. Paid signing and notarization are not in use. Verification: [release.md](release.md).
 
 The shell can stay thin. The UI uses same-origin relative URLs only. With `PORT` unset, the process binds a free local port and prints `ERT_READY` plus the URL and data directory. Data is an SQLite file in the OS user-data directory, with backups every five minutes. The first screen is a three-step wizard that creates the race. Volunteers do not use a terminal, Docker, or a separate server install.

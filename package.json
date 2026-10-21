@@ -4,12 +4,15 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.33.4",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "pnpm --filter @ert/web dev",
     "dev:server": "node --env-file=config/dev.env --import tsx packages/server/src/index.ts",
     "start": "node --import tsx packages/server/src/index.ts",
     "build": "pnpm --filter @ert/web build",
+    "build:sidecar": "tsx scripts/build-sidecar.ts",
     "tauri": "tauri",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "eslint .",
@@ -21,7 +24,10 @@
     "e2e": "pnpm build && playwright test"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["better-sqlite3", "esbuild"]
+    "onlyBuiltDependencies": [
+      "better-sqlite3",
+      "esbuild"
+    ]
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.2",
@@ -31,9 +37,11 @@
     "@tauri-apps/cli": "^2.12.3",
     "@types/node": "^22.18.6",
     "dependency-cruiser": "^17.3.0",
+    "esbuild": "^0.28.2",
     "eslint": "^9.36.0",
     "fast-check": "^4.2.0",
     "happy-dom": "^21.0.4",
+    "postject": "1.0.0-alpha.6",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2",
     "typescript-eslint": "^8.44.0",

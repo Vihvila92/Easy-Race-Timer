@@ -39,21 +39,29 @@ Avaa osoite, jonka prosessi tulostaa rivillä `ERT_READY`. Kehittäjän palvelin
 
 `pnpm dev` käynnistää Vite-käyttöliittymän välityspalvelimella. Se on vain kehitysapu, eikä osoite ole mukana rakennetussa käyttöliittymässä.
 
-`pnpm start` ilman muuttujia käyttäytyy kuin tuleva työpöytäkuori: vapaa paikallinen portti ja käyttöjärjestelmän käyttäjähakemisto.
+`pnpm start` ilman muuttujia käyttäytyy kuin työpöytäkuori: vapaa paikallinen portti ja käyttöjärjestelmän käyttäjähakemisto.
 
-## Työpöytäsovellus (Tauri, kehittäjäversio)
+## Työpöytäsovellus (Tauri)
 
-`src-tauri/` on pienin mahdollinen Tauri 2 -kuori rakennetun käyttöliittymän (`packages/web/dist`) ympärillä. Siinä ei ole omia komentoja, ja sillä on vain `core:default`-oikeus. Node-palvelin sidecarina (ADR 0010) ja päivittäjä (#136) tulevat myöhemmin, joten ikkuna näyttää toistaiseksi käyttöliittymän ilman taustapalvelua.
+`src-tauri/` on Tauri 2 -kuori. Käynnistyksessä se käynnistää Node-palvelimen sidecarina (`PORT=0`, `HOST=127.0.0.1`, `ERT_DATA_DIR` on käyttöjärjestelmän sovellusdatahakemisto) ja odottaa enintään 20 sekuntia yhtä stdout-riviä: `ERT_READY` ja JSON. Sitten se avaa ikkunan osoitteeseen `http://127.0.0.1:<port>`, joten käyttöliittymä ja API ovat sama origin. Ikkunan sulkeminen pysäyttää sidecarin.
 
-Vaatimukset: Rust 1.90 tai uudempi (CI asentaa 1.90.0) ja Linuxilla `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `librsvg2-dev` ja `libayatana-appindicator3-dev`. Windowsin ja macOS:n vaatimukset löytyvät Taurin ohjeesta.
+Shell-liitännäinen saa käynnistää vain `binaries/ert-server`-ohjelman, ilman argumentteja. Se ei saa ajaa muita ohjelmia. Jos sidecar epäonnistuu tai valmisriviä ei tule, ikkuna näyttää staattisen suomen- ja englanninkielisen virhesivun tyhjän näkymän sijaan.
+
+Jokainen palvelimen vastaus, myös HTML-tulokset, lähettää otsakkeet `Content-Security-Policy` (mukana `default-src 'self'`, `connect-src 'self'` ja `frame-ancestors 'none'`), `X-Content-Type-Options: nosniff` ja `Referrer-Policy: no-referrer`.
+
+`pnpm build:sidecar` rakentaa käyttöliittymän ja pakkaa `packages/server`-palvelimen Node 22 -yhdeksi suoritettavaksi, mukana tämän koneen `better-sqlite3`-natiivimoduuli. Tiedosto on `src-tauri/binaries/ert-server-<target-triple>` (Windowsissa `.exe`). Sitä ei commitoida. `pnpm tauri build` ajaa skriptin ensin. `check`-ajo ei rakenna sitä.
+
+Vaatimukset: Node.js 22 ja Rust 1.90 tai uudempi (`rust-toolchain.toml`; CI asentaa 1.90.0). Linuxilla tarvitaan myös `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `librsvg2-dev`, `patchelf` ja `libayatana-appindicator3-dev`. Windowsin ja macOS:n muut vaatimukset löytyvät Taurin ohjeesta.
 
 ```sh
 pnpm install
-pnpm tauri dev                            # ikkuna, jossa Viten pikapäivitys
+pnpm rebuild better-sqlite3 esbuild
+pnpm build:sidecar
+pnpm tauri dev
 pnpm tauri build --bundles appimage,deb   # Linux: AppImage + .deb
 ```
 
-Pakettimuodot: Windows `msi` ja `nsis`, macOS universal `dmg` (ad-hoc-allekirjoitus, ei notarisointia), Linux `appimage` ja `deb`. Maksullista Applen tai Windowsin varmennetta ei ole. Release-työnkulku rakentaa asentimet ja `v*`-tagista GitHub-julkaisun. Pakollinen `check`-ajo ei rakenna asenninta. Tarkistus, Gatekeeper ja SmartScreen: [docs/release.fi.md](docs/release.fi.md).
+Pakettimuodot: Windows `msi` ja `nsis`, macOS universal `dmg` (ad-hoc-allekirjoitus, ei notarisointia), Linux `appimage` ja `deb`. Maksullista Applen tai Windowsin varmennetta ei ole. Release-työnkulku rakentaa asentimet ja `v*`-tagista GitHub-julkaisun. Pakollinen `check`-ajo ei rakenna sidecar-tiedostoa eikä asenninta. Tarkistus, Gatekeeper ja SmartScreen: [docs/release.fi.md](docs/release.fi.md). Päivittäjä (#136) ei kuulu tähän kuoreen.
 
 ## Testit
 

@@ -721,7 +721,7 @@ export function PrintView() {
     <section>
       <h1>{t('print.title')}</h1>
       <p className="lead">{t('print.lead')}</p>
-      <iframe title={t('print.title')} data-testid="print-frame" srcDoc={html} style={{ width: '100%', minHeight: '70vh', border: '1px solid var(--line)', borderRadius: 16, background: 'white' }} />
+      <iframe title={t('print.title')} className="print-frame" data-testid="print-frame" srcDoc={html} />
     </section>
   )
 }

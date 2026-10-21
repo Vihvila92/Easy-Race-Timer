@@ -39,21 +39,29 @@ Open the address printed on the `ERT_READY` line. The developer server uses port
 
 `pnpm dev` starts the Vite UI with a proxy. That proxy is a development aid. The built UI does not contain a host or a port.
 
-`pnpm start` with no variables behaves like the future desktop shell: a free local port and the operating system user-data directory.
+`pnpm start` with no variables behaves like the desktop shell: a free local port and the operating system user-data directory.
 
-## Desktop app (Tauri, developer preview)
+## Desktop app (Tauri)
 
-`src-tauri/` is a minimal Tauri 2 shell around the built web UI (`packages/web/dist`). It has no custom commands and only the `core:default` permission. The Node server sidecar (ADR 0010) and the updater (#136) come later, so the desktop window shows the UI without a backend for now.
+`src-tauri/` is a Tauri 2 shell. On startup it spawns the Node server as a sidecar (`PORT=0`, `HOST=127.0.0.1`, `ERT_DATA_DIR` set to the operating system app data directory) and waits up to 20 seconds for one stdout line, `ERT_READY` plus JSON. It then opens the window at that `http://127.0.0.1:<port>` URL, so the UI and the API stay on the same origin. Closing the window stops the sidecar.
 
-Requirements: Rust 1.90 or newer (CI installs 1.90.0) and, on Linux, `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `librsvg2-dev`, `libayatana-appindicator3-dev`. See the Tauri prerequisites guide for Windows and macOS.
+The shell plugin may spawn only `binaries/ert-server`, with no arguments. It cannot run other programs. If the sidecar fails or the ready line does not arrive, the window shows a static Finnish and English error page instead of a blank view.
+
+Every response from that server, including HTML results, sends `Content-Security-Policy` (with `default-src 'self'`, `connect-src 'self'`, and `frame-ancestors 'none'`), `X-Content-Type-Options: nosniff`, and `Referrer-Policy: no-referrer`.
+
+`pnpm build:sidecar` builds the web UI and packages `packages/server` as a Node 22 single executable, including the `better-sqlite3` prebuild for this machine. The file is `src-tauri/binaries/ert-server-<target-triple>` (`.exe` on Windows). It is not committed. `pnpm tauri build` runs that script first. The `check` job does not.
+
+Requirements: Node.js 22 and Rust 1.90 or newer (`rust-toolchain.toml`; CI installs 1.90.0). On Linux also install `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `librsvg2-dev`, `patchelf`, and `libayatana-appindicator3-dev`. See the Tauri prerequisites guide for Windows and macOS.
 
 ```sh
 pnpm install
-pnpm tauri dev                            # window with Vite hot reload
+pnpm rebuild better-sqlite3 esbuild
+pnpm build:sidecar
+pnpm tauri dev
 pnpm tauri build --bundles appimage,deb   # Linux: AppImage + .deb
 ```
 
-Bundle targets: Windows `msi` + `nsis`, macOS universal `dmg` (ad-hoc signed, not notarized), Linux `appimage` + `deb`. Installers have no paid Apple or Windows certificate. The Release workflow builds them and, for a `v*` tag, publishes the GitHub Release. The required `check` job does not build installers. Verification, Gatekeeper and SmartScreen: [docs/release.md](docs/release.md).
+Bundle targets: Windows `msi` + `nsis`, macOS universal `dmg` (ad-hoc signed, not notarized), Linux `appimage` + `deb`. Installers have no paid Apple or Windows certificate. The Release workflow builds them and, for a `v*` tag, publishes the GitHub Release. The required `check` job does not build the sidecar or the installers. Verification, Gatekeeper and SmartScreen: [docs/release.md](docs/release.md). The updater (#136) is not part of this shell.
 
 ## Tests
 

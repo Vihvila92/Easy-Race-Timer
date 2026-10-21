@@ -2,6 +2,7 @@ import path from 'node:path'
 import { existsSync } from 'node:fs'
 import Fastify, { type FastifyInstance } from 'fastify'
 import { z } from 'zod'
+import helmet from '@fastify/helmet'
 import rateLimit from '@fastify/rate-limit'
 import fastifyStatic from '@fastify/static'
 import websocket from '@fastify/websocket'
@@ -47,6 +48,19 @@ export async function createApp(options: AppOptions): Promise<{ app: FastifyInst
   const secret = sessionSecret(options.db)
   const discovered: DiscoveredRoute[] = []
   const app = Fastify({ logger: options.testMode ? false : { level: 'info' } })
+  // Helmet's default policy would add upgrade-insecure-requests. This server is
+  // plain HTTP on loopback, so that directive would break the UI and the API.
+  await app.register(helmet, {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        connectSrc: ["'self'"],
+        frameAncestors: ["'none'"],
+        upgradeInsecureRequests: null,
+      },
+    },
+    referrerPolicy: { policy: 'no-referrer' },
+  })
   const globalMax = options.rateLimit?.globalMax ?? DEFAULT_GLOBAL_MAX
   const strictMax = options.rateLimit?.strictMax ?? DEFAULT_STRICT_MAX
   const recordingMax = options.rateLimit?.recordingMax ?? DEFAULT_RECORDING_MAX

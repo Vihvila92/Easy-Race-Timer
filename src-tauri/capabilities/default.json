@@ -1,7 +1,19 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Main window: core defaults only. No shell, fs, http or updater permissions.",
+  "description": "Main window. The shell plugin may spawn only the ert-server sidecar, with no arguments and no other commands.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": [
+    "core:default",
+    {
+      "identifier": "shell:allow-spawn",
+      "allow": [
+        {
+          "name": "binaries/ert-server",
+          "sidecar": true,
+          "args": false
+        }
+      ]
+    }
+  ]
 }
