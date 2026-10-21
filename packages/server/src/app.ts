@@ -143,7 +143,12 @@ export async function createApp(options: AppOptions): Promise<{ app: FastifyInst
     }
   })
 
-  app.get('/api/v1/health', async () => ({ ok: true, version: '0.1.0', pinConfigured: service.pinConfigured() }))
+  app.get('/api/v1/health', async () => ({
+    ok: true,
+    version: '0.1.0',
+    pinConfigured: service.pinConfigured(),
+    plaintextQuarantine: options.db.quarantinedPlaintext.length > 0,
+  }))
   app.get('/api/v1/runtime', async () => ({
     url: options.runtime?.url ?? '',
     dataDir: options.runtime?.dataDir ?? '',

@@ -5,8 +5,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { EXPECTED_CIPHER, cipherSettings, plaintextSqliteFiles, rawKeyPragma } from './cipher.js'
-import { backupDatabase, openDataFile, openDatabase, rekeyDataFile, rekeyHooks } from './db.js'
+import { EXPECTED_CIPHER, cipherSettings, isPlaintextSqlite, plaintextSqliteFiles, rawKeyPragma } from './cipher.js'
+import { backupDatabase, openDataFile, openDatabase, plaintextHooks, rekeyDataFile, rekeyHooks } from './db.js'
 import { RaceFileError } from './errors.js'
 import { devDataKey, resetDevKeyWarning } from './key.js'
 import { SCHEMA_VERSION } from './schema.js'
@@ -22,6 +22,8 @@ function tempDir(): string {
 
 afterEach(() => {
   rekeyHooks.beforeRename = undefined
+  plaintextHooks.failAfter = undefined
+  plaintextHooks.pauseAfter = undefined
   for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true })
 })
 
@@ -44,7 +46,7 @@ function assertPlainSqliteRejects(file: string): void {
   expect(py.status).not.toBe(0)
 }
 
-function killDuring(modeName: string, dir: string): Promise<void> {
+function killChild(modeName: string, dir: string, rejectPlaintext: boolean): Promise<void> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ['--import', 'tsx', fixture, modeName, dir], {
       cwd: fileURLToPath(new URL('../../../', import.meta.url)),
@@ -67,7 +69,7 @@ function killDuring(modeName: string, dir: string): Promise<void> {
         return
       }
       clearInterval(timer)
-      during = plaintextSqliteFiles(dir)
+      if (rejectPlaintext) during = plaintextSqliteFiles(dir)
       child.kill('SIGKILL')
     }, 30)
     child.on('exit', (code, signal) => {
@@ -80,6 +82,10 @@ function killDuring(modeName: string, dir: string): Promise<void> {
       else reject(new Error(`fixture ${modeName} exited ${String(code)}: ${stderr}`))
     })
   })
+}
+
+function killDuring(modeName: string, dir: string): Promise<void> {
+  return killChild(modeName, dir, true)
 }
 
 describe('encrypted race file', () => {
@@ -325,7 +331,7 @@ describe('encrypted race file', () => {
     previous.fill(0)
   })
 
-  it('encrypts a plaintext race file and removes other plaintext copies', async () => {
+  it('encrypts a plaintext race file and quarantines only recognized copies', async () => {
     const dir = tempDir()
     const file = path.join(dir, 'ert.sqlite')
     const plain = new Database(file)
@@ -357,11 +363,31 @@ describe('encrypted race file', () => {
       bib INTEGER,
       registered_at INTEGER
     )`)
+    plain.exec('CREATE TABLE audit_shadow (id INTEGER)')
+    plain.exec('CREATE TRIGGER person_ins AFTER INSERT ON person BEGIN INSERT INTO audit_shadow (id) VALUES (1); END')
+    plain.exec('CREATE INDEX idx_person_name ON person(last_name)')
+    plain.exec('CREATE VIEW person_names AS SELECT id, first_name, last_name FROM person')
     plain.close()
     const backups = path.join(dir, 'backups')
     fs.mkdirSync(backups)
-    fs.copyFileSync(file, path.join(backups, 'old.sqlite'))
-    fs.copyFileSync(file, path.join(dir, 'race.premigrate.sqlite'))
+    const notes = new Database(path.join(dir, 'notes.sqlite'))
+    notes.exec('CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT)')
+    notes.prepare('INSERT INTO notes (body) VALUES (?)').run('foreign')
+    notes.exec(`CREATE TABLE schema_meta (id INTEGER PRIMARY KEY, schema_version INTEGER)`)
+    notes.close()
+    fs.copyFileSync(path.join(dir, 'notes.sqlite'), path.join(backups, 'notes.sqlite'))
+    fs.copyFileSync(file, path.join(dir, 'ert-legacy.sqlite'))
+    fs.copyFileSync(file, path.join(backups, 'ert-old-lock.sqlite'))
+    fs.copyFileSync(file, path.join(dir, 'race.premigrate-1.sqlite'))
+    const foreign = new Database(path.join(dir, 'ert-foreign.sqlite'))
+    foreign.exec('CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT)')
+    foreign.prepare('INSERT INTO notes (body) VALUES (?)').run('not ours')
+    foreign.close()
+    const untouched = [
+      path.join(dir, 'notes.sqlite'),
+      path.join(backups, 'notes.sqlite'),
+      path.join(dir, 'ert-foreign.sqlite'),
+    ].map((candidate) => ({ file: candidate, bytes: fs.readFileSync(candidate), mtime: fs.statSync(candidate).mtimeMs }))
     const warnings: string[] = []
     const spy = vi.spyOn(console, 'warn').mockImplementation((message: unknown) => {
       warnings.push(String(message))
@@ -370,19 +396,133 @@ describe('encrypted race file', () => {
     spy.mockRestore()
     expect(db.all<{ name: string }>('PRAGMA table_info(person)').some((column) => column.name === 'birth_date')).toBe(false)
     expect(db.get('SELECT birth_year FROM person WHERE id = ?', 'p1')).toEqual({ birth_year: 2014 })
+    expect(db.get(`SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_person_name'`)).toEqual({ name: 'idx_person_name' })
+    expect(db.get(`SELECT name FROM sqlite_master WHERE type = 'trigger' AND name = 'person_ins'`)).toEqual({ name: 'person_ins' })
+    expect(db.get(`SELECT name FROM sqlite_master WHERE type = 'view' AND name = 'person_names'`)).toEqual({ name: 'person_names' })
+    expect(db.get('SELECT last_name FROM person_names WHERE id = ?', 'p1')).toEqual({ last_name: 'Testi' })
+    db.run(`INSERT INTO person (id, first_name, last_name, gender, birth_year, publication, created_at, updated_at, hlc)
+      VALUES ('p2', 'Extra', 'Runner', 'M', 1990, 'full', 2, 2, '2')`)
+    expect(db.get('SELECT COUNT(*) AS n FROM audit_shadow')).toEqual({ n: 1 })
     db.raw.pragma('wal_checkpoint(TRUNCATE)')
     expect(db.raw.serialize().includes(Buffer.from('2014-08-09'))).toBe(false)
+    expect(db.quarantinedPlaintext.slice().sort()).toEqual(['ert-legacy.sqlite', 'ert-old-lock.sqlite', 'race.premigrate-1.sqlite'])
     db.raw.close()
     expect(fs.readFileSync(file).subarray(0, 16).toString('utf8')).not.toContain('SQLite format 3')
-    expect(fs.existsSync(path.join(backups, 'old.sqlite'))).toBe(false)
-    expect(fs.existsSync(path.join(dir, 'race.premigrate.sqlite'))).toBe(false)
-    expect(plaintextSqliteFiles(dir)).toEqual([])
-    expect(plaintextSqliteFiles(backups)).toEqual([])
+    expect(fs.existsSync(`${file}.plaintext-old`)).toBe(false)
+    expect(fs.existsSync(`${file}.encrypting`)).toBe(false)
+    const quarantine = path.join(dir, 'plaintext-quarantine')
+    expect(modeOf(quarantine)).toBe(0o700)
+    for (const name of ['ert-legacy.sqlite', 'ert-old-lock.sqlite', 'race.premigrate-1.sqlite']) {
+      expect(fs.existsSync(path.join(quarantine, name))).toBe(true)
+      expect(isPlaintextSqlite(path.join(quarantine, name))).toBe(true)
+    }
+    for (const saved of untouched) {
+      expect(fs.readFileSync(saved.file).equals(saved.bytes)).toBe(true)
+      expect(fs.statSync(saved.file).mtimeMs).toBe(saved.mtime)
+    }
+    expect(plaintextSqliteFiles(dir).sort()).toEqual(['ert-foreign.sqlite', 'notes.sqlite'])
+    expect(plaintextSqliteFiles(backups)).toEqual(['notes.sqlite'])
     const text = warnings.join('\n')
     expect(text).toContain('Encrypted plaintext race file ert.sqlite')
-    expect(text).toContain('Removed plaintext SQLite file old.sqlite')
-    expect(text).toContain('Removed plaintext SQLite file race.premigrate.sqlite')
+    expect(text).toContain('overwritten where the filesystem allows')
+    expect(text).toContain('Quarantined plaintext race file ert-legacy.sqlite')
+    expect(text).toContain('Quarantined plaintext race file ert-old-lock.sqlite')
+    expect(text).toContain('Quarantined plaintext race file race.premigrate-1.sqlite')
+    expect(text).not.toContain('Removed plaintext')
+    expect(text).not.toContain('notes.sqlite')
     expect(text).not.toContain(dir)
+  })
+
+  it('keeps race rows when plaintext encryption stops after each durable step', async () => {
+    const steps = ['encrypting', 'aside', 'renamed'] as const
+    for (const step of steps) {
+      const dir = tempDir()
+      const file = path.join(dir, 'ert.sqlite')
+      const plain = new Database(file)
+      plain.exec(`CREATE TABLE schema_meta (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        schema_version INTEGER NOT NULL,
+        app_version TEXT NOT NULL,
+        installation_id TEXT NOT NULL
+      )`)
+      plain.prepare('INSERT INTO schema_meta (id, schema_version, app_version, installation_id) VALUES (1, 4, ?, ?)').run('0.1.0', 'install')
+      plain.exec(`CREATE TABLE person (
+        id TEXT PRIMARY KEY,
+        first_name TEXT NOT NULL,
+        last_name TEXT NOT NULL,
+        gender TEXT NOT NULL,
+        birth_year INTEGER,
+        email TEXT,
+        publication TEXT NOT NULL DEFAULT 'full',
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        hlc TEXT NOT NULL
+      )`)
+      plain.prepare(`INSERT INTO person (id, first_name, last_name, gender, birth_year, email, publication, created_at, updated_at, hlc)
+        VALUES ('kept', 'Kept', 'Runner', 'F', 1991, 'kept@example.test', 'full', 1, 1, '1')`).run()
+      plain.close()
+      plaintextHooks.failAfter = step
+      await expect(openDatabase(file)).rejects.toThrow(new RegExp(`paused after ${step}`))
+      plaintextHooks.failAfter = undefined
+      if (step === 'encrypting') {
+        expect(isPlaintextSqlite(file)).toBe(true)
+        expect(fs.existsSync(`${file}.encrypting`)).toBe(true)
+        expect(fs.existsSync(`${file}.plaintext-old`)).toBe(false)
+      } else if (step === 'aside') {
+        expect(fs.existsSync(file)).toBe(false)
+        expect(isPlaintextSqlite(`${file}.plaintext-old`)).toBe(true)
+        expect(fs.existsSync(`${file}.encrypting`)).toBe(true)
+        const aside = new Database(`${file}.plaintext-old`)
+        aside.prepare(`UPDATE person SET email = ? WHERE id = 'kept'`).run('restored@example.test')
+        aside.close()
+      } else {
+        expect(isPlaintextSqlite(file)).toBe(false)
+        expect(isPlaintextSqlite(`${file}.plaintext-old`)).toBe(true)
+        expect(fs.existsSync(`${file}.encrypting`)).toBe(false)
+        const aside = new Database(`${file}.plaintext-old`)
+        aside.prepare(`UPDATE person SET email = ? WHERE id = 'kept'`).run('restored@example.test')
+        aside.close()
+        const fd = fs.openSync(file, 'r+')
+        fs.writeSync(fd, Buffer.alloc(32, 0x5a), 0)
+        fs.closeSync(fd)
+      }
+      const db = await openDatabase(file)
+      expect(db.raw.pragma('integrity_check', { simple: true })).toBe('ok')
+      expect(db.get<{ email: string }>('SELECT email FROM person WHERE id = ?', 'kept')?.email).toBe(step === 'encrypting' ? 'kept@example.test' : 'restored@example.test')
+      db.raw.close()
+      expect(fs.existsSync(`${file}.plaintext-old`)).toBe(false)
+      expect(fs.existsSync(`${file}.encrypting`)).toBe(false)
+    }
+  })
+
+  it('promotes a leftover encrypting copy when the race file is missing', async () => {
+    for (const leftover of ['ert.sqlite.encrypting', '.ert.sqlite.encrypting']) {
+      const dir = tempDir()
+      const file = path.join(dir, 'ert.sqlite')
+      const db = await openDatabase(file)
+      db.run(`INSERT INTO person (id, first_name, last_name, gender, birth_year, email, publication, created_at, updated_at, hlc)
+        VALUES ('kept', 'Kept', 'Runner', 'F', 1991, 'kept@example.test', 'full', 1, 1, '1')`)
+      db.raw.pragma('wal_checkpoint(TRUNCATE)')
+      db.raw.close()
+      fs.renameSync(file, path.join(dir, leftover))
+      const again = await openDatabase(file)
+      expect(again.get<{ email: string }>('SELECT email FROM person WHERE id = ?', 'kept')?.email).toBe('kept@example.test')
+      expect(fs.existsSync(path.join(dir, leftover))).toBe(false)
+      expect(isPlaintextSqlite(file)).toBe(false)
+      again.raw.close()
+    }
+  })
+
+  it('does not replace a broken encrypting leftover with an empty database', async () => {
+    const dir = tempDir()
+    const file = path.join(dir, 'ert.sqlite')
+    fs.writeFileSync(`${file}.encrypting`, Buffer.from('not a database, and not empty'))
+    const error = await openDatabase(file).then(() => null, (caught: unknown) => caught)
+    expect(error).toBeInstanceOf(Error)
+    expect((error as Error).message).toContain('could not be recovered')
+    expect((error as Error).message).not.toContain(dir)
+    expect(fs.existsSync(file)).toBe(false)
+    expect(fs.readFileSync(`${file}.encrypting`).toString('utf8')).toContain('not a database')
   })
 
   it('shows a friendly error for a newer schema', async () => {
@@ -416,6 +556,31 @@ describe('power loss', () => {
       expect(db.all<{ name: string }>('PRAGMA table_info(person)').some((column) => column.name === 'birth_date')).toBe(false)
     }
     db.raw.close()
+  })
+
+  it('recovers the race file after a kill at each plaintext encryption step', async () => {
+    for (const step of ['encrypt-encrypting', 'encrypt-aside', 'encrypt-renamed'] as const) {
+      const dir = tempDir()
+      const file = path.join(dir, 'ert.sqlite')
+      await killChild(step, dir, false)
+      if (step === 'encrypt-encrypting') {
+        expect(isPlaintextSqlite(file)).toBe(true)
+        expect(fs.existsSync(`${file}.encrypting`)).toBe(true)
+      } else if (step === 'encrypt-aside') {
+        expect(fs.existsSync(file)).toBe(false)
+        expect(isPlaintextSqlite(`${file}.plaintext-old`)).toBe(true)
+        expect(fs.existsSync(`${file}.encrypting`)).toBe(true)
+      } else {
+        expect(isPlaintextSqlite(file)).toBe(false)
+        expect(isPlaintextSqlite(`${file}.plaintext-old`)).toBe(true)
+      }
+      const db = await openDatabase(file)
+      expect(db.raw.pragma('integrity_check', { simple: true })).toBe('ok')
+      expect(db.get<{ email: string }>('SELECT email FROM person WHERE id = ?', 'kept')?.email).toBe('kept@example.test')
+      db.raw.close()
+      expect(fs.existsSync(`${file}.plaintext-old`)).toBe(false)
+      expect(plaintextSqliteFiles(dir)).toEqual([])
+    }
   })
 
   it('keeps the last committed row when a save is killed', async () => {

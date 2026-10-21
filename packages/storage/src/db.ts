@@ -9,7 +9,7 @@ import { RaceFileError } from './errors.js'
 import { omitInternal } from './internal.js'
 import { devKeyOptIn, isDevDataKey, resolveDataKey, type OpenOptions } from './key.js'
 import { backupPairComplete, databasePathForKeyFile, ensureKeyFile, inspectKeyFile, keyFilePath, rekeyTempPaths, writeKeyStub } from './key-file.js'
-import { migratePlaintextFile, removePlaintextCopies } from './plaintext.js'
+import { migratePlaintextFile, quarantinePlaintextCopies, recoverPlaintextMigration } from './plaintext.js'
 import { ensureFileId, MIGRATIONS, SCHEMA_SQL, SCHEMA_VERSION } from './schema.js'
 
 export const APP_VERSION = '0.1.0'
@@ -31,6 +31,8 @@ export const rekeyHooks: {
   beforeRename?: () => void
 } = {}
 
+export { plaintextHooks, type PlaintextStep } from './plaintext.js'
+
 function zeroKeyOnClose(raw: SqliteDatabase, dataKey: Buffer): void {
   const close = raw.close.bind(raw)
   raw.close = () => {
@@ -41,12 +43,17 @@ function zeroKeyOnClose(raw: SqliteDatabase, dataKey: Buffer): void {
 }
 
 export class AppDb {
+  /** Basenames moved to plaintext-quarantine on this open. Empty for a memory database. */
+  readonly quarantinedPlaintext: readonly string[]
+
   constructor(
     readonly raw: SqliteDatabase,
     readonly filePath: string,
     /** Null for an in-memory database. Never log this value. Filled with zeros when the handle closes. */
     readonly dataKey: Buffer | null,
+    quarantinedPlaintext: readonly string[] = [],
   ) {
+    this.quarantinedPlaintext = quarantinedPlaintext
     if (dataKey) zeroKeyOnClose(raw, dataKey)
   }
 
@@ -350,8 +357,9 @@ export async function openDatabase(filePath: string, options: OpenOptions = {}):
   const resolved = path.resolve(filePath)
   fs.mkdirSync(path.dirname(resolved), { recursive: true })
   if (fs.existsSync(resolved)) recoverRekeyTemps(resolved, dataKey)
+  recoverPlaintextMigration(resolved, dataKey)
   if (fs.existsSync(resolved) && isPlaintextSqlite(resolved)) migratePlaintextFile(resolved, dataKey)
-  removePlaintextCopies(path.dirname(resolved), resolved)
+  const quarantinedPlaintext = quarantinePlaintextCopies(path.dirname(resolved), resolved)
 
   if (!fs.existsSync(resolved)) {
     const raw = openEncrypted(resolved, dataKey)
@@ -359,7 +367,7 @@ export async function openDatabase(filePath: string, options: OpenOptions = {}):
       applyFreshSchema(raw)
       bindKeyFile(resolved, raw)
       restrictPermissions(resolved)
-      return new AppDb(raw, resolved, dataKey)
+      return new AppDb(raw, resolved, dataKey, quarantinedPlaintext)
     } catch (error) {
       try {
         raw.close()
@@ -388,7 +396,7 @@ export async function openDatabase(filePath: string, options: OpenOptions = {}):
     purgeBirthDateColumn(raw)
     bindKeyFile(resolved, raw)
     restrictPermissions(resolved)
-    return new AppDb(raw, resolved, dataKey)
+    return new AppDb(raw, resolved, dataKey, quarantinedPlaintext)
   } catch (error) {
     try {
       raw.close()

@@ -98,9 +98,11 @@ export function writeKeyStub(keyPath: string, fileIdHex: string): void {
 }
 
 /**
- * Create the stub when the companion is missing.
- * Leave an ERTK envelope in place. #131 owns that format.
+ * Create the stub when the companion is missing or truncated and is not an ERTK file.
+ * Leave a matching stub or a complete ERTK envelope in place. #131 owns that format.
  * A file id that does not match is a hard failure and is not rewritten.
+ * A short file whose magic is ERTK is a hard failure and is not rewritten.
+ * Once #131 lands, a missing or invalid ERTK envelope must fail closed and must not be regenerated here.
  */
 export function ensureKeyFile(databasePath: string, fileIdHex: string): void {
   const keyPath = keyFilePath(databasePath)

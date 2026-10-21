@@ -43,7 +43,9 @@ The dev key is a fixed low-entropy buffer for development and tests. It is not a
 
 A wrong key and a tampered file both surface as one error: the file name, no directory, no key bytes and no stack. A missing key is a separate clear error. A schema newer than this app is a friendly error in Finnish and English, with the guided hint `file.hint.newer`. The file is left unchanged.
 
-A plaintext `ert.sqlite` is encrypted in place with the configured data key, and the old bytes are overwritten with zeros. Other plaintext SQLite files in the data directory and in `backups/`, including older `.premigrate` copies, are overwritten and deleted. The process logs the file name only.
+A plaintext `ert.sqlite` is encrypted with the configured data key. The encrypted copy is written to `<file>.encrypting`, fsynced, and checked with `PRAGMA integrity_check`. The original is then renamed to `<file>.plaintext-old`, the encrypted copy is renamed into place, and the directory is fsynced. Only after that is the set-aside original overwritten with zeros where the filesystem allows, then unlinked. Indexes, triggers and views are copied with the tables. If startup finds `.encrypting` or `.plaintext-old` left by a crash, it restores a consistent file and prefers the plaintext original when the encrypted target is missing or fails its integrity check. A leftover `.encrypting` whose integrity check passes is promoted only when the target file is missing and there is no plaintext original. The same recovery accepts the older `.ert.sqlite.encrypting` name.
+
+Other plaintext files are not deleted. Startup moves a file only when its name is one this app creates (`ert*.sqlite` in the data directory, `ert-*.sqlite` in `backups/`, `*.premigrate.sqlite`, `*.premigrate-*.sqlite`, or a `<file>.sqlite.vN.bak`) and a read-only copy shows a `schema_meta` table. The file and its `-wal`/`-shm` sidecars are renamed into `plaintext-quarantine/` (mode `0700`). The log and `GET /api/v1/health` (`plaintextQuarantine`) report that. A file that does not match, such as another program's `notes.sqlite`, is not opened and is not moved. `secureRemove` overwrites bytes where the filesystem allows. On SSDs and copy-on-write filesystems (APFS, btrfs) that does not prove the old bytes are gone.
 
 ### Key file seam
 
@@ -90,5 +92,6 @@ Do not rekey to the dev key unless the same dev-key opt-in applies. Production r
 
 - A copy of the file on a USB stick is ciphertext. Plain `sqlite3` cannot open it.
 - Tests assert the pinned cipher settings after open, and they assert that a known name and email are absent from the raw bytes.
-- Power loss is tested by `SIGKILL` during migration and during an uncommitted save.
+- Power loss is tested by `SIGKILL` during migration, during an uncommitted save, and after each step of plaintext encryption.
+- `file_id` stays the same across rekey. Restart after a rekey still depends on the caller holding the new key, or on the key-file slot once #131 writes it. The stub does not unwrap a new key by itself.
 - #131 replaces the `ERTS` stub with the `ERTK` envelope in the same path, checks `file_id` after unwrap, and writes the new envelope during rekey instead of copying the stub. It keeps this page format, keeps the database at offset 0, and keeps backup pairs in this order.

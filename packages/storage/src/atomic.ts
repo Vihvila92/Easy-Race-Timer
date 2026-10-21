@@ -14,7 +14,10 @@ export function fsyncDirectory(directory: string): void {
   }
 }
 
-/** Overwrite a file with zeros, then delete it. A crash may still leave ciphertext, not the old bytes. */
+/**
+ * Overwrite a file with zeros where the filesystem allows, then delete it.
+ * On SSDs and copy-on-write filesystems that overwrite does not prove the old bytes are gone.
+ */
 export function secureRemove(file: string): void {
   if (!fs.existsSync(file)) return
   const stat = fs.statSync(file)

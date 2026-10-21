@@ -1,10 +1,12 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it } from 'vitest'
 import { translate } from '@ert/i18n'
 import { RaceFileError, openDatabase } from '@ert/storage'
 import { unpackErtx } from '@ert/sync'
+import { createApp } from './app.js'
 import { formatRaceFileError } from './race-file.js'
 import { Clock, RaceService } from './service.js'
 
@@ -103,5 +105,51 @@ describe('race file privacy columns', () => {
       expect(bytes.includes(Buffer.from('liisa@example.com'))).toBe(false)
       expect(bytes.includes(Buffer.from('Liisa'))).toBe(false)
     }
+  })
+})
+
+describe('plaintext quarantine flag', () => {
+  it('reports quarantined plaintext on health and leaves a foreign database', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ert-quarantine-'))
+    dirs.push(dir)
+    const backups = path.join(dir, 'backups')
+    fs.mkdirSync(backups)
+    const writeNotes = (target: string) => {
+      const notes = new DatabaseSync(target)
+      notes.exec('CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT)')
+      notes.prepare('INSERT INTO notes (body) VALUES (?)').run('foreign')
+      notes.close()
+    }
+    writeNotes(path.join(dir, 'notes.sqlite'))
+    writeNotes(path.join(backups, 'notes.sqlite'))
+    const legacy = new DatabaseSync(path.join(dir, 'ert-legacy.sqlite'))
+    legacy.exec(`CREATE TABLE schema_meta (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      schema_version INTEGER NOT NULL,
+      app_version TEXT NOT NULL,
+      installation_id TEXT NOT NULL
+    )`)
+    legacy.prepare('INSERT INTO schema_meta (id, schema_version, app_version, installation_id) VALUES (1, 4, ?, ?)').run('0.1.0', 'install')
+    legacy.close()
+    const before = fs.readFileSync(path.join(dir, 'notes.sqlite'))
+    const beforeBackup = fs.readFileSync(path.join(backups, 'notes.sqlite'))
+    const db = await openDatabase(path.join(dir, 'ert.sqlite'))
+    expect(fs.readFileSync(path.join(dir, 'notes.sqlite')).equals(before)).toBe(true)
+    expect(fs.readFileSync(path.join(backups, 'notes.sqlite')).equals(beforeBackup)).toBe(true)
+    expect(fs.existsSync(path.join(dir, 'plaintext-quarantine', 'ert-legacy.sqlite'))).toBe(true)
+    expect(db.quarantinedPlaintext).toEqual(['ert-legacy.sqlite'])
+    const { app } = await createApp({ db, testMode: true })
+    const health = await app.inject({ method: 'GET', url: '/api/v1/health' })
+    expect(health.statusCode).toBe(200)
+    expect(health.json().plaintextQuarantine).toBe(true)
+    await app.close()
+    db.raw.close()
+
+    const memory = await openDatabase(':memory:')
+    const memoryApp = await createApp({ db: memory, testMode: true })
+    const memoryHealth = await memoryApp.app.inject({ method: 'GET', url: '/api/v1/health' })
+    expect(memoryHealth.json().plaintextQuarantine).toBe(false)
+    await memoryApp.app.close()
+    memory.raw.close()
   })
 })
