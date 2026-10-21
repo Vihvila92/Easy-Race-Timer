@@ -1,0 +1,20 @@
+# Temporary caller so this pull request can run Release before release.yml
+# is on the default branch. Remove this file after the dry run is green.
+# workflow_dispatch stays the supported dry run once the workflow is on main.
+name: Release dry run
+
+# GitHub requires the caller to allow every permission a nested job declares,
+# including publish and verify, even when those jobs are skipped on a dry run.
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+on:
+  push:
+    branches:
+      - valtteriv/node-sidecar-6251
+
+jobs:
+  release:
+    uses: ./.github/workflows/release.yml
