@@ -35,11 +35,25 @@ pnpm build
 pnpm dev:server
 ```
 
-Open the address printed on the `ERT_READY` line. The developer server uses port 8080 and the `./data` folder. The UI is in Finnish and English, light and dark. With no race yet, the first screen is a three-step wizard. A dev build reviews shared components at `#/preview`. That route is not in the production build.
+Open the address printed on the `ERT_READY` line. The developer server uses port 8080 and the `./data` folder. The UI is in Finnish and English, light and dark. With no race yet, the first screen is a three-step wizard. If the timing program cannot be reached, that screen explains it in the chosen language and offers Try again. A dev build reviews shared components at `#/preview`. That route is not in the production build.
 
 `pnpm dev` starts the Vite UI with a proxy. That proxy is a development aid. The built UI does not contain a host or a port.
 
 `pnpm start` with no variables behaves like the future desktop shell: a free local port and the operating system user-data directory.
+
+## Desktop app (Tauri, developer preview)
+
+`src-tauri/` is a minimal Tauri 2 shell around the built web UI (`packages/web/dist`). It has no custom commands and only the `core:default` permission. The Node server sidecar (ADR 0010) and the updater (#136) come later, so the desktop window shows the UI without a backend for now.
+
+Requirements: Rust (stable) and, on Linux, `libwebkit2gtk-4.1-dev`, `libgtk-3-dev`, `librsvg2-dev`, `libayatana-appindicator3-dev`. See the Tauri prerequisites guide for Windows and macOS.
+
+```sh
+pnpm install
+pnpm tauri dev                            # window with Vite hot reload
+pnpm tauri build --bundles appimage,deb   # Linux: AppImage + .deb
+```
+
+Bundle targets: Windows `msi` + `nsis`, macOS universal `dmg` (ad-hoc signed, not notarized), Linux `appimage` + `deb`. Installers are unsigned; release builds are made by the release workflow (#153), not by the `check` job.
 
 ## Tests
 

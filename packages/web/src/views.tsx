@@ -350,7 +350,7 @@ export function Finish() {
   const [lastLabel, setLastLabel] = useState('')
   const [queued, setQueued] = useState(0)
   const [offsetMs, setOffsetMs] = useState(() => readClockOffset()?.offsetMs ?? 0)
-  const waiting = data?.ties.filter((group) => group.status === 'unconfirmed').length ?? 0
+  const waiting = data?.ties?.filter((group) => group.status === 'unconfirmed').length ?? 0
   const clockSkew = Math.abs(offsetMs) > 1000
 
   useEffect(() => {
@@ -476,8 +476,8 @@ export function Ties() {
     <section>
       <h1>{t('ties.title')}</h1>
       <p className="lead">{t('ties.lead')}</p>
-      {data.ties.length === 0 && <p>{t('ties.empty')}</p>}
-      {data.ties.map((group) => <TieCard key={`${group.raceId}-${group.displayTime}`} group={group} />)}
+      {(data.ties ?? []).length === 0 && <p>{t('ties.empty')}</p>}
+      {(data.ties ?? []).map((group) => <TieCard key={`${group.raceId}-${group.displayTime}`} group={group} />)}
     </section>
   )
 }
