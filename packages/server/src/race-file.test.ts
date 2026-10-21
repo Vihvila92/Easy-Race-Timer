@@ -1,10 +1,9 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { DatabaseSync } from 'node:sqlite'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { translate } from '@ert/i18n'
-import { QUARANTINE_RETENTION_MS, RaceFileError, openDatabase } from '@ert/storage'
+import { QUARANTINE_RETENTION_MS, RaceFileError, openDatabase, openPlaintextSqlite } from '@ert/storage'
 import { unpackErtx } from '@ert/sync'
 import { createApp } from './app.js'
 import { formatRaceFileError } from './race-file.js'
@@ -134,14 +133,14 @@ describe('plaintext quarantine flag', () => {
     const backups = path.join(dir, 'backups')
     fs.mkdirSync(backups)
     const writeNotes = (target: string) => {
-      const notes = new DatabaseSync(target)
+      const notes = openPlaintextSqlite(target)
       notes.exec('CREATE TABLE notes (id INTEGER PRIMARY KEY, body TEXT)')
       notes.prepare('INSERT INTO notes (body) VALUES (?)').run('foreign')
       notes.close()
     }
     writeNotes(path.join(dir, 'notes.sqlite'))
     writeNotes(path.join(backups, 'notes.sqlite'))
-    const legacy = new DatabaseSync(path.join(dir, 'ert-legacy.sqlite'))
+    const legacy = openPlaintextSqlite(path.join(dir, 'ert-legacy.sqlite'))
     legacy.exec(`CREATE TABLE schema_meta (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       schema_version INTEGER NOT NULL,
@@ -173,10 +172,23 @@ describe('plaintext quarantine flag', () => {
       method: 'POST',
       url: '/api/v1/plaintext-quarantine/delete',
       headers: { host: 'localhost:80' },
-      payload: {},
+      payload: { confirm: true },
     })
     expect(anonymous.statusCode).toBe(401)
     const session = await second.app.inject({ method: 'POST', url: '/api/v1/settings/pin/check', payload: {} })
+    const auth = { authorization: `Bearer ${session.json().token as string}`, host: 'localhost:80' }
+    for (const payload of [{}, { confirm: false }, { confirm: 'true' }]) {
+      const refused = await second.app.inject({
+        method: 'POST',
+        url: '/api/v1/plaintext-quarantine/delete',
+        headers: auth,
+        payload,
+      })
+      expect(refused.statusCode, JSON.stringify(payload)).toBe(400)
+      expect(refused.json().error.code).toBe('VALIDATION_ERROR')
+    }
+    expect(fs.existsSync(path.join(dir, 'plaintext-quarantine', 'ert-legacy.sqlite'))).toBe(true)
+    expect(second.service.audit().some((row) => row.action === 'plaintext_quarantine_delete')).toBe(false)
     const warnings: string[] = []
     const spy = vi.spyOn(console, 'warn').mockImplementation((message: unknown) => {
       warnings.push(String(message))
@@ -184,12 +196,18 @@ describe('plaintext quarantine flag', () => {
     const deleted = await second.app.inject({
       method: 'POST',
       url: '/api/v1/plaintext-quarantine/delete',
-      headers: { authorization: `Bearer ${session.json().token as string}`, host: 'localhost:80' },
-      payload: {},
+      headers: auth,
+      payload: { confirm: true },
     })
     spy.mockRestore()
     expect(deleted.statusCode).toBe(200)
     expect(deleted.json().deleted).toEqual(['ert-legacy.sqlite'])
+    const audit = second.service.audit().filter((row) => row.action === 'plaintext_quarantine_delete')
+    expect(audit).toHaveLength(1)
+    expect(audit[0].reason).toBe('deleted 1')
+    expect(audit[0].new_value_json).toBe(JSON.stringify({ count: 1 }))
+    expect(JSON.stringify(audit[0])).not.toContain('ert-legacy')
+    expect(JSON.stringify(audit[0])).not.toContain('.sqlite')
     expect(warnings.join('\n')).toContain('overwritten where the filesystem allows')
     expect(warnings.join('\n')).not.toContain(dir)
     const cleared = await second.app.inject({ method: 'GET', url: '/api/v1/health' })
@@ -209,7 +227,7 @@ describe('plaintext quarantine flag', () => {
   it('clears the quarantine flag after the retention period on the next startup', async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ert-quarantine-expire-'))
     dirs.push(dir)
-    const legacy = new DatabaseSync(path.join(dir, 'ert-legacy.sqlite'))
+    const legacy = openPlaintextSqlite(path.join(dir, 'ert-legacy.sqlite'))
     legacy.exec(`CREATE TABLE schema_meta (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       schema_version INTEGER NOT NULL,

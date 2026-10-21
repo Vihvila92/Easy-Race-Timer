@@ -9,6 +9,7 @@ export default defineConfig({
     env: {
       NODE_ENV: 'test',
       ERT_DEV_KEY: '1',
+      SQLITE_USE_URI: '1',
     },
   },
 })

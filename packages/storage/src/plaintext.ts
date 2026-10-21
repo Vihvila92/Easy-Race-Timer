@@ -1,6 +1,6 @@
+import './sqlite-uri.js'
 import fs from 'node:fs'
 import path from 'node:path'
-import { DatabaseSync } from 'node:sqlite'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { fsyncDirectory, fsyncFile, secureRemove } from './atomic.js'
 import { isPlaintextSqlite, openEncrypted, restrictPermissions, unlock } from './cipher.js'
@@ -284,8 +284,7 @@ export function isRecognizedRaceFileName(name: string, inBackups: boolean): bool
 
 /**
  * Read-only URI for the original file. `immutable=1` does not create `-wal` or `-shm`.
- * `node:sqlite` is used because better-sqlite3-multiple-ciphers does not pass `SQLITE_OPEN_URI`,
- * so the same text would be opened as a literal filename.
+ * The SQLCipher binding opens this with no key. A plaintext file is readable that way.
  */
 export function immutableReadUri(file: string): string {
   const absolute = path.resolve(file)
@@ -295,9 +294,9 @@ export function immutableReadUri(file: string): string {
 }
 
 function hasSchemaMeta(file: string): boolean {
-  let raw: DatabaseSync | undefined
+  let raw: Database.Database | undefined
   try {
-    raw = new DatabaseSync(immutableReadUri(file), { readOnly: true })
+    raw = new Database(immutableReadUri(file), { readonly: true, fileMustExist: true })
     const row = raw.prepare(`SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = 'schema_meta' LIMIT 1`).get()
     return Boolean(row)
   } catch {

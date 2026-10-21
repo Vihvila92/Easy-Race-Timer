@@ -33,7 +33,7 @@ import {
   type PrivacyEntrant,
 } from '@ert/people'
 import { massStart } from '@ert/race-formats'
-import { AppDb, ORG_ID, SCHEMA_VERSION, omitInternal, type Row } from '@ert/storage'
+import { AppDb, ORG_ID, SCHEMA_VERSION, deleteQuarantinedPlaintext, omitInternal, type Row } from '@ert/storage'
 import { ERTX_FORMAT_VERSION, packErtx } from '@ert/sync'
 import { previewErtx, readErtx, replaceFromErtx } from './ertx-import.js'
 import { touchButton } from '@ert/timing-sources'
@@ -1263,6 +1263,16 @@ export class RaceService {
 
   audit() {
     return this.db.all<CorrectionRow>('SELECT * FROM correction ORDER BY created_at, id')
+  }
+
+  /**
+   * Overwrite quarantined plaintext files and record the count.
+   * The correction row has the count only. It does not name the files.
+   */
+  deletePlaintextQuarantine(): { deleted: string[] } {
+    const deleted = deleteQuarantinedPlaintext(this.db.filePath)
+    this.correct('database', 'plaintext-quarantine', 'plaintext_quarantine_delete', `deleted ${deleted.length}`, null, { count: deleted.length })
+    return { deleted }
   }
 
   consents() {

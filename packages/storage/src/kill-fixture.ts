@@ -2,6 +2,7 @@
  * Child process for power-loss tests. The parent sends SIGKILL while this process waits.
  * Usage: node --import tsx packages/storage/src/kill-fixture.ts <migrate|save|encrypt-encrypting|encrypt-aside|encrypt-renamed> <directory>
  */
+import './sqlite-uri.js'
 import fs from 'node:fs'
 import path from 'node:path'
 import Database from 'better-sqlite3-multiple-ciphers'

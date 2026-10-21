@@ -1,3 +1,4 @@
+import './sqlite-uri.js'
 import fs from 'node:fs'
 import path from 'node:path'
 import Database from 'better-sqlite3-multiple-ciphers'
@@ -92,6 +93,11 @@ export function restrictPermissions(filePath: string): void {
       // Permissions are best-effort on filesystems that ignore them.
     }
   }
+}
+
+/** Plaintext SQLite file, no key and no cipher pragmas. Not used for the race file. */
+export function openPlaintextSqlite(filePath: string): SqliteDatabase {
+  return new Database(filePath)
 }
 
 export function openEncrypted(filePath: string, dataKey: Buffer): SqliteDatabase {

@@ -1,3 +1,4 @@
+import './sqlite-uri.js'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { spawn, spawnSync } from 'node:child_process'
 import fs from 'node:fs'
