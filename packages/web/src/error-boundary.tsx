@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import type { Locale } from '@ert/i18n'
 import { Component, type ErrorInfo, type ReactNode } from 'react'
 import { useApp } from './context.js'
