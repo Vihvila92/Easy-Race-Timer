@@ -49,7 +49,7 @@ gh attestation verify INSTALLER \
 
 Replace `vX.Y.Z` with the tag. For the first attestation command, `FILE` is each installer (`.msi`, `.exe`, `.dmg`, `.AppImage`, `.deb`), each updater archive (`.tar.gz`, `.nsis.zip`, `.msi.zip`), each `.sig` file, `latest.json`, `checksums.txt` and both SBOM files. For the second, `INSTALLER` is each installer and each updater archive. That command checks the CycloneDX attestations: their subjects are those files, and their predicates are the two SBOM files. The checksum command checks every file listed in `checksums.txt`. An attestation command fails when the file was not built by this repository's Release workflow for that tag.
 
-The release `verify` job also checks every `.sig` against `plugins.updater.pubkey` in `src-tauri/tauri.conf.json`. A tag whose public key is still the placeholder fails that check.
+The `publish` job checks every `.sig` against `plugins.updater.pubkey` in `src-tauri/tauri.conf.json` immediately before it creates the GitHub Release. The `verify` job checks them again after the release exists. A tag whose public key is still the placeholder, or whose signature does not match that key, fails before the release is created.
 
 A dry run uploads workflow artifacts only. Those artifacts are not a GitHub Release and do not have attestations. Check them with `sha256sum -c checksums.txt` from the `release-assets` artifact.
 

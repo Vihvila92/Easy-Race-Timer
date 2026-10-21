@@ -49,7 +49,7 @@ gh attestation verify INSTALLER \
 
 Vaihda `vX.Y.Z` tagiin. Ensimmäisessä attestaatiokomennossa `FILE` on kukin asennin (`.msi`, `.exe`, `.dmg`, `.AppImage`, `.deb`), kukin päivitysarkisto (`.tar.gz`, `.nsis.zip`, `.msi.zip`), kukin `.sig`-tiedosto, `latest.json`, `checksums.txt` ja molemmat SBOM-tiedostot. Toisessa komennossa `INSTALLER` on kukin asennin ja kukin päivitysarkisto. Se tarkistaa CycloneDX-attestaatiot: kohteena ovat nämä tiedostot ja predikaattina molemmat SBOM-tiedostot. Tarkistussummakomento tarkistaa jokaisen `checksums.txt`-tiedostossa luetellun tiedoston. Attestaatiokomento epäonnistuu, jos tiedostoa ei ole rakentanut tämän tietovaraston Release-työnkulku kyseiselle tagille.
 
-Julkaisun `verify`-työ tarkistaa myös jokaisen `.sig`-tiedoston tiedostossa `src-tauri/tauri.conf.json` olevaa avainta `plugins.updater.pubkey` vasten. Tagi, jonka julkinen avain on yhä paikkamerkki, epäonnistuu tässä tarkistuksessa.
+`publish`-työ tarkistaa jokaisen `.sig`-tiedoston tiedostossa `src-tauri/tauri.conf.json` olevaa avainta `plugins.updater.pubkey` vasten heti ennen GitHub-julkaisun luontia. `verify`-työ tarkistaa ne uudelleen julkaisun jälkeen. Tagi, jonka julkinen avain on yhä paikkamerkki tai jonka allekirjoitus ei täsmää siihen avaimeen, epäonnistuu ennen julkaisun luontia.
 
 Kuivaharjoitus lataa vain työnkulun artefakteja. Ne eivät ole GitHub-julkaisu, eikä niillä ole attestaatioita. Tarkista ne komennolla `sha256sum -c checksums.txt` artefaktista `release-assets`.
 

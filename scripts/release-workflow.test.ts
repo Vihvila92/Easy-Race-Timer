@@ -69,6 +69,11 @@ describe('release workflow', () => {
     for (const subject of ['release/*.sig', 'release/latest.json', 'release/*.tar.gz', 'release/*.zip']) {
       expect(publish).toContain(subject)
     }
+    const signatureCheck = publish.indexOf('verify-signatures --dir release')
+    const releaseCreate = publish.indexOf('gh release create')
+    expect(signatureCheck).toBeGreaterThan(-1)
+    expect(releaseCreate).toBeGreaterThan(signatureCheck)
+    expect(publish).not.toContain('TAURI_SIGNING')
     expect(publish).not.toMatch(/subject-path: release\/sbom-/)
     expect(publish).toContain('sbom-path: release/sbom-npm.cdx.json')
     expect(publish).toContain('sbom-path: release/sbom-cargo.cdx.json')
