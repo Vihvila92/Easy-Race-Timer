@@ -3,6 +3,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { openDatabase, type AppDb } from '@ert/storage'
 import { createApp, DEFAULT_GLOBAL_MAX, DEFAULT_RECORDING_MAX, DEFAULT_STRICT_MAX } from './app.js'
+import { formatRaceFileError } from './race-file.js'
 import { startBackupSchedule, writeBackup } from './backup.js'
 import { assertCanListen, resolveDataDir, resolveDbPath, resolveListenPort } from './config.js'
 
@@ -23,7 +24,7 @@ const webDist = process.env.ERT_WEB_DIST ?? path.resolve(path.dirname(fileURLToP
 const runtime = { url: '', dataDir, dbPath }
 
 const db: AppDb = await openDatabase(dbPath).catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : error)
+  console.error(formatRaceFileError(error))
   process.exit(1)
 })
 

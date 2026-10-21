@@ -1,2 +1,6 @@
 export * from './db.js'
 export * from './schema.js'
+export * from './errors.js'
+export * from './key.js'
+export * from './internal.js'
+export { EXPECTED_CIPHER, cipherSettings, plaintextSqliteFiles, SQLITE_PLAINTEXT_HEADER } from './cipher.js'

@@ -14,7 +14,7 @@ packages/sports          juoksuprofiili
 packages/timing-sources  kosketusmaali
 packages/race-formats    yhteislähtö
 packages/exporters       CSV ja A4-tuloste
-packages/storage         SQLite
+packages/storage         salattu SQLite (SQLCipher)
 packages/sync            .ertx
 packages/server          Fastify, composition root
 packages/web             React-PWA
@@ -30,7 +30,7 @@ Tarvitaan Node.js 22 ja pnpm 10.33. Nämä komennot ovat kehittäjälle. Seuran 
 
 ```bash
 pnpm install
-pnpm rebuild better-sqlite3 esbuild
+pnpm rebuild esbuild
 pnpm build
 pnpm dev:server
 ```

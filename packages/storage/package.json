@@ -3,13 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "dependencies": {
     "@ert/core": "workspace:*",
-    "better-sqlite3": "^13.0.3"
+    "better-sqlite3-multiple-ciphers": "13.0.3"
   },
-  "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13"
-  },
-  "scripts": { "typecheck": "tsc --noEmit" }
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  }
 }

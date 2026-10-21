@@ -101,7 +101,7 @@ This process is designed to align with the EU Cyber Resilience Act
 ## Defaults
 
 - The server binds to localhost. Opening it on a LAN is a later, explicit choice.
-- SQLite uses WAL and `synchronous=FULL`.
+- The race file is SQLCipher (AES-256) with WAL, `synchronous=FULL` and `temp_store=MEMORY`. The file and its backups are mode 0600 on macOS and Linux. A dev key cannot be enabled in production.
 - Admin actions require a reason and are stored in the correction log.
 - Wrong PIN attempts are rate-limited.
 

@@ -203,5 +203,8 @@
   "preview.rowDetail": "Numero 12",
   "preview.statusesTitle": "Tilat",
   "preview.clockTitle": "Kello",
-  "preview.clockLabel": "Esimerkkiaika"
+  "preview.clockLabel": "Esimerkkiaika",
+  "file.newer": "Tämä kisatiedosto on tehty uudemmalla Easy Race Timer -versiolla. Päivitä ohjelma ennen kuin avaat sen.",
+  "file.hint.newer": "Tiedosto ei ole rikki. Tämä ohjelma on vanhempi kuin tiedosto, joten se ei avaa eikä muuta sitä.",
+  "file.openFailed": "Kisatiedostoa {name} ei voitu avata."
 }

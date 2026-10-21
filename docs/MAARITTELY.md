@@ -36,7 +36,7 @@ Ei oteta mukaan v1:een: Postgres + RLS + multi-tenancy (palaa SaaS-vaiheessa `st
 ## 3. Tekninen pino
 
 - **TypeScript-monorepo** (pnpm workspaces), paketit kohdan 4.1 mukaan.
-- **Palvelin (kannettava):** Node 22 LTS, Fastify, **SQLite** (better-sqlite3, WAL, `synchronous=FULL`), zod, pino. Käynnistyy yhdellä komennolla tai valmiista asennuspaketista (Windows/macOS/Linux). Käyttöliittymä avataan samalla koneella osoitteessa `http://localhost`, joka on selaimelle turvallinen konteksti, joten PWA ja service worker toimivat ilman sertifikaattia.
+- **Palvelin (kannettava):** Node 22 LTS, Fastify, **salattu SQLite** (SQLCipher, `better-sqlite3-multiple-ciphers`, AES-256, WAL, `synchronous=FULL`, `temp_store=MEMORY`), zod, pino. Käynnistyy yhdellä komennolla tai valmiista asennuspaketista (Windows/macOS/Linux). Käyttöliittymä avataan samalla koneella osoitteessa `http://localhost`, joka on selaimelle turvallinen konteksti, joten PWA ja service worker toimivat ilman sertifikaattia.
 - **Web:** React + TypeScript + Vite, **PWA** (service worker, IndexedDB-paikallisvarasto). Ulkoasu HIG-henkinen: kosketusalueet ≥ 44 pt, maalinappi ≥ 30 % näytöstä, tumma ja vaalea teema. Kohde ES2019, joten vanhat Android/iOS-laitteet toimivat.
 - **Mobiililaitteet (v0.2):** väliaikalaitteet ovat PWA:ita, joten tarvitaan HTTPS. Ratkaisu valitaan ADR:ssä v0.2:n alussa. Vaihtoehdot: (a) julkinen HTTPS-osoite, josta PWA asennetaan välimuistiin ja joka synkronoi kannettavalle tai pilveen; (b) paikallinen sertifikaatti oman domainin alla (`*.lan.easyracetimer.fi`, DNS osoittaa lähiverkkoon); (c) natiivikääre (Capacitor).
 - **Natiivisovellukset (myöhemmin, SaaS, v1.x):** iOS (Swift/SwiftUI) ja Android (Kotlin/Jetpack Compose). Niillä saadaan paras suorituskyky ja tarkin ajanotto: monotoninen kello (`mach_continuous_time` / `SystemClock.elapsedRealtimeNanos`), alhainen kosketusviive, haptiikka, fyysiset painikkeet, taustasynkronointi sekä myöhemmin BLE/NFC. PWA riittää alkuun. API ja synkronointiprotokolla suunnitellaan alustariippumattomiksi (kohta 9.1), jotta natiivisovellukset voivat käyttää niitä suoraan ilman palvelinmuutoksia.
@@ -119,7 +119,7 @@ Kaikki id:t ovat ULID-tunnisteita. Juuritauluissa on `org_id`, ja muokattavissa 
 
 ```
 person           -- HENKILÖ, kisasta riippumaton (vanha competitors)
-  id, org_id, first_name, last_name, gender (F|M|X), birth_date(nullable), birth_year,
+  id, org_id, first_name, last_name, gender (F|M|X), birth_year,
   default_club_id(nullable),                             -- viimeksi edustettu seura, vain ehdotukseksi
   nationality, email(nullable), phone(nullable),
   guardian_name(nullable), guardian_email(nullable),     -- alaikäiset
@@ -180,6 +180,8 @@ entry            -- OSALLISTUMINEN: henkilö × matka
   start_offset_reason,
   offset_ranking: inherit | ranked | unranked | open_category,
   status: registered | started | finished | dns | dnf | dsq, status_reason,
+  dsq_reason (sisäinen; vienti, tuloste ja .ertx eivät valitse sitä),
+  consent_date (pakollinen; palvelin asettaa ilmoittautumishetkestä),
   team_id(nullable), leg_no(nullable)
   UNIQUE(race_id, bib), CHECK(bib > 0), UNIQUE(race_id, person_id)
   -- Seuran yhdistäminen siirtää club_id:n kohdeseuraan (kirjataan correction-tauluun, peruttavissa)
@@ -218,6 +220,7 @@ schema_meta      -- schema_version, app_version, installation_id
 
 ### 6.1 Sarjan määräytyminen
 - Ikä lasketaan asetuksen `age_basis` mukaan. `birth_date` = täydet vuodet viitepäivänä (oletus kisapäivä). `birth_year` = viitevuosi − syntymävuosi ("sinä vuonna täyttävät"). Jos syntymäpäivää ei tiedetä, käytetään vuosi-ikää ja annetaan huomautus.
+- Tallennettuun henkilöön kirjoitetaan vain syntymävuosi. Täyttä päivämäärää saa käyttää muistissa tuonnin ja ilmoittautumisen ajan, mutta sitä ei kirjoiteta tiedostoon. `entry.consent_date` on pakollinen ja sen asettaa palvelin ilmoittautumishetkestä. `entry.dsq_reason` on sisäinen kenttä: vienti, tuloste ja `.ertx` eivät valitse sitä.
 - Ehdotettu sarja on sarja, jonka sukupuoli täsmää ja jonka `min_age ≤ ikä ≤ max_age` ja jossa `auto_assign = true`. Kuulan hölkässä sarja `Xn` (4 km) kattaa iät n…n+1 (4, 6, …, 16 vuotta täyttäneet), ja N/M (8 km) ovat 18 vuotta täyttäneille. **16–17-vuotiaat juoksevat 4 km**. Jos he haluavat pidemmän matkan, he ilmoittautuvat 8 km:lle ja sijoittuvat aikuisten sarjaan N/M (N/M: `min_age = 16`, mutta ehdotus tehdään vain ilmoittautumisen matkalta, joten 4 km:lle ilmoittautunut 16–17-vuotias saa aina P/T16:n).
 - Sarja haetaan ensin ilmoittautumisen matkalta. Vasta jos sieltä ei löydy, tarkistetaan muut matkat (ks. seuraava kohta).
 - Alle nuorimman sarjan: oletuksena nuorin sarja ja varoitus.

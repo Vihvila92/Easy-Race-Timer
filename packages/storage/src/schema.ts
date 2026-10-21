@@ -1,10 +1,30 @@
 import { ageOnReference } from '@ert/core'
+import type { SqliteDatabase } from './cipher.js'
 
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 
 export interface Migration {
   version: number
-  up: (raw: import('better-sqlite3').Database) => void
+  up: (raw: SqliteDatabase) => void
+}
+
+function columnNames(raw: SqliteDatabase, table: string): Set<string> {
+  const rows = raw.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
+  return new Set(rows.map((column) => column.name))
+}
+
+interface StoredPerson {
+  id: string
+  gender: 'F' | 'M' | 'X'
+  birth_date: string | null
+  birth_year: number | null
+  publication: string
+}
+
+function peopleForPublication(raw: SqliteDatabase): StoredPerson[] {
+  const columns = columnNames(raw, 'person')
+  const birthDate = columns.has('birth_date') ? 'birth_date' : 'NULL AS birth_date'
+  return raw.prepare(`SELECT id, gender, ${birthDate}, birth_year, publication FROM person`).all() as StoredPerson[]
 }
 
 /** Applied in order when schema_meta.schema_version is behind SCHEMA_VERSION. */
@@ -27,7 +47,7 @@ export const MIGRATIONS: Migration[] = [
       } catch {
         reference = event.date_start
       }
-      const people = raw.prepare('SELECT id, gender, birth_date, birth_year, publication FROM person').all() as { id: string; gender: 'F' | 'M' | 'X'; birth_date: string | null; birth_year: number | null; publication: string }[]
+      const people = peopleForPublication(raw)
       const update = raw.prepare(`UPDATE person SET publication = 'initials' WHERE id = ? AND publication = 'full'`)
       for (const person of people) {
         if (person.publication !== 'full') continue
@@ -58,7 +78,7 @@ export const MIGRATIONS: Migration[] = [
       } catch {
         reference = event.date_start
       }
-      const people = raw.prepare('SELECT id, gender, birth_date, birth_year, publication FROM person').all() as { id: string; gender: 'F' | 'M' | 'X'; birth_date: string | null; birth_year: number | null; publication: string }[]
+      const people = peopleForPublication(raw)
       const update = raw.prepare(`UPDATE person SET publication = 'initials' WHERE id = ? AND publication = 'full'`)
       for (const person of people) {
         if (person.publication !== 'full') continue
@@ -74,7 +94,54 @@ export const MIGRATIONS: Migration[] = [
       }
     },
   },
+  {
+    version: 4,
+    up(raw) {
+      const person = columnNames(raw, 'person')
+      if (person.has('birth_date')) {
+        raw.exec(`UPDATE person
+          SET birth_year = CAST(substr(birth_date, 1, 4) AS INTEGER)
+          WHERE birth_year IS NULL AND birth_date IS NOT NULL AND length(birth_date) >= 4`)
+        raw.exec('ALTER TABLE person DROP COLUMN birth_date')
+      }
+      const entry = columnNames(raw, 'entry')
+      if (!entry.has('consent_date')) {
+        raw.exec(`ALTER TABLE entry ADD COLUMN consent_date TEXT NOT NULL DEFAULT '1970-01-01'`)
+        raw.exec(`UPDATE entry
+          SET consent_date = strftime('%Y-%m-%d', registered_at / 1000, 'unixepoch')
+          WHERE registered_at IS NOT NULL`)
+      }
+      if (!entry.has('dsq_reason')) {
+        raw.exec('ALTER TABLE entry ADD COLUMN dsq_reason TEXT')
+      }
+      raw.exec(ACCOUNT_TABLES)
+    },
+  },
 ]
+
+/** User accounts and key-slot metadata live in the same encrypted file. Wrapping is #131. */
+const ACCOUNT_TABLES = `
+CREATE TABLE IF NOT EXISTS user_account (
+  id TEXT PRIMARY KEY,
+  org_id TEXT NOT NULL DEFAULT 'local',
+  display_name TEXT NOT NULL,
+  email TEXT,
+  role TEXT NOT NULL CHECK (role IN ('admin', 'clerk')),
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS key_slot (
+  id TEXT PRIMARY KEY,
+  org_id TEXT NOT NULL DEFAULT 'local',
+  user_account_id TEXT,
+  kind TEXT NOT NULL CHECK (kind IN ('admin', 'recovery')),
+  kdf TEXT,
+  salt BLOB,
+  wrapped_key BLOB,
+  created_at INTEGER NOT NULL
+);
+`
 
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -148,7 +215,6 @@ CREATE TABLE IF NOT EXISTS person (
   first_name TEXT NOT NULL,
   last_name TEXT NOT NULL,
   gender TEXT NOT NULL,
-  birth_date TEXT,
   birth_year INTEGER,
   default_club_id TEXT,
   nationality TEXT,
@@ -231,6 +297,9 @@ CREATE TABLE IF NOT EXISTS entry (
   offset_ranking TEXT NOT NULL DEFAULT 'inherit',
   status TEXT NOT NULL DEFAULT 'registered',
   status_reason TEXT,
+  -- Internal. Export and print must not select dsq_reason. See INTERNAL_COLUMNS.
+  dsq_reason TEXT,
+  consent_date TEXT NOT NULL,
   race_change_note TEXT,
   warnings_json TEXT,
   result_order INTEGER,
@@ -332,4 +401,6 @@ CREATE TABLE IF NOT EXISTS sync_state (
   last_seq INTEGER NOT NULL,
   PRIMARY KEY (device_id, from_device_id)
 );
+
+${ACCOUNT_TABLES}
 `

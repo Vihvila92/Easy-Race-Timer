@@ -90,7 +90,9 @@ test.describe('Kuulan hölkkä', () => {
     await expect(page.getByTestId('suggestion-123-category')).toHaveText('P8')
     await expect(page.getByTestId('suggestion-135-category')).toHaveText('')
     await page.getByTestId('age-basis-birth_date').click()
-    await expect(page.getByTestId('suggestion-123-category')).toHaveText('P6')
+    // The race file keeps the birth year only, so a later suggestion uses that year.
+    // The category stored at import still used the full date from the CSV.
+    await expect(page.getByTestId('suggestion-123-category')).toHaveText('P8')
 
     for (const action of raceDay.actions) {
       if (action.at) await setClock(page, request, action.at)

@@ -14,7 +14,7 @@ packages/sports          running profile
 packages/timing-sources  touch finish
 packages/race-formats    mass start
 packages/exporters       CSV and A4 print
-packages/storage         SQLite
+packages/storage         encrypted SQLite (SQLCipher)
 packages/sync            .ertx
 packages/server          Fastify, composition root
 packages/web             React PWA
@@ -30,7 +30,7 @@ You need Node.js 22 and pnpm 10.33. These commands are for developers. The club 
 
 ```bash
 pnpm install
-pnpm rebuild better-sqlite3 esbuild
+pnpm rebuild esbuild
 pnpm build
 pnpm dev:server
 ```

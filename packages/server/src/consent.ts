@@ -48,15 +48,15 @@ export class ConsentService {
       throw new AppError('VALIDATION_ERROR', parsed.error.issues[0]?.message ?? 'Invalid consent')
     }
     const input = parsed.data
-    const person = this.deps.db.get<{ id: string; gender: AgeInput['gender']; birth_date: string | null; birth_year: number | null }>(
-      'SELECT id, gender, birth_date, birth_year FROM person WHERE id = ?',
+    const person = this.deps.db.get<{ id: string; gender: AgeInput['gender']; birth_year: number | null }>(
+      'SELECT id, gender, birth_year FROM person WHERE id = ?',
       subjectId,
     )
     if (!person) throw new AppError('NOT_FOUND', 'Person not found')
     const identity: PersonIdentity = {
       id: person.id,
       gender: person.gender,
-      birthDate: person.birth_date,
+      birthDate: null,
       birthYear: person.birth_year,
     }
     const raceDay = this.deps.db.get<{ date_start: string }>('SELECT date_start FROM event ORDER BY created_at LIMIT 1')?.date_start
