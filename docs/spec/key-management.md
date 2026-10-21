@@ -2,8 +2,8 @@
 
 - Status: proposed for Santtu's review. This is the key-handling spec requested on [#131](https://github.com/Vihvila92/Easy-Race-Timer/issues/131#issuecomment-6308842611). Implementation starts only after Santtu approves it in a comment on that issue. This document is not that approval.
 - Date: 2026-10-21
-- Decision and byte layout: [ADR 0012](../adr/0012-key-management.md)
-- Depends on [#130](https://github.com/Vihvila92/Easy-Race-Timer/issues/130) (one SQLCipher file, one 256-bit DEK). Sessions are [#132](https://github.com/Vihvila92/Easy-Race-Timer/issues/132) and are out of scope here.
+- Decision and byte layout: [ADR 0013](../adr/0013-key-management.md). Number 0012 is the encrypted race file on [#175](https://github.com/Vihvila92/Easy-Race-Timer/pull/175).
+- Depends on [#130](https://github.com/Vihvila92/Easy-Race-Timer/issues/130) and [#175](https://github.com/Vihvila92/Easy-Race-Timer/pull/175) (one SQLCipher file, one 256-bit DEK, random per-page IV, HMAC-SHA512). Sessions are [#132](https://github.com/Vihvila92/Easy-Race-Timer/issues/132) and are out of scope here.
 
 The ADR and this spec match. The ADR owns the slot layout and the USB-stick threat model. This spec owns parameters, procedures, user-facing text and the tests. Update both in the same change.
 
@@ -15,16 +15,16 @@ Santtu's review asked for each item below. The linked section is the normative t
 
 | # | Required statement | Section |
 |---|---|---|
-| 1 | A fresh random 96-bit GCM nonce on every wrap and every rewrap, plus a unique nonce scheme for encryption under the DEK. Nonces are never reused with the same key. | [Nonces](#nonces) |
+| 1 | A fresh random 96-bit GCM nonce on every wrap and every rewrap. The database body uses SQLCipher 4's random 128-bit IV per page write plus HMAC-SHA512. The same key does not reuse a wrap nonce or a page IV. | [Nonces](#nonces) |
 | 2 | The slot header (format version, KDF parameters, salt) is GCM associated data. Tampering with any of those fields makes unlock fail. The rest of the file header is authenticated the same way. | [Header authentication](#header-authentication) |
 | 3 | Argon2id minimum `m >= 64 MiB`, `t >= 3`, `p = 1`. Unlock refuses anything weaker before the KDF runs. Salt is 16 bytes from a CSPRNG. | [KDF and downgrade refusal](#kdf-and-downgrade-refusal) |
 | 4 | Recovery key has at least 128 bits of entropy, an unambiguous Crockford Base32 form, a checksum, is shown once, and is never stored in the file or in logs. | [Recovery key](#recovery-key) |
 | 5 | Failed unlocks hit an increasing backoff that survives a restart. The error does not reveal which slot failed. | [Unlock failures and persistent backoff](#unlock-failures-and-persistent-backoff) |
 | 6 | DEK, KEKs, passwords and the recovery key live in `Buffer`s and are zeroized after use where Node allows it. They are not turned into JS strings except at the input boundary. The unwrapped DEK is never written to disk. A test scans the data directory. | [Zeroization and the on-disk DEK scan](#zeroization-and-the-on-disk-dek-scan) |
-| 7 | Resetting another admin requires an authenticated admin and rewraps only that slot. Replacing an admin overwrites that slot. This does not protect old copies. If a former admin may still hold a copy, rotate the DEK, re-encrypt, and rewrap every slot. | [Admin change and DEK rotation](#admin-change-and-dek-rotation) |
+| 7 | Resetting another admin requires an authenticated admin and rewraps only that slot. Replacing an admin overwrites that slot and leaves both slots with one person until a second admin is set. This does not protect old copies. If a former admin may still hold a copy, `PRAGMA rekey` on a copy (journal `DELETE` during the rekey, then WAL), then rewrap every slot. | [Admin change and DEK rotation](#admin-change-and-dek-rotation) |
 | 8 | Regenerating the recovery key requires an unlocked admin session and invalidates the old slot. If both passwords and the recovery key are lost, the data cannot be recovered. The UI and the recovery guide say that in plain language. | [Recovery key loss](#recovery-key-loss) and [Recovery key guide](#recovery-key-guide) |
 | 9 | Passwords are at least 10 characters, are checked against a common-password list, and the maximum is not below 64 characters. | [Passwords](#passwords) |
-| 10 | Slot format and the USB-stick threat model are in the ADR. | [ADR 0012](../adr/0012-key-management.md) |
+| 10 | Slot format and the USB-stick threat model are in the ADR. | [ADR 0013](../adr/0013-key-management.md) |
 
 The original acceptance criteria on [#131](https://github.com/Vihvila92/Easy-Race-Timer/issues/131) are covered by those sections and by [Tests](#tests). Locale JSON is not edited in the documentation change that introduces this spec. The strings in [User-facing strings](#user-facing-strings) are the contract for the implementation pull request.
 
@@ -32,9 +32,10 @@ The original acceptance criteria on [#131](https://github.com/Vihvila92/Easy-Rac
 
 In scope:
 
-- Envelope header in front of the SQLCipher body from [#130](https://github.com/Vihvila92/Easy-Race-Timer/issues/130).
+- The sidecar key file next to the SQLCipher database from [#175](https://github.com/Vihvila92/Easy-Race-Timer/pull/175). The database itself starts at byte 0.
 - Two admin slots and one recovery slot, each an independent AES-256-GCM wrap of the one DEK.
-- Password policy, recovery-key format, print text, backoff, zeroization, log redaction, and DEK rotation.
+- Binding that key file to the database with `file_id`, and copying both files in every backup.
+- Password policy, recovery-key format, print text, backoff, zeroization, log redaction, the dev-key rule, and DEK rotation with `PRAGMA rekey`.
 
 Out of scope:
 
@@ -42,17 +43,39 @@ Out of scope:
 - Cloud KMS, vendor escrow, and an OS keychain as the only key store.
 - Encrypting `.ertx` or CSV exports ([#84](https://github.com/Vihvila92/Easy-Race-Timer/issues/84)).
 - The v0.1 event PIN (`pin_hash`, `PIN_REQUIRED`). It stays as it is until a later issue changes it. File unlock and the event PIN are different secrets.
-- Choosing the SQLCipher package and the migration/backup mechanics. Those stay in [#130](https://github.com/Vihvila92/Easy-Race-Timer/issues/130), subject to the body nonce rule here.
+- Choosing the SQLCipher package, the page format, and the migration mechanics. Those stay in [#175](https://github.com/Vihvila92/Easy-Race-Timer/pull/175). This spec adds the key file those backups must copy, and it does not change the page cipher.
 
-The on-disk race file keeps the path [#130](https://github.com/Vihvila92/Easy-Race-Timer/issues/130) already uses (`ERT_DB`, otherwise `ert.sqlite` in the data directory). Its first bytes are `ERTK`, then the SQLCipher body at offset 320. A tool that expects a raw SQLCipher file has to skip the envelope. `openDataFile(path, dek: Buffer)` receives the unwrapped DEK only after a slot verifies and only in memory.
+The database path stays the one [#175](https://github.com/Vihvila92/Easy-Race-Timer/pull/175) uses (`ERT_DB`, otherwise `ert.sqlite` in the data directory). Its first bytes are the SQLCipher header, not an application prefix. `openDataFile(path, dek: Buffer)` receives the unwrapped DEK only after a slot verifies and only in memory.
 
 ## File layout
 
-The version 1 header is exactly 320 bytes, as specified in [ADR 0012](../adr/0012-key-management.md#slot-format). The body starts at offset 320. The parser rejects a header whose length, slot count, slot order, types, or reserved bytes differ from that ADR. There is no empty slot and no fourth slot in version 1.
+`ert.keys` is the version 1 envelope: exactly 320 bytes, as specified in [ADR 0013](../adr/0013-key-management.md#slot-format). When `ERT_DB` uses another basename, the sidecar is `<basename>.keys` in the same directory (`club.sqlite` and `club.keys`). The parser rejects a key file whose length, slot count, slot order, types, or reserved bytes differ from that ADR. There is no empty slot and no fourth slot in version 1. There is no `ERTK` prefix on `ert.sqlite`, and no custom VFS.
 
-Creation writes all three slots before the file is opened for normal use. The operator sees the recovery key and sets both admin passwords in that same setup. Cancelling setup deletes the partial file and zeroizes every buffer.
+Wraps are not stored in the `key_slot` table. That table sits inside the encrypted database, so it cannot be read before unlock. The implementation drops `key_slot` instead of writing slot rows.
 
-Writes of the envelope (create, rewrap, recovery regeneration, DEK rotation) use a temporary file in the same directory, `fsync`, atomic rename, and a directory `fsync` where the operating system supports it. Mode is `0600` on macOS and Linux, and the current-user-only ACL on Windows, including `unlock-backoff.json` and backups. That is the same permission rule as [#130](https://github.com/Vihvila92/Easy-Race-Timer/issues/130).
+`file_id` from the key file is also written to `schema_meta.file_id` inside the encrypted database. That column is distinct from `installation_id`. After GCM unwrap, the app opens SQLCipher with the DEK and compares the two ids with `crypto.timingSafeEqual`. A mismatch closes the database, zeroizes the DEK, and returns `UNLOCK_FAILED`.
+
+Creation writes the database, `schema_meta.file_id`, and all three slots before the file is opened for normal use. The operator sees the recovery key and sets both admin passwords in that same setup. Cancelling setup deletes the partial database and the partial key file and zeroizes every buffer.
+
+Writes of the key file (create, rewrap, recovery regeneration, DEK rotation) use a temporary file in the same directory, `fsync`, atomic rename, and a directory `fsync` where the operating system supports it. Mode is `0600` on macOS and Linux, and the current-user-only ACL on Windows, including `unlock-backoff.json` and backups. That is the same permission rule as [#175](https://github.com/Vihvila92/Easy-Race-Timer/pull/175).
+
+### Backups copy both files
+
+A backup is the database and the key file from the same moment. Either file alone does not open. The paper recovery key does not replace `ert.keys`.
+
+- A scheduled backup that writes `backups/ert-<stamp>-<reason>.sqlite` also writes `backups/ert-<stamp>-<reason>.keys`, the key-file bytes from that moment. Both are mode `0600`. Pruning deletes the pair together.
+- A pre-migration copy `<file>.v<N>.bak` also writes `<file>.v<N>.keys`. Migration does not start unless both copies succeed. The database copy stays byte-identical to the pre-migration database, as [#175](https://github.com/Vihvila92/Easy-Race-Timer/pull/175) already requires.
+- A USB copy is the same pair. The UI string `keys.pairFiles` says so.
+
+[#175](https://github.com/Vihvila92/Easy-Race-Timer/pull/175) copies only the database today. The implementation of this spec changes that backup path. This documentation pull request does not edit that code.
+
+### Dev key
+
+A production or packaged build has no dev key provider. The only way to open a race file is a DEK unwrapped from a slot.
+
+The fixed development key from the storage module is used only when both of these are true: `NODE_ENV` is exactly `test` or exactly `development`, and `ERT_DEV_KEY` is exactly `1`. If `NODE_ENV` is unset, empty, `production`, or any other value, the dev key is refused, including when `ERT_DEV_KEY=1` is set and including when the caller passes the dev-key bytes. The process fails closed instead of creating or opening a race file with that key.
+
+While the dev key is in use, the log gets one warning that names the opt-in and does not contain key bytes. A test covers unset `NODE_ENV`, `NODE_ENV=production` with the opt-in, `NODE_ENV=test` without the opt-in, and `NODE_ENV=development` with the opt-in.
 
 ## Nonces
 
@@ -71,23 +94,34 @@ Rules:
 
 ### Body encryption under the DEK
 
-The DEK encrypts the SQLCipher body and nothing else. Key wrapping does not encrypt under the DEK.
+The DEK is the SQLCipher raw key for the database and for nothing else. Key wrapping does not encrypt under the DEK. The database starts at byte 0.
 
-Each page or chunk write under that DEK uses a 96-bit nonce that is unique for the life of that DEK. The nonce is generated at write time with the same CSPRNG, stored in the clear beside that page's ciphertext, and fed to an authenticated cipher (AES-256-GCM, or the authenticated mode [#130](https://github.com/Vihvila92/Easy-Race-Timer/issues/130) pins if its nonce is also 96 bits and is stored per write). The page tag covers the nonce.
+SQLCipher 4, as pinned by [#175](https://github.com/Vihvila92/Easy-Race-Timer/pull/175) (`legacy = 4`, `hmac_use = 1`, `hmac_algorithm = 2`, `plaintext_header_size = 0`), already gives each page write its own IV:
 
-A nonce derived only from the page number is forbidden. Rewriting the page would reuse it with the same DEK. SQLCipher 4's default AES-256-CBC IV is a function of the page number and does not meet this requirement. The [#130](https://github.com/Vihvila92/Easy-Race-Timer/issues/130) implementation selects a stricter mode (per-write nonce in the SQLCipher reserve, or 64 KiB chunks in the envelope body) and records the mode in the storage ADR. This spec's uniqueness test is the acceptance check either way.
+- The IV is 128 bits from a CSPRNG, stored in the page reserve, and regenerated on every write. It is not a function of the page number.
+- SQLite3 Multiple Ciphers' sqlcipher scheme uses that 16-byte IV, a 64-byte HMAC-SHA512, and 80 reserved bytes per page.
+- The HMAC-SHA512 covers the ciphertext, the IV and the page number, and it is checked on read.
+- Writing the same page twice stores two different IVs. Changing an IV byte fails the HMAC.
 
-An allowed alternative, if the storage ADR records it, is a 96-bit nonce split as a random per-DEK prefix plus a counter stored with the ciphertext. The counter is authenticated by the page tag, never repeats for that DEK, and forces a DEK rotation instead of wrapping. The default to implement is the random 96-bit nonce per write.
+That is the body nonce rule. This spec does not add a 96-bit GCM layer or 64 KiB chunks on top of SQLCipher, and it does not ask [#130](https://github.com/Vihvila92/Easy-Race-Timer/issues/130) or #175 to select a stricter page mode.
 
-Random 96-bit nonces also cover the backup-rollback case: an attacker who kept a newer snapshot and then forced the app onto an older snapshot does not cause a repeat, short of a birthday collision. A file that encrypts fewer than 2^32 pages stays far from that bound. The app does not use one nonce for the whole file.
+`PRAGMA rekey` rewrites the pages under the new DEK, so those writes get new random IVs. The old DEK is not used again. Page numbers may coincide between the old file and the new file. The key is different, and the IV is random per write, so that is not IV reuse.
 
-DEK rotation generates a new DEK and new body nonces. The old DEK is not used again. Page numbers may coincide between the old file and the new file; the key is different, so that is not nonce reuse.
+### Passing the DEK to SQLCipher
 
-The DEK is handed to SQLCipher as a raw 256-bit key via the binding's Buffer key method (`openDataFile`). It is not interpolated into `PRAGMA key` text, and SQLCipher's own passphrase KDF is not run on top of it. Production builds do not enable SQL tracing.
+The pragma matches [#175](https://github.com/Vihvila92/Easy-Race-Timer/pull/175). It is built only from the lowercase hex of the 32-byte buffer:
+
+```text
+key = "x'" + dataKey.toString('hex') + "'"
+```
+
+`PRAGMA rekey` uses the same quoting with the new buffer (`rekey = "x'" + newKey.toString('hex') + "'"`). The hex is 64 characters. The double quotes around the `x'...'` blob are the form SQLite3 Multiple Ciphers accepts. No other characters are interpolated. SQL tracing is off, and the statement is not logged. The JavaScript string that holds the hex cannot be wiped. The buffer is zeroized after the pragma returns. That leftover string is acceptable because it is not logged and not written to disk.
+
+The passphrase KDF is not applied to this key. `kdf_iter` stays at the SQLCipher 4 value pinned in #175 so the page format does not change.
 
 ## Header authentication
 
-AES-256-GCM associated data for a slot is the 80-byte string defined in [ADR 0012](../adr/0012-key-management.md#associated-data): the 32-byte envelope prefix, then the first 48 bytes of that slot (through the nonce).
+AES-256-GCM associated data for a slot is the 80-byte string defined in [ADR 0013](../adr/0013-key-management.md#associated-data): the 32-byte key-file prefix, then the first 48 bytes of that slot (through the nonce).
 
 Those bytes include every field Santtu named:
 
@@ -101,7 +135,7 @@ Tampering with any of those fields makes unlock fail. When the edited parameters
 
 The ciphertext and the tag are not associated data. They are the GCM output. A bit flip there also fails verification.
 
-The app does not treat a GCM-valid DEK as a successful unlock until SQLCipher has opened the body with that DEK and an integrity check (`cipher_integrity_check`, or `PRAGMA integrity_check` if that is what the pinned cipher exposes) has passed. A spliced slot that unwraps an old DEK fails that check against the current body. The DEK is zeroized and the result is `UNLOCK_FAILED`.
+The app does not treat a GCM-valid DEK as a successful unlock until SQLCipher has opened the database with that DEK, `schema_meta.file_id` matches the key file, and `PRAGMA integrity_check` has returned `ok`. A spliced slot that unwraps an old DEK fails that check against the current database. The DEK is zeroized and the result is `UNLOCK_FAILED`.
 
 Header policy failures that happen before GCM use `KEY_PARAMS_REJECTED` or `FILE_HEADER_INVALID`, as specified in [KDF and downgrade refusal](#kdf-and-downgrade-refusal). Those codes still do not name a slot.
 
@@ -262,9 +296,9 @@ Procedure for one attempt:
 6. On success, after the body integrity check passes, set `failureCount` and `lastAttemptMs` back to 0, `fsync`, and only then tell the UI the file is open.
 7. On failure, leave the incremented record as step 4 wrote it.
 
-Replacing the race file does not reset the counter. The counter belongs to the data directory, not to `file_id`. A restart of the process or of the operating system reads the same file and continues the wait.
+Replacing the race file does not reset the counter. The counter belongs to the directory that holds the database, not to `file_id`. `ERT_DB=/media/usb/ert.sqlite` reads and writes `/media/usb/unlock-backoff.json`, so every race file in that USB directory shares one counter. A different data directory has its own file. A restart of the process or of the operating system reads the same file and continues the wait.
 
-This backoff does not bind an attacker who copies the race file onto another computer, or who deletes `unlock-backoff.json`. Those limits are in the [ADR threat model](../adr/0012-key-management.md#threat-model). The recovery key is protected offline by its entropy, not by this delay. Admin passwords are protected offline by Argon2id.
+This backoff does not bind an attacker who copies the database and the key file onto another computer, or who deletes `unlock-backoff.json`. Those limits are in the [ADR threat model](../adr/0013-key-management.md#threat-model). The recovery key is protected offline by its entropy, not by this delay. Admin passwords are protected offline by Argon2id.
 
 ## Zeroization and the on-disk DEK scan
 
@@ -272,7 +306,7 @@ DEK, admin KEKs, the recovery KEK, password bytes and recovery-key bytes are `Bu
 
 The DEK buffer that SQLCipher needs stays alive until the database is closed or the file is locked. Closing the database is what clears that copy. Zeroizing it earlier would be a use-after-free of the key. On close, the storage module zeroizes its DEK buffer. A rewrap zeroizes the slot KEK before it returns. Setup and the regeneration screen zeroize the recovery secret when the screen closes.
 
-JavaScript strings cannot be wiped. The only place a password or a recovery key may be a string is the input boundary: the field the operator typed. The handler copies UTF-8 into a `Buffer` immediately and does not put that string on an object the logger serializes, in an `Error`, in a template string, or in a SQL statement. The redaction list below is the backstop for the request object.
+JavaScript strings cannot be wiped. The only places a secret may be a string are the input boundary (the field the operator typed, copied into a `Buffer` immediately) and the hex argument of `PRAGMA key` / `PRAGMA rekey` described under [Passing the DEK to SQLCipher](#passing-the-dek-to-sqlcipher). The handler does not put a password or a recovery key on an object the logger serializes, in an `Error`, in a template string, or in any SQL other than that hex pragma. The redaction list below is the backstop for the request object. The pragma text is not logged.
 
 `mlock` / `sodium_mlock` is used when the process can take it. Failure to lock memory is not an unlock failure. The threat model does not claim the key is absent from swap.
 
@@ -310,27 +344,31 @@ Changing one admin password, or resetting the other admin's password, rewraps th
 
 A test hashes the body before and after and compares the other slot's raw bytes. Both are equal. The changed slot's nonce and ciphertext differ from the previous bytes.
 
-Removing an admin is the same overwrite. Version 1 has no empty slot. The remaining person sets a new password on that slot (still different from their own). The previous password no longer unwraps the current file.
+Removing an admin is the same overwrite. Version 1 has no empty slot. The remaining person sets a new password on that slot (still different from their own). Both slots are then known to that one person. That is allowed. The UI says so with `keys.singleAdmin` and asks them to have a second admin set their own password as soon as someone else can take the slot. The previous password no longer unwraps the current key file.
 
 ### Old copies
 
-A slot overwrite does **not** protect old copies of the file. A backup, a pre-migration `.bak`, a USB copy, or an email attachment made before the rewrap still opens with the old password and the old recovery key. Someone who can write the current file and who has the old slot bytes can also splice that slot back, because the DEK did not change. The [threat model](../adr/0012-key-management.md#threat-model) states that splice.
+A slot overwrite does **not** protect old copies of the pair. A backup pair, a pre-migration `.vN.bak` plus its `.keys` file, a USB copy of both files, or an attachment made before the rewrap still opens with the old password and the old recovery key. Someone who can write the current key file and who has the old slot bytes can also splice that slot back, because the DEK did not change and `file_id` still matches. The [threat model](../adr/0013-key-management.md#threat-model) states that splice.
 
 The UI says this in the password-change confirmation, in English and in Finnish, using `keys.oldCopies` in [User-facing strings](#user-facing-strings).
 
 ### When a former admin may still hold a copy
 
-If a former admin may still have a copy, the operator rotates the DEK. Password rewrap is the wrong tool for that case. Rotation:
+If a former admin may still have a copy, the operator rotates the DEK with `PRAGMA rekey`. Password rewrap is the wrong tool for that case. SQLite3 Multiple Ciphers does not support rekey while `journal_mode` is WAL, so the rekey runs on a copy and the journal on that copy is `DELETE` only for the rekey.
 
-1. An authenticated admin unlocks the current file.
+1. An authenticated admin unlocks the current pair.
 2. Generate a new 32-byte DEK from the CSPRNG.
-3. Write a new envelope in a temporary file. Re-encrypt every page under the new DEK with new body nonces. `file_id` stays the same so the backoff record remains in force.
-4. Rewrap both admin slots under the current passwords (or under passwords the operator sets during the rotation) and regenerate the recovery key. The new recovery key is shown once. The old paper key does not unwrap the new file.
-5. `fsync`, rename the temp file over the race file, `fsync` the directory. Zeroize the old DEK and the new recovery secret after the print screen closes.
-6. Delete or re-encrypt backups this operator still controls. The app lists the `backups/` directory and the `.bak` files it knows about and asks the operator to confirm deletion. It does not claim to see USB sticks that are not mounted.
-7. Tell the operator, in the same screen, that a copy already in someone else's hands is still readable, and that this program cannot erase it.
+3. Copy the database to a temporary file in the same directory (`.ert.sqlite.rekey`). Do not rekey the live file. `file_id` inside `schema_meta` stays the same, so the backoff file is unchanged.
+4. Open the copy with the current DEK using the hex `PRAGMA key` from [Passing the DEK to SQLCipher](#passing-the-dek-to-sqlcipher). Set `PRAGMA journal_mode = DELETE`. Run `PRAGMA rekey` with the new DEK in the same `x'<hex>'` form. Run `PRAGMA integrity_check` and require `ok`. Set `PRAGMA journal_mode = WAL`, checkpoint, close, and `fsync` the copy. If any step fails, delete the temp and keep the original pair.
+5. Write the new key file to `.ert.keys.rekey` and `fsync` it. The acting admin confirms their own password, and that slot is rewrapped under it. The other admin either types their password during the rotation, or the acting admin sets a temporary password for that slot. A temporary password must be replaced at the next unlock of that slot before normal use (`keys.temporaryPassword`). The encrypted audit log records `dek_rotation` with reason `other_admin_present` or `temporary_password`, and it does not record the password or the DEK. The recovery key is regenerated and shown once. The old paper key does not unwrap the new database.
+6. Rename the database temp over the database, `fsync` the directory, rename the key temp over the key file, and `fsync` the directory. Zeroize the old DEK when rekey returns. Zeroize the new recovery secret after the print screen closes. The open database keeps the new DEK until it closes.
+7. A crash before either rename leaves the original pair; startup deletes the temps when the original pair still opens. A crash after the database rename and before the key rename leaves `.ert.keys.rekey`. Startup renames it over the key file only when its `file_id` matches `schema_meta.file_id` and a slot opens the database. Otherwise it stops with a clear error and leaves both files in place. It does not attach a key file that fails the `file_id` check.
+8. Delete or re-encrypt backup pairs this operator still controls. The app lists `backups/` and the `.vN.bak` / `.vN.keys` pairs it knows about and asks the operator to confirm deletion. It does not claim to see USB sticks that are not mounted.
+9. Tell the operator, in the same screen, that a copy already in someone else's hands is still readable, and that this program cannot erase it.
 
-After rotation, the old admin password fails on the new file if that slot was given a new password; the old recovery key fails either way because regeneration is mandatory; a pre-rotation backup still opens with the old secrets. The tests assert all three. That last result is deliberate: it is why step 6 exists.
+`VACUUM INTO` is not the rotation path. The path above is the one tests implement.
+
+After rotation, the old recovery key fails on the new pair because regeneration is mandatory. A slot that received a new or temporary password no longer opens with the old password. A preserved pre-rotation pair still opens with the old secrets. The tests assert all three. That last result is deliberate: it is why step 8 exists.
 
 Rotation is unavailable during the recovery-key gate below. The operator sets an admin password first, then rotates if they need to.
 
@@ -366,7 +404,7 @@ This is the plain-language guide. The implementation shows it from setup, from t
 
 **How to use it.** On the locked screen, choose "I don't have the passwords" and type the groups, including the last group. You can type the letters O, I and L; the program reads them as 0 and 1. If a group is mistyped, the program says so and does not try to open the file. If the key is accepted, the program then asks for a new admin password and will not continue until that password is set.
 
-**If the key is lost or seen by someone else.** If you still know an admin password, open the file and create a new recovery key. The paper you have now stops working for this file. An old copy of the file, such as a USB backup taken before that change, still opens with the old paper. Destroy those copies, or rotate the data key if a former admin might still have one.
+**If the key is lost or seen by someone else.** If you still know an admin password, open the file and create a new recovery key. The paper you have now stops working for this file. An old copy, such as a USB backup taken before that change, still opens with the old paper. That copy is both the database and the key file next to it. The paper key does not replace the key file. Destroy those copies, or rotate the data key if a former admin might still have one.
 
 **If both passwords and the paper are lost.** If both admin passwords and this recovery key are lost, the race file cannot be opened. There is no way to reset it and no one else has a copy of the key. The names, results and consents in the file would be gone.
 
@@ -378,7 +416,7 @@ This is the plain-language guide. The implementation shows it from setup, from t
 
 **Käyttö.** Lukitulla näytöllä valitse "Minulla ei ole salasanoja" ja kirjoita ryhmät, myös viimeinen. Kirjaimet O, I ja L kelpaavat: ohjelma lukee ne nollana ja ykkösenä. Jos ryhmässä on kirjoitusvirhe, ohjelma kertoo siitä eikä yritä avata tiedostoa. Jos avain käy, ohjelma pyytää uuden ylläpitäjän salasanan eikä jatka ennen kuin salasana on asetettu.
 
-**Jos avain katoaa tai joku muu näkee sen.** Jos tiedät vielä ylläpitäjän salasanan, avaa tiedosto ja luo uusi palautusavain. Nykyinen paperi ei enää avaa tätä tiedostoa. Vanha kopio, esimerkiksi USB-varmuuskopio ennen vaihtoa, aukeaa yhä vanhalla paperilla. Hävitä sellaiset kopiot, tai vaihda data-avain, jos entisellä ylläpitäjällä voi olla kopio.
+**Jos avain katoaa tai joku muu näkee sen.** Jos tiedät vielä ylläpitäjän salasanan, avaa tiedosto ja luo uusi palautusavain. Nykyinen paperi ei enää avaa tätä tiedostoa. Vanha kopio, esimerkiksi USB-varmuuskopio ennen vaihtoa, aukeaa yhä vanhalla paperilla. Kopio on sekä tietokanta että sen vieressä oleva avaintiedosto. Paperiavain ei korvaa avaintiedostoa. Hävitä sellaiset kopiot, tai vaihda data-avain, jos entisellä ylläpitäjällä voi olla kopio.
 
 **Jos molemmat salasanat ja paperi katoavat.** Jos molemmat ylläpitäjän salasanat ja tämä palautusavain katoavat, kisa-tiedostoa ei voi avata. Avainta ei voi nollata, eikä kellään muulla ole siitä kopiota. Tiedoston nimet, tulokset ja suostumukset katoavat.
 
@@ -418,8 +456,11 @@ The implementation PR adds these keys to `packages/i18n/locales/en.json` and `fi
 | `unlock.hint.recovery` | Type the printed groups, including the last group. The program checks for a typing error before it tries to open the file. | Kirjoita tulostetut ryhmät, myös viimeinen. Ohjelma tarkistaa kirjoitusvirheen ennen kuin se yrittää avata tiedoston. |
 | `keys.oldCopies` | Changing this password does not lock old copies. A USB backup made earlier still opens with the old password. If a former admin may have a copy, rotate the data key and destroy the backups you still have. | Salasanan vaihto ei lukitse vanhoja kopioita. Aiempi USB-varmuuskopio aukeaa yhä vanhalla salasanalla. Jos entisellä ylläpitäjällä voi olla kopio, vaihda data-avain ja hävitä varmuuskopiot, jotka sinulla vielä on. |
 | `keys.rotateLeftover` | A copy you do not have anymore stays readable. This program cannot erase someone else's stick. | Kopio, joka ei ole enää sinulla, pysyy luettavana. Ohjelma ei voi hävittää toisen henkilön tikkua. |
+| `keys.singleAdmin` | Both passwords are now held by one person. Ask a second admin to set their own password as soon as you can. | Molemmat salasanat ovat nyt yhdellä henkilöllä. Pyydä toista ylläpitäjää asettamaan oma salasanansa heti kun se on mahdollista. |
+| `keys.temporaryPassword` | The other admin's password is temporary. They must set their own password the next time the file is opened. | Toisen ylläpitäjän salasana on väliaikainen. Hänen on asetettava oma salasanansa, kun tiedosto avataan seuraavan kerran. |
+| `keys.pairFiles` | A backup has to include both the race database and the key file next to it. The paper recovery key does not replace the key file. | Varmuuskopiossa on oltava sekä kisatietokanta että sen vieressä oleva avaintiedosto. Paperinen palautusavain ei korvaa avaintiedostoa. |
 
-`unlock.unrecoverable` is shown at setup, on the print view, on the recovery screen, and in the guide. `keys.oldCopies` is shown when changing or resetting an admin password. `keys.rotateLeftover` is shown at the end of DEK rotation.
+`unlock.unrecoverable` is shown at setup, on the print view, on the recovery screen, and in the guide. `keys.oldCopies` is shown when changing or resetting an admin password. `keys.singleAdmin` is shown when one person ends up holding both slots. `keys.temporaryPassword` is shown when rotation sets a temporary password for the other admin, and again at the next unlock until that password is replaced. `keys.pairFiles` is shown wherever the app offers a backup or a USB copy. `keys.rotateLeftover` is shown at the end of DEK rotation.
 
 ## Errors
 
@@ -446,7 +487,7 @@ The implementation pull request adds these tests. None of them are in the docume
 | Disk scan | After create, rewrap, recovery regeneration and rotation, the data directory does not contain the raw DEK or its hex or base64 forms, nor the canary password or canary recovery text. |
 | Either admin | Slot 0's password and slot 1's password each open the body. A wrong password returns `UNLOCK_FAILED` with no slot field. The test doubles the Argon2 function and observes two calls on a successful first-slot password and on a failure. |
 | Nonce per wrap | After a rewrap, that slot's 12 nonce bytes differ, including when the password bytes are unchanged. All three slot nonces differ. A stubbed RNG that returns a nonce already in the header is called again. |
-| Body nonce | Writing the same logical page twice under one DEK stores two different 96-bit nonces, and decryption with the nonces swapped fails authentication. A page-number-only nonce fails this test. |
+| Body IV | Writing the same logical page twice under one DEK stores two different 16-byte IVs in the SQLCipher reserve. Changing one IV byte fails the HMAC-SHA512. The test does not require a GCM nonce or a chunk layer. |
 | Header tamper | Flipping `envelope_version`, `memory_kib` (to a value still at or above 65536 and within the ceiling), `iterations`, `parallelism`, one salt byte, `kdf_id`, `slot_type`, or `file_id` makes unlock fail. The body does not open. |
 | Downgrade | `memory_kib = 8192`, `iterations = 2`, and `parallelism = 0` each return `KEY_PARAMS_REJECTED` and do not call Argon2id. A file whose recovery slot is rewritten as Argon2id with `memory_kib = 1024` is refused as a whole, and the admin password does not open it. |
 | Stored parameters | A fixture with `memory_kib = 131072`, `t = 3`, `p = 1` is derived with 131072 KiB. Deriving it with 65536 does not verify the tag. |
@@ -455,11 +496,14 @@ The implementation pull request adds these tests. None of them are in the docume
 | Recovery gate | A valid recovery key opens the body and blocks normal navigation until one admin slot has been rewrapped. The other admin slot's bytes are unchanged if only one password was set. |
 | Single-slot rewrap | After an authenticated reset of slot 1, slot 0's 96 bytes are equal and a hash of the body is equal. Slot 1's old password fails. Slot 1's new password opens the file. The acting admin's password still opens it. An unauthenticated caller cannot rewrap. |
 | Old copy | A byte copy taken before the rewrap still opens with the old password. The test exists so the limitation stays true and documented. |
-| Rotation | After DEK rotation the old recovery key fails on the new file, the new recovery key is required to have been observed by the test harness only inside the returned show-once buffer, the new admin passwords open the new file, and a preserved pre-rotation backup still opens with the old password. Participant bytes round-trip. |
+| Rotation | Rotation calls `PRAGMA rekey` on a copy. The copy's journal is `DELETE` while rekey runs and `WAL` after `integrity_check` returns `ok`. The live file is not rekeyed in place. Afterward the old recovery key fails on the new pair, the new recovery key is observed by the test harness only inside the returned show-once buffer, the new admin passwords open the new pair, and a preserved pre-rotation pair still opens with the old password. A temporary password for the other admin is recorded in the encrypted audit log as `temporary_password` and blocks normal use until it is replaced. Participant bytes round-trip. A kill during rekey of the copy leaves the original pair openable. |
 | Backoff | The first five failures schedule no extra wait. After the fifth, the next attempt waits 1 second, then the wait doubles up to 900 seconds. The record is still there after the test reloads the module (the restart). A clock moved backward does not shorten the wait. Deleting the JSON is the documented reset, asserted so the threat model stays honest. Success writes `failureCount: 0`. A checksum failure increments the same counter. The response JSON has no slot field. |
 | Zeroize | The test's KEK buffer is all zeros after unwrap returns, including the failure path. The DEK buffer the storage module owns is all zeros after close. |
 | Logs | Captured logs, the thrown error's message, and the crash serializer do not contain the canaries or the DEK encodings. |
 | Passwords | 9 code points are rejected. 10 are accepted when not on the list. 64 are accepted when not on the list. 129 are rejected and the stored wrap does not exist (no truncation). `password123` is rejected. Two equal admin passwords are rejected. |
+| Dev key | With `NODE_ENV` unset, the process refuses to open a race file without a slot unwrap. `NODE_ENV=production` and `ERT_DEV_KEY=1` also refuse. `NODE_ENV=test` without `ERT_DEV_KEY=1` refuses. `NODE_ENV=development` and `ERT_DEV_KEY=1` opens and logs the opt-in warning, with no key bytes in that warning. |
+| Key file binding | `ert.sqlite` starts with the SQLCipher header, not `ERTK`. A `file_id` mismatch between `ert.keys` and `schema_meta.file_id` returns `UNLOCK_FAILED`. The database has no `key_slot` rows and no `key_slot` table. |
+| Backup pair | A scheduled backup and a `.vN.bak` migration copy each leave a sibling key file from the same moment. Restoring only the database fails. Restoring both opens. |
 
 ## Implementation note
 

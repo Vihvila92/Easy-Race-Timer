@@ -361,7 +361,7 @@ Juoksija kirjautuu sähköpostilinkillä tai OIDC:llä ja näkee omat tuloksensa
   6. SaaS: jaetun seurahakemiston ja juoksijaportaalin henkilöyhdistämisen tietosuoja.
   7. Varmuuskopiot: anonymisoinnin on ulotuttava varmuuskopioihin säilytysajan puitteissa (varmuuskopioiden kierto ≤ säilytysaika tai anonymisointi palautuksen yhteydessä).
 - **Turvallisuus:** PIN ylläpitoon ja rajoitus väärille PIN-yrityksille. Palvelin kuuntelee oletuksena vain localhostia; lähiverkko avataan erikseen (v0.2). Ei avoimia portteja internetiin.
-- **Kisa-tiedoston avaimet (vaihe 1, [#131](https://github.com/Vihvila92/Easy-Race-Timer/issues/131)):** yksi satunnainen 256-bittinen data-avain, kaksi ylläpitäjän salasanaa ja paperinen palautusavain. Normatiivinen englanninkielinen määrittely on [spec/key-management.md](spec/key-management.md), päätös [adr/0012-key-management.md](adr/0012-key-management.md). Toteutus alkaa vasta, kun Santtu on hyväksynyt määrittelyn issuen kommentissa. v0.1:n PIN ei muutu tässä päätöksessä.
+- **Kisa-tiedoston avaimet (vaihe 1, [#131](https://github.com/Vihvila92/Easy-Race-Timer/issues/131)):** yksi satunnainen 256-bittinen data-avain, kaksi ylläpitäjän salasanaa ja paperinen palautusavain. Normatiivinen englanninkielinen määrittely on [spec/key-management.md](spec/key-management.md), päätös [adr/0013-key-management.md](adr/0013-key-management.md). Toteutus alkaa vasta, kun Santtu on hyväksynyt määrittelyn issuen kommentissa. v0.1:n PIN ei muutu tässä päätöksessä.
 
 ## 9. API (luonnos)
 ```
