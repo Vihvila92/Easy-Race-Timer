@@ -41,7 +41,7 @@ export function TextField({
   label: string
   value: string
   onChange: (value: string) => void
-  type?: 'text' | 'time' | 'email'
+  type?: 'text' | 'time' | 'email' | 'password'
   inputMode?: 'text' | 'numeric' | 'decimal' | 'tel' | 'email'
   autoComplete?: string
   testId?: string
