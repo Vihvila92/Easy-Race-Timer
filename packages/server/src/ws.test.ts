@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import http from 'node:http'
 import crypto from 'node:crypto'
 import type { Socket } from 'node:net'
@@ -5,13 +6,19 @@ import type { FastifyInstance } from 'fastify'
 import { describe, expect, it } from 'vitest'
 import { openDatabase } from '@ert/storage'
 import { createApp } from './app.js'
-import { issueToken, sessionSecret } from './session.js'
+import { issueToken, SESSION_TTL_SECONDS, sessionSecret, tokenExpiry } from './session.js'
+
+interface CloseInfo {
+  code: number
+  reason: string
+}
 
 interface Handshake {
   status: number
   body: string
   frames: string[]
   waitFor: (count: number) => Promise<void>
+  waitForClose: () => Promise<CloseInfo>
   close: () => void
 }
 
@@ -54,6 +61,7 @@ function connect(app: FastifyInstance, headers: Record<string, string | undefine
           body: Buffer.concat(chunks).toString('utf8'),
           frames: [],
           waitFor: async () => { throw new Error('connection was not upgraded') },
+          waitForClose: async () => { throw new Error('connection was not upgraded') },
           close: () => undefined,
         })
       })
@@ -66,13 +74,27 @@ function liveSocket(status: number, socket: Socket, head: Buffer): Handshake {
   const frames: string[] = []
   let buffer = Buffer.from(head)
   let pending: { count: number; done: () => void } | null = null
+  let closed: CloseInfo | null = null
+  let closePending: ((info: CloseInfo) => void) | null = null
+  const finishClose = (info: CloseInfo) => {
+    if (closed) return
+    closed = info
+    closePending?.(info)
+    closePending = null
+  }
   const take = () => {
     while (buffer.length >= 2) {
       const length = buffer[1] & 0x7f
       if (length >= 126) throw new Error('unexpected long websocket frame')
       if (buffer.length < 2 + length) return
       const opcode = buffer[0] & 0x0f
-      if (opcode === 0x1) frames.push(buffer.subarray(2, 2 + length).toString('utf8'))
+      const payload = buffer.subarray(2, 2 + length)
+      if (opcode === 0x1) frames.push(payload.toString('utf8'))
+      if (opcode === 0x8) {
+        const code = payload.length >= 2 ? payload.readUInt16BE(0) : 1005
+        const reason = payload.length > 2 ? payload.subarray(2).toString('utf8') : ''
+        finishClose({ code, reason })
+      }
       buffer = buffer.subarray(2 + length)
       if (pending && frames.length >= pending.count) {
         const current = pending
@@ -84,6 +106,9 @@ function liveSocket(status: number, socket: Socket, head: Buffer): Handshake {
   socket.on('data', (chunk: Buffer) => {
     buffer = Buffer.concat([buffer, chunk])
     take()
+  })
+  socket.on('end', () => {
+    if (!closed) finishClose({ code: 1006, reason: '' })
   })
   take()
   return {
@@ -100,6 +125,16 @@ function liveSocket(status: number, socket: Socket, head: Buffer): Handshake {
             clearTimeout(timer)
             resolve()
           },
+        }
+      })
+    },
+    waitForClose() {
+      if (closed) return Promise.resolve(closed)
+      return new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error('timed out waiting for close')), 5000)
+        closePending = (info) => {
+          clearTimeout(timer)
+          resolve(info)
         }
       })
     },
@@ -134,14 +169,18 @@ describe('/ws handshake', () => {
       const badSignature = await connect(app, { authorization: `Bearer ${forged}` })
       const stale = await connect(app, { authorization: `Bearer ${expired}` })
       const badCookie = await connect(app, { cookie: 'ert_session=nope' })
-      opened.push(foreign, foreignWithToken, missingOrigin, anonymous, malformed, badSignature, stale, badCookie)
+      const brokenCookie = await connect(app, { cookie: 'ert_session=%' })
+      const truncatedCookie = await connect(app, { cookie: `ert_session=${token.slice(0, 12)}` })
+      const partialEscape = await connect(app, { cookie: 'ert_session=%E0%A4' })
+      opened.push(foreign, foreignWithToken, missingOrigin, anonymous, malformed, badSignature, stale, badCookie, brokenCookie, truncatedCookie, partialEscape)
 
       expect(foreign.status).toBe(403)
       expect(foreignWithToken.status).toBe(403)
       expect(missingOrigin.status).toBe(403)
-      for (const rejected of [anonymous, malformed, badSignature, stale, badCookie]) {
+      for (const rejected of [anonymous, malformed, badSignature, stale, badCookie, brokenCookie, truncatedCookie, partialEscape]) {
         expect(rejected.status).toBe(401)
-        expect(JSON.parse(rejected.body).error.code).toBe('PIN_REQUIRED')
+        expect(JSON.parse(rejected.body).error).toEqual({ code: 'PIN_REQUIRED', message: 'PIN required' })
+        expect(rejected.body).not.toMatch(/URIError|SyntaxError|stack|decodeURI/i)
       }
     } finally {
       for (const socket of opened) socket.close()
@@ -224,6 +263,91 @@ describe('/ws handshake', () => {
       expect(wire).not.toContain(reason)
       expect(wire).not.toContain('90421')
       expect(wire).not.toContain(entry?.id ?? 'missing-entry')
+    } finally {
+      for (const socket of opened) socket.close()
+      await app.close()
+      db.raw.close()
+    }
+  })
+
+  it('does not send a DSQ reason on the socket or in public results', async () => {
+    const db = await openDatabase(':memory:')
+    const { app, service } = await createApp({ db, testMode: true })
+    const opened: Handshake[] = []
+    try {
+      await app.listen({ port: 0, host: '127.0.0.1' })
+      const local = endpoint(app)
+      service.importEvent({
+        id: 'EV',
+        name: 'Privacy',
+        date: '2027-06-12',
+        timezone: 'Europe/Helsinki',
+        sport: 'run',
+        races: [{ id: 'R1', name: { fi: '1 km', en: '1 km' }, distance_m: 1000, start_mode: 'mass' }],
+        categories: [{ id: 'M', race_id: 'R1', name: { fi: 'M', en: 'M' }, gender: 'M', min_age: 0 }],
+      })
+      service.registerLate({
+        firstName: 'Aino',
+        lastName: 'Testi',
+        gender: 'F',
+        birthDate: '2014-08-09',
+        raceId: 'R1',
+        bib: 7,
+        consent: false,
+      })
+      const issued = await app.inject({
+        method: 'POST',
+        url: '/api/v1/settings/pin/check',
+        headers: { host: local.host, 'content-type': 'application/json' },
+        payload: {},
+      })
+      const token = issued.json().token as string
+      const bearer = await connect(app, { authorization: `Bearer ${token}` })
+      opened.push(bearer)
+      expect(bearer.status).toBe(101)
+      await bearer.waitFor(1)
+      const note = 'socket-dq-note'
+      service.setStatus(7, 'dsq', note)
+      await bearer.waitFor(2)
+      const wire = bearer.frames.join('\n')
+      expect(wire).not.toContain(note)
+      expect(wire).not.toContain('dsq_reason')
+      expect(wire).toContain('set_status')
+      const pub = await app.inject({ method: 'GET', url: '/api/v1/results', headers: { host: local.host } })
+      expect(pub.statusCode).toBe(200)
+      expect(pub.body).not.toContain(note)
+      expect(pub.body).not.toContain('dsq_reason')
+      const csv = await app.inject({ method: 'GET', url: '/api/v1/results?format=csv', headers: { host: local.host } })
+      expect(csv.body).not.toContain(note)
+      expect(csv.body).not.toContain('dsq_reason')
+    } finally {
+      for (const socket of opened) socket.close()
+      await app.close()
+      db.raw.close()
+    }
+  })
+
+  it('closes an open socket when the device token expires', async () => {
+    const db = await openDatabase(':memory:')
+    const { app } = await createApp({ db, testMode: true })
+    const opened: Handshake[] = []
+    try {
+      await app.listen({ port: 0, host: '127.0.0.1' })
+      const secret = sessionSecret(db)
+      const lifetimeMs = 1500
+      const token = issueToken(secret, Date.now() - SESSION_TTL_SECONDS * 1000 + lifetimeMs)
+      expect(tokenExpiry(secret, token)).toBeGreaterThan(Date.now())
+      expect(tokenExpiry(secret, issueToken(secret, 0))).toBeNull()
+
+      const socket = await connect(app, { authorization: `Bearer ${token}` })
+      opened.push(socket)
+      expect(socket.status).toBe(101)
+      await socket.waitFor(1)
+      expect(JSON.parse(socket.frames[0])).toEqual({ type: 'device.status', payload: { proto: 1 } })
+      const closed = await socket.waitForClose()
+      expect(closed.code).toBe(4401)
+      expect(closed.reason).toBe('expired')
+      expect(closed.reason).not.toContain(token)
     } finally {
       for (const socket of opened) socket.close()
       await app.close()

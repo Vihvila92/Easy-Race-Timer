@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 export const ERROR_CODES = [
   'VALIDATION_ERROR',
   'NOT_FOUND',

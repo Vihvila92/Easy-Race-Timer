@@ -1,6 +1,16 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import type { MessageKey } from '@ert/i18n'
+import { useState, type AnchorHTMLAttributes, type ButtonHTMLAttributes, type FocusEventHandler, type ReactNode } from 'react'
 import { useApp } from '../context.js'
-import type { ButtonHTMLAttributes, ReactNode } from 'react'
+import {
+  dateFieldInvalid,
+  dateFieldOnBlur,
+  dateFieldOnFocus,
+  dateFieldOnInput,
+  dateFieldOnValue,
+  dateFieldShown,
+  initialDateDraft,
+} from './date-field.js'
 
 type ButtonVariant = 'primary' | 'secondary' | 'danger'
 
@@ -22,16 +32,27 @@ export function TextField({
   inputMode,
   autoComplete,
   testId,
+  hint,
+  error,
+  onBlur,
+  onFocus,
 }: {
   id: string
   label: string
   value: string
   onChange: (value: string) => void
-  type?: 'text' | 'date' | 'time' | 'email'
+  type?: 'text' | 'time' | 'email'
   inputMode?: 'text' | 'numeric' | 'decimal' | 'tel' | 'email'
   autoComplete?: string
   testId?: string
+  hint?: string
+  error?: string
+  onBlur?: FocusEventHandler<HTMLInputElement>
+  onFocus?: FocusEventHandler<HTMLInputElement>
 }) {
+  const hintId = hint ? `${id}-hint` : undefined
+  const errorId = error ? `${id}-error` : undefined
+  const describedBy = [hintId, errorId].filter(Boolean).join(' ')
   return (
     <div className="ui-field">
       <label htmlFor={id}>{label}</label>
@@ -42,9 +63,95 @@ export function TextField({
         inputMode={inputMode}
         autoComplete={autoComplete}
         data-testid={testId}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy || undefined}
+        onBlur={onBlur}
+        onFocus={onFocus}
         onChange={(event) => onChange(event.target.value)}
       />
+      {hint ? <p className="ui-field-hint" id={hintId} data-testid={testId ? `${testId}-hint` : undefined}>{hint}</p> : null}
+      {error ? <p className="ui-field-error" id={errorId} role="alert" data-testid={testId ? `${testId}-error` : undefined}>{error}</p> : null}
     </div>
+  )
+}
+
+export function DateField({
+  id,
+  label,
+  hint,
+  errorMessage,
+  value,
+  onChange,
+  testId,
+}: {
+  id: string
+  label: string
+  hint: string
+  errorMessage: string
+  /** Stored calendar date, `YYYY-MM-DD`, or empty while the text is incomplete. */
+  value: string
+  onChange: (iso: string) => void
+  testId?: string
+}) {
+  const { locale } = useApp()
+  const [draft, setDraft] = useState(() => initialDateDraft(value))
+  const synced = value === draft.valueSeen ? draft : dateFieldOnValue(draft, value)
+  if (synced !== draft) setDraft(synced)
+  const shown = dateFieldShown(value, locale, synced)
+  const invalid = dateFieldInvalid(shown, locale, synced)
+  return (
+    <TextField
+      id={id}
+      label={label}
+      hint={hint}
+      error={invalid ? errorMessage : undefined}
+      value={shown}
+      onChange={(next) => {
+        const result = dateFieldOnInput(synced, next, locale)
+        setDraft(result.draft)
+        onChange(result.iso)
+      }}
+      onFocus={() => setDraft((current) => dateFieldOnFocus(current))}
+      onBlur={() => setDraft((current) => dateFieldOnBlur(current))}
+      autoComplete="off"
+      inputMode="text"
+      testId={testId}
+    />
+  )
+}
+
+type TextLinkProps = AnchorHTMLAttributes<HTMLAnchorElement> & { testId?: string }
+
+/** Inline link with a 44 px target. Navigation items keep the nav-link treatment. */
+export function TextLink({ className, testId, children, ...rest }: TextLinkProps) {
+  const classes = ['ui-text-link', className].filter(Boolean).join(' ')
+  return <a className={classes} data-testid={testId} {...rest}><span>{children}</span></a>
+}
+
+export function Checkbox({
+  id,
+  label,
+  checked,
+  onChange,
+  testId,
+}: {
+  id: string
+  label: string
+  checked: boolean
+  onChange: (checked: boolean) => void
+  testId?: string
+}) {
+  return (
+    <label className="ui-check" htmlFor={id}>
+      <input
+        id={id}
+        type="checkbox"
+        checked={checked}
+        data-testid={testId}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span>{label}</span>
+    </label>
   )
 }
 
@@ -77,9 +184,19 @@ export function Select({
 
 type BannerTone = 'info' | 'warning' | 'danger' | 'ok'
 
-export function Banner({ tone, children, testId }: { tone: BannerTone; children: ReactNode; testId?: string }) {
+export function Banner({
+  tone,
+  children,
+  testId,
+  role,
+}: {
+  tone: BannerTone
+  children: ReactNode
+  testId?: string
+  role?: 'alert' | 'status'
+}) {
   return (
-    <p className={`ui-banner ui-banner-${tone}`} data-testid={testId}>
+    <p className={`ui-banner ui-banner-${tone}`} role={role} data-testid={testId}>
       {children}
     </p>
   )

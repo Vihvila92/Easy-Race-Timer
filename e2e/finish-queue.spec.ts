@@ -1,4 +1,6 @@
-import { expect, test, type Page } from '@playwright/test'
+// SPDX-License-Identifier: AGPL-3.0-only
+import { type Page } from '@playwright/test'
+import { expect, test } from './fixtures.ts'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'

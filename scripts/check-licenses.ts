@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import path from 'node:path'
 
@@ -19,6 +20,7 @@ const allowed = new Set([
   'BlueOak-1.0.0',
   'Python-2.0',
   'MPL-2.0',
+  'CC-BY-3.0',
   'CC-BY-4.0',
   'UNLICENSED',
 ])

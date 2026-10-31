@@ -22,11 +22,12 @@ Commit messages and pull request titles follow [Conventional Commits](https://ww
 
 ```bash
 pnpm install
-pnpm rebuild better-sqlite3 esbuild
+pnpm rebuild esbuild
 pnpm lint
 pnpm depcruise
 pnpm check:i18n
 pnpm check:licenses
+pnpm check:spdx
 pnpm typecheck
 pnpm test
 pnpm e2e
@@ -46,11 +47,13 @@ The language switch lives in settings. Finnish is the default. The choice is sto
 
 Guided mode is the default. A `<view>.hint.<id>` string is shown only while guided mode is on. Write the Finnish and English hint next to the other strings for that view. Do not put the hint sentence in the component.
 
-Format dates and times with `formatDate`, `formatTime` and `formatDateTime` from `@ert/i18n` (`fi-FI` and `en-GB`). A Finnish date looks like `15.10.2026`. Store a calendar date as `YYYY-MM-DD`.
+Format dates and times with `formatDate`, `formatTime` and `formatDateTime` from `@ert/i18n` (`fi-FI` and `en-GB`). A Finnish date looks like `15.10.2026`, or `5.6.2026` when the day or month is below 10. English dates stay zero-padded (`05/06/2026`). The office view shows `formatDate` of the event date. Store a calendar date as `YYYY-MM-DD`.
+
+Do not use `<input type="date">` for a date a volunteer reads. The browser paints that control in the browser language, not the app language. Use `DateField`: Finnish shows `d.M.yyyy` (for example `12.6.2027`) and English shows the `formatDate` value (`12/06/2027`). The field still stores `YYYY-MM-DD`. Finnish `formatDate` has no leading zero (`12.6.2027`, `5.6.2026`). English stays `12/06/2027`. `DateField` passes a format hint and, after blur, an error through `TextField` (`aria-invalid` and `aria-describedby`). Lock-blocker ids stay in the API; the results view shows `results.blocker.*` instead of the raw id.
 
 ## User interface
 
-Shared controls live in [`packages/web/src/ui`](packages/web/src/ui). Use them for new views: `Button` (primary, secondary, danger), `TextField`, `Select`, `Banner`, `ListRow`, `StatusBadge`, `Clock` and `HintFrame`. Colors, type and spacing are CSS variables on `:root`. `[data-theme="dark"]` replaces them. The theme follows the system setting until the user chooses light or dark. Targets are at least 44 by 44 px, and both themes meet WCAG 2.2 AA contrast.
+Shared controls live in [`packages/web/src/ui`](packages/web/src/ui). Use them for new views: `Button` (primary, secondary, danger), `TextField`, `DateField`, `Select`, `Checkbox`, `TextLink`, `Banner`, `ListRow`, `StatusBadge`, `Clock` and `HintFrame`. Colors, type and spacing are CSS variables on `:root`. `[data-theme="dark"]` replaces them. The theme follows the system setting until the user chooses light or dark. Targets are at least 44 by 44 px (`--target`), including inline links and checkboxes, and both themes meet WCAG 2.2 AA contrast.
 
 `HintFrame` renders a `<view>.hint.<id>` string in the page flow only while guided mode is on. It is not a dialog. A dev build reviews the set at `#/preview`. That route is not part of the production build.
 
@@ -87,6 +90,8 @@ Changes to authentication (PIN, tokens), consent, publication levels, anonymizat
 ## License
 
 The project is licensed under `AGPL-3.0-only` (see `LICENSE`). External contributors must sign the Contributor License Agreement ([CLA.md](CLA.md)) before their pull request can be merged; the CLA assistant bot guides you in the PR by asking you to comment `I have read the CLA Document and I hereby sign the CLA`. Do not submit code you cannot license under these terms.
+
+Every source file (`.ts`, `.tsx`, `.js`, `.mjs`, `.cjs`, `.css`, `.py`, `.html`, `.rs`) carries `SPDX-License-Identifier: AGPL-3.0-only` in its first lines. A shebang stays on the first line and the header follows it. `pnpm check:spdx` fails when a source file is missing that header. JSON, Markdown and lockfiles are not source files. See [ADR 0012](docs/adr/0012-spdx-and-source-link.md).
 
 ## Security
 

@@ -5,8 +5,10 @@ Nykyinen ohjelma on Easy Race Timer v0.1: yksi kannettava, SQLite, React-PWA.
 | Tiedosto | Sisältö |
 |---|---|
 | [MAARITTELY.md](MAARITTELY.md) | Määrittely. Tämä on tuotteen lähde. |
-| [roadmap.md](roadmap.md) | Tiekartta. Työpöytäasennin on suunniteltu, ei vielä tehty. |
-| [adr/](adr/) | Päätökset 0001–0011, ja [0013](adr/0013-key-management.md) kisa-tiedoston avaimista. Numero 0012 on salatun kisatiedoston päätös [#175](https://github.com/Vihvila92/Easy-Race-Timer/pull/175):ssä, ei tässä haarassa. |
+| [roadmap.md](roadmap.md) | Tiekartta. Julkaisuputki rakentaa allekirjoittamattomat asentimet. |
+| [release.md](release.md) | Julkaisun tarkistus englanniksi: tarkistussummat, attestaatiot, Gatekeeper, SmartScreen. |
+| [release.fi.md](release.fi.md) | Sama suomeksi. |
+| [adr/](adr/) | Päätökset 0001–0014. 0001–0007: SQLite, append-only-ajanotto, moduulirajat, offline, lisenssi, henkilö ja suostumus, seurat. 0008–0014: anonymisointi, API, työpöytäsovellus, käyttöliittymän pohja, SPDX-otsikot ja lähdekoodilinkki, [0013 key-management](adr/0013-key-management.md), [0014 encrypted-race-file](adr/0014-encrypted-race-file.md). |
 | [spec/key-management.md](spec/key-management.md) | Avainten määrittely (englanti, [#131](https://github.com/Vihvila92/Easy-Race-Timer/issues/131)): kaksi ylläpitäjää, palautusavain, erillinen avaintiedosto. Päätös [adr/0013-key-management.md](adr/0013-key-management.md). |
 | [api/ERROR_CODES.md](api/ERROR_CODES.md) | Virhekoodit ja HTTP-statukset. |
 | [api/openapi.yaml](api/openapi.yaml) | REST-sopimus v0.1. |

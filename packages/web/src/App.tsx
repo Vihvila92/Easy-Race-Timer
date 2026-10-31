@@ -1,9 +1,13 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { syncServerClock } from './api.js'
 import { useApp } from './context.js'
 import { flush } from './queue.js'
+import { sourceCodeUrl } from './source-link.js'
+import { TextLink } from './ui/components.js'
+import { UnreachableView } from './unreachable.js'
 import { Wizard } from './wizard.js'
-import { Audit, Clubs, Corrections, Entries, Finish, ImportView, Office, PrintView, Results, Start, Ties } from './views.js'
+import { About, Audit, Clubs, Corrections, Entries, Finish, ImportView, Office, PrintView, Results, Start, Ties } from './views.js'
 
 const VIEWS = [
   ['/office', 'nav.office', Office],
@@ -17,6 +21,7 @@ const VIEWS = [
   ['/results', 'nav.results', Results],
   ['/print', 'nav.print', PrintView],
   ['/audit', 'nav.audit', Audit],
+  ['/about', 'nav.about', About],
 ] as const
 
 /** Dev-only. The production build constant-folds this to null and drops the page. */
@@ -42,8 +47,17 @@ function Preferences() {
         <button type="button" className={theme === 'dark' ? '' : 'secondary'} aria-pressed={theme === 'dark'} data-testid="theme-dark" onClick={() => setTheme('dark')}>{t('theme.dark')}</button>
         <button type="button" className={theme === 'system' ? '' : 'secondary'} aria-pressed={theme === 'system'} data-testid="theme-system" onClick={() => setTheme('system')}>{t('theme.system')}</button>
       </div>
-      <p className="muted" data-testid="theme-value">{theme}</p>
     </div>
+  )
+}
+
+/** AGPL source link. It stays outside the view so the PIN gate and a later race mode still show it. */
+function SourceFooter() {
+  const { t } = useApp()
+  return (
+    <p className="footer">
+      <TextLink href={sourceCodeUrl(__ERT_SOURCE_REF__)} rel="noreferrer" testId="source-link">{t('common.source')}</TextLink>
+    </p>
   )
 }
 
@@ -60,13 +74,14 @@ function PinGate() {
           <input aria-label={t('office.pin')} data-testid="pin-input" inputMode="numeric" value={pin} onChange={(event) => setPin(event.target.value)} />
           <button type="button" data-testid="pin-submit" onClick={() => { void login(pin) }}>{t('pin.open')}</button>
         </section>
+        <SourceFooter />
       </main>
     </div>
   )
 }
 
 export function App() {
-  const { t, data, needsPin, error } = useApp()
+  const { t, data, needsPin, unreachable, error, reload, locale } = useApp()
   const [hash, setHash] = useState(() => window.location.hash.replace('#', '') || '/office')
   useEffect(() => {
     const onHash = () => setHash(window.location.hash.replace('#', '') || '/office')
@@ -84,15 +99,18 @@ export function App() {
   }, [])
   const current = VIEWS.find(([path]) => path === hash) ?? VIEWS[0]
   const View = current[2]
-  const waiting = data?.ties.filter((group) => group.status === 'unconfirmed').length ?? 0
   if (needsPin) return <PinGate />
   const preview = import.meta.env.DEV && hash === '/preview' && PreviewPage != null
   if (!data && !preview) {
-    return <div className="shell wizard-shell"><main className="main"><p>{t('common.loading')}</p></main></div>
+    if (unreachable) {
+      return <UnreachableView locale={locale} onRetry={() => reload().catch(() => undefined)} />
+    }
+    return <div className="shell wizard-shell"><main className="main"><p>{t('common.loading')}</p><SourceFooter /></main></div>
   }
+  const waiting = data?.ties?.filter((group) => group.status === 'unconfirmed').length ?? 0
   const settingUp = !data?.event
-  const links = !data || settingUp ? VIEWS.filter(([path]) => data && path === '/import') : VIEWS
-  const showWizard = !preview && settingUp && hash !== '/import' && !!data
+  const links = !data || settingUp ? VIEWS.filter(([path]) => data && (path === '/import' || path === '/about')) : VIEWS
+  const showWizard = !preview && settingUp && hash !== '/import' && hash !== '/about' && !!data
   return (
     <div className={showWizard ? 'shell wizard-shell' : 'shell'}>
       <nav className="nav" aria-label={t('a11y.menu')}>
@@ -118,7 +136,7 @@ export function App() {
             <PreviewPage />
           </Suspense>
         ) : showWizard ? <Wizard /> : <View />}
-        <p className="footer"><a href="https://github.com/Vihvila92/Easy-Race-Timer">{t('common.source')}</a></p>
+        <SourceFooter />
       </main>
     </div>
   )

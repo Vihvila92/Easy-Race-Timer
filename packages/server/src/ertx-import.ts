@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { z } from 'zod'
 import { AppError } from '@ert/core'
 import { SCHEMA_VERSION, type AppDb } from '@ert/storage'
@@ -23,7 +24,7 @@ export const ERTX_TABLES = [
 export type ErtxTable = (typeof ERTX_TABLES)[number]
 
 const TABLE_SET = new Set<string>(ERTX_TABLES)
-const DENIED_COLUMNS = new Set(['pin_hash'])
+const DENIED_COLUMNS = new Set(['pin_hash', 'dsq_reason'])
 const IDENT = /^[a-z_]+$/
 
 const cell = z.union([z.string(), z.number(), z.null()])

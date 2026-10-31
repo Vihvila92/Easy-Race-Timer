@@ -9,7 +9,7 @@ v0.1 ajetaan kisapaikalla yhdellä kannettavalla, ilman verkkoa. Vanha luonnos o
 
 ## Päätös
 
-Palvelin on yksi Node 22 -prosessi. Tietokanta on SQLite (`better-sqlite3`), `journal_mode=WAL` ja `synchronous=FULL`. Palvelin kuuntelee oletuksena vain `127.0.0.1`. Varmuuskopio otetaan viiden minuutin välein. Skeema on numeroitu (`schema_meta.schema_version`); uudempaa kantaa ei avata vanhemmalla sovelluksella, ja ennen migraatiota otetaan kopio.
+Palvelin on yksi Node 22 -prosessi. Tietokanta on SQLite (`better-sqlite3-multiple-ciphers`), `journal_mode=WAL` ja `synchronous=FULL`. Palvelin kuuntelee oletuksena vain `127.0.0.1`. Varmuuskopio otetaan viiden minuutin välein. Skeema on numeroitu (`schema_meta.schema_version`); uudempaa kantaa ei avata vanhemmalla sovelluksella, ja ennen migraatiota otetaan kopio.
 
 Jokaisessa juuritaulussa on `org_id`. v0.1:ssä arvo on aina `'local'`. SQL pidetään siirrettävänä ja ajat INTEGER-millisekunteina, jotta sama skeema voidaan myöhemmin ajaa PostgreSQL:ään.
 
@@ -18,3 +18,4 @@ Jokaisessa juuritaulussa on `org_id`. v0.1:ssä arvo on aina `'local'`. SQL pide
 - Yksi komento käynnistää kisan. Selain avataan samalla koneella, joten PWA toimii ilman TLS-sertifikaattia.
 - Kuitattu painallus on levyllä ennen HTTP-vastausta. Tämä testataan `kill -9`:llä.
 - Lähiverkko ja Postgres eivät kuulu v0.1:een.
+- Tiedoston salaus, avain ja migraation atomisuus on päätetty ADR 0014:ssa. Tämä päätös kuvaa edelleen yhden prosessin, WAL-tilan ja `synchronous=FULL`.

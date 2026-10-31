@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { ApiError, api } from './api.js'
 
 export interface QueuedTap {
@@ -71,6 +72,7 @@ export async function flush(focusId?: string): Promise<{ flags: string[]; synced
     try {
       const saved = await api<{ flags?: string[] }>('/api/v1/timing-events', {
         method: 'POST',
+        timeout: false,
         body: JSON.stringify({
           id: item.id,
           deviceId: item.deviceId,

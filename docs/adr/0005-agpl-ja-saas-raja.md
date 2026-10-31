@@ -2,6 +2,7 @@
 
 - Tila: ehdotus, odottaa tekijänoikeuden haltijan päätöstä
 - Päivä: 2026-10-14
+- Päivitys 2026-10-21: SPDX-otsikot ja versioitu lähdekoodilinkki on päätetty [ADR 0012](0012-spdx-and-source-link.md):ssä. Lause "SPDX-AGPL-otsikoita ei lisätä" ei ole enää voimassa.
 
 ## Tausta
 

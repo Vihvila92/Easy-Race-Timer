@@ -1,4 +1,6 @@
-import { expect, test, type APIRequestContext, type Page } from '@playwright/test'
+// SPDX-License-Identifier: AGPL-3.0-only
+import { type APIRequestContext, type Page } from '@playwright/test'
+import { expect, test } from './fixtures.ts'
 import AxeBuilder from '@axe-core/playwright'
 import { mkdtempSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -9,6 +11,20 @@ import { authorize, killServer, startServer, type RunningServer } from './server
 const dir = path.resolve('testdata/kuulan-holkka')
 const read = (name: string) => readFileSync(path.join(dir, name), 'utf8')
 const raceDay = JSON.parse(read('race-day.json')) as { actions: Record<string, any>[] }
+
+const blockerLabels: Record<string, string> = {
+  'entry:108:no_result': 'Numerolla 108 ei ole tulosta',
+  'tie:R4:21:32': 'Ratkaisematon tasatilanne, R4, 21:32',
+  'tie:R4:22:13': 'Ratkaisematon tasatilanne, R4, 22:13',
+  'tie:R8:41:07': 'Ratkaisematon tasatilanne, R8, 41:07',
+}
+
+function blockerText(id: string): string {
+  const text = blockerLabels[id]
+  if (!text) throw new Error(`missing blocker label for ${id}`)
+  if (text === id) throw new Error(`blocker label still raw: ${id}`)
+  return text
+}
 
 function project(csv: string) {
   return parseCsv(csv).map((row) => RESULT_FIELDS.map((field) => row[field] ?? '').join(';'))
@@ -90,7 +106,9 @@ test.describe('Kuulan hölkkä', () => {
     await expect(page.getByTestId('suggestion-123-category')).toHaveText('P8')
     await expect(page.getByTestId('suggestion-135-category')).toHaveText('')
     await page.getByTestId('age-basis-birth_date').click()
-    await expect(page.getByTestId('suggestion-123-category')).toHaveText('P6')
+    // The race file keeps the birth year only, so a later suggestion uses that year.
+    // The category stored at import still used the full date from the CSV.
+    await expect(page.getByTestId('suggestion-123-category')).toHaveText('P8')
 
     for (const action of raceDay.actions) {
       if (action.at) await setClock(page, request, action.at)
@@ -314,7 +332,10 @@ async function runAction(page: Page, action: Record<string, any>) {
     await open(page, 'results')
     await page.getByTestId(`lock-${action.race}`).click()
     const items = page.getByTestId(`blockers-${action.race}`).getByTestId('blocker')
-    await expect(items).toHaveText(action.expect_blockers)
+    const ids = action.expect_blockers as string[]
+    const labels = ids.map((id) => blockerText(id))
+    await expect(items).toHaveText(labels)
+    await expect(items.nth(0).locator('a')).toHaveAttribute('href', ids[0].startsWith('tie:') ? '#/ties' : '#/entries')
     return
   }
   if (action.type === 'confirm_tie_order') {

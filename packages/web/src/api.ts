@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: AGPL-3.0-only
 import { createId } from '@ert/core'
 import type { Workspace } from './types.js'
 
@@ -7,17 +8,41 @@ export class ApiError extends Error {
   }
 }
 
+/** A startup call that stays open this long is treated as unreachable. */
+export const API_TIMEOUT_MS = 10_000
+
+export type ApiInit = RequestInit & {
+  /** False keeps the request alive. Queued finish uploads set this so a slow POST is not cancelled. */
+  timeout?: false
+}
+
 /** Same-origin path. The desktop shell chooses the port; this client must not embed a host. */
-export async function api<T>(path: string, init?: RequestInit): Promise<T> {
+export async function api<T>(path: string, init?: ApiInit): Promise<T> {
   const method = (init?.method ?? 'GET').toUpperCase()
-  const response = await fetch(path, {
-    ...init,
-    credentials: 'same-origin',
-    headers: {
-      ...(method !== 'GET' && method !== 'HEAD' ? { 'content-type': 'application/json' } : {}),
-      ...(init?.headers ?? {}),
-    },
-  })
+  const { timeout, signal: outer, ...rest } = init ?? {}
+  const timed = timeout !== false
+  const controller = new AbortController()
+  const onOuterAbort = () => controller.abort(outer?.reason)
+  if (outer) {
+    if (outer.aborted) controller.abort(outer.reason)
+    else outer.addEventListener('abort', onOuterAbort, { once: true })
+  }
+  const timer = timed ? setTimeout(() => controller.abort(), API_TIMEOUT_MS) : undefined
+  let response: Response
+  try {
+    response = await fetch(path, {
+      ...rest,
+      credentials: 'same-origin',
+      headers: {
+        ...(method !== 'GET' && method !== 'HEAD' ? { 'content-type': 'application/json' } : {}),
+        ...(rest.headers ?? {}),
+      },
+      signal: timed || outer ? controller.signal : undefined,
+    })
+  } finally {
+    if (timer !== undefined) clearTimeout(timer)
+    outer?.removeEventListener('abort', onOuterAbort)
+  }
   if (!response.ok) {
     const body = await response.json().catch(() => ({})) as { error?: { code?: string; message?: string; details?: unknown } }
     throw new ApiError(body.error?.code ?? 'VALIDATION_ERROR', body.error?.message ?? response.statusText, body.error?.details)
