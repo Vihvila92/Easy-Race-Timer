@@ -102,4 +102,4 @@ pnpm tauri signer generate -w "$HOME/.tauri/easy-race-timer.key"
 
 Korvaa `src-tauri/tauri.conf.json`-tiedoston `TODO_REPLACE_WITH_UPDATER_PUBKEY` komennon tulostamalla julkisella avaimella. Tallenna yksityinen avain vain `release`-ympäristöön. Älä commitoi yksityistä avainta. Ensimmäinen `v*`-tagi epäonnistuu `sign`-työssä, kunnes paikkamerkki on vaihdettu ja yllä oleva ympäristö on olemassa.
 
-Työpöytäikkuna on yhä käyttöliittymä ilman seuran palvelinta. Palvelin sidecarina tulee myöhemmin. Päivityslisäosa tulee myöhemmin; avain commitoidaan nyt, jotta julkaisun allekirjoitus on kiinnitetty gitiin.
+Työpöytäsovellus sisältää Node-palvelimen sidecarina (#177). Päivityslisäosa tulee myöhemmin (#136); avain commitoidaan nyt, jotta julkaisun allekirjoitus on kiinnitetty gitiin.

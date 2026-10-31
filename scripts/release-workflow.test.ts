@@ -10,7 +10,7 @@ function job(name: string): string {
   return match[1]?.split(/^ {2}[a-z]+:/m)[0] ?? ''
 }
 
-describe('release workflow', () => {
+describe('release workflow pins and triggers', () => {
   it('defaults to contents read and pins every action to a commit SHA', () => {
     expect(release).toMatch(/^permissions:\n {2}contents: read\n/m)
     const uses = release.split('\n').filter((line) => line.includes('uses:'))
@@ -53,7 +53,9 @@ describe('release workflow', () => {
     expect(job('sbom')).not.toContain('secrets.')
     expect(job('bundle')).not.toContain('secrets.')
   })
+})
 
+describe('release workflow checkout and runners', () => {
   it('checks out without credentials and disables the pnpm cache on tags', () => {
     const checkouts = release.match(/actions\/checkout@/g) ?? []
     const persisted = release.match(/persist-credentials: false/g) ?? []
@@ -80,7 +82,9 @@ describe('release workflow', () => {
     expect(sbom).toContain('pnpm exec cdxgen')
     expect(readFileSync('package.json', 'utf8')).toContain('"@cyclonedx/cdxgen": "12.8.6"')
   })
+})
 
+describe('release workflow publish and sign', () => {
   it('refuses to replace an existing release and attests updater files', () => {
     const publish = job('publish')
     expect(publish).not.toContain('--clobber')
@@ -137,11 +141,16 @@ describe('release workflow', () => {
     const outside = release.replace(sign, '')
     expect(outside).not.toContain('TAURI_SIGNING_PRIVATE_KEY')
   })
+})
 
-  it('does not add installer work to the required check job', () => {
+describe('check job', () => {
+  it('does not build installers', () => {
     expect(ci).toMatch(/^ {2}check:/m)
-    expect(ci).not.toContain('tauri')
-    expect(ci).not.toContain('rust-toolchain')
+    expect(ci).not.toContain('tauri build')
+    expect(ci).not.toContain('pnpm tauri')
+    expect(ci).not.toContain('tauri-apps')
+    expect(ci).not.toContain('build:sidecar')
     expect(ci).not.toContain('attest')
+    expect(ci).toContain('cargo clippy --all-targets --locked -- -D warnings')
   })
 })

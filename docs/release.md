@@ -102,4 +102,4 @@ pnpm tauri signer generate -w "$HOME/.tauri/easy-race-timer.key"
 
 Replace `TODO_REPLACE_WITH_UPDATER_PUBKEY` in `src-tauri/tauri.conf.json` with the public key that command prints. Put the private key only in the `release` environment. Do not commit the private key. The first `v*` tag fails the `sign` job until that placeholder is replaced and the environment above exists.
 
-The desktop window is still the web UI without the club server. The server sidecar is a later change. The updater plugin itself is a later change; the key is committed now so release signatures are pinned in git.
+The desktop app bundles the Node server as a sidecar (#177). The updater plugin itself is a later change (#136); the key is committed now so release signatures are pinned in git.
