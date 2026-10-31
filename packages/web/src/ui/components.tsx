@@ -189,14 +189,23 @@ export function Banner({
   children,
   testId,
   role,
+  live,
 }: {
   tone: BannerTone
   children: ReactNode
   testId?: string
   role?: 'alert' | 'status'
+  /** Explicit live-region politeness. `polite` matches `role="status"`. */
+  live?: 'polite' | 'assertive'
 }) {
   return (
-    <p className={`ui-banner ui-banner-${tone}`} role={role} data-testid={testId}>
+    <p
+      className={`ui-banner ui-banner-${tone}`}
+      role={role}
+      aria-live={live}
+      aria-atomic={live ? true : undefined}
+      data-testid={testId}
+    >
       {children}
     </p>
   )

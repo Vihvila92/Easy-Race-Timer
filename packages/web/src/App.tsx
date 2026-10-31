@@ -4,7 +4,7 @@ import { syncServerClock } from './api.js'
 import { useApp } from './context.js'
 import { flush } from './queue.js'
 import { sourceCodeUrl } from './source-link.js'
-import { TextLink } from './ui/components.js'
+import { Banner, TextLink } from './ui/components.js'
 import { UnreachableView } from './unreachable.js'
 import { Wizard } from './wizard.js'
 import { About, Audit, Clubs, Corrections, Entries, Finish, ImportView, Office, PrintView, Results, Start, Ties } from './views.js'
@@ -81,7 +81,7 @@ function PinGate() {
 }
 
 export function App() {
-  const { t, data, needsPin, unreachable, error, reload, locale } = useApp()
+  const { t, data, needsPin, unreachable, connection, error, reload, locale } = useApp()
   const [hash, setHash] = useState(() => window.location.hash.replace('#', '') || '/office')
   useEffect(() => {
     const onHash = () => setHash(window.location.hash.replace('#', '') || '/office')
@@ -130,6 +130,11 @@ export function App() {
         <Preferences />
       </nav>
       <main className="main">
+        {connection === 'reconnecting' && (
+          <Banner tone="info" role="status" live="polite" testId="connection-status">
+            {t('connection.reconnecting')}
+          </Banner>
+        )}
         {error && <p className="error" role="alert" data-testid="form-error">{t('common.error')}: {error}</p>}
         {preview && PreviewPage ? (
           <Suspense fallback={<p>{t('common.loading')}</p>}>

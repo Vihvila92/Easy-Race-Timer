@@ -2,7 +2,7 @@
 import { parseLocale, translate, type Locale, type MessageKey } from '@ert/i18n'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ApiError, api, loadWorkspace } from './api.js'
-import { LiveSession, openLiveSocket } from './live-session.js'
+import { LiveSession, openLiveSocket, type LiveConnection } from './live-session.js'
 import type { Workspace } from './types.js'
 import { parseGuidance, parseThemeChoice, resolveColorScheme, type Guidance, type ThemeChoice } from './ui/preferences.js'
 import { unreachableDetail, validateWorkspaceResponse } from './workspace.js'
@@ -21,6 +21,8 @@ interface AppContextValue {
   data: Workspace | null
   needsPin: boolean
   unreachable: boolean
+  /** `reconnecting` while a dropped live socket is retrying. `connected` hides the notice. */
+  connection: LiveConnection
   reload: () => Promise<void>
   login: (pin: string) => Promise<void>
   error: string
@@ -60,6 +62,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [unreachable, setUnreachable] = useState(false)
   const [authenticated, setAuthenticated] = useState(false)
   const [error, setError] = useState('')
+  const [connection, setConnection] = useState<LiveConnection>('connected')
   const sessionRef = useRef<LiveSession | null>(null)
 
   const setLocale = useCallback((next: Locale) => {
@@ -148,7 +151,27 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!authenticated) {
       sessionRef.current?.stop()
       sessionRef.current = null
+      setConnection('connected')
       return
+    }
+    let cancelled = false
+    let running = false
+    let again = false
+    const resync = () => {
+      if (cancelled) return
+      if (running) {
+        again = true
+        return
+      }
+      running = true
+      void reload()
+        .catch(() => undefined)
+        .finally(() => {
+          running = false
+          if (cancelled || !again) return
+          again = false
+          resync()
+        })
     }
     const session = new LiveSession({
       open: openLiveSocket,
@@ -158,15 +181,21 @@ export function AppProvider({ children }: { children: ReactNode }) {
         setNeedsPin(true)
         setUnreachable(false)
         setAuthenticated(false)
+        setConnection('connected')
       },
+      onStatus: (status) => {
+        if (!cancelled) setConnection(status)
+      },
+      onResync: resync,
     })
     sessionRef.current = session
     session.start()
     return () => {
+      cancelled = true
       session.stop()
       if (sessionRef.current === session) sessionRef.current = null
     }
-  }, [authenticated])
+  }, [authenticated, reload])
 
   const run = useCallback(async <T,>(fn: () => Promise<T>) => {
     setError('')
@@ -191,12 +220,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     data,
     needsPin,
     unreachable,
+    connection,
     reload,
     login,
     error,
     clearError: () => setError(''),
     run,
-  }), [locale, setLocale, guidance, setGuidance, theme, setTheme, data, needsPin, unreachable, reload, login, error, run])
+  }), [locale, setLocale, guidance, setGuidance, theme, setTheme, data, needsPin, unreachable, connection, reload, login, error, run])
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>
 }
