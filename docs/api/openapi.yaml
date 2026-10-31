@@ -803,5 +803,13 @@ components:
                       - CLUB_ABBREVIATION_CONFLICT
                       - SYNC_CONFLICT
                       - BACKUP_FAILED
+                      - UNLOCK_FAILED
+                      - RECOVERY_KEY_CHECKSUM
+                      - KEY_PARAMS_REJECTED
+                      - FILE_HEADER_INVALID
+                      - PASSWORD_TOO_SHORT
+                      - PASSWORD_TOO_LONG
+                      - PASSWORD_COMMON
+                      - PASSWORD_MISMATCH
                   message: { type: string }
                   details: {}
