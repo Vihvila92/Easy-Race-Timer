@@ -1318,6 +1318,28 @@ export class RaceService {
     const plan = this.retentionPlan(nowMs)
     if (!plan.locked) throw new AppError('LOCK_BLOCKED', 'Retention requires every race to be locked')
     if (!plan.deadlinePassed) throw new AppError('VALIDATION_ERROR', 'Retention deadline has not passed')
+    return this.applyRetention(plan, nowMs)
+  }
+
+  /**
+   * Retention anonymisation for a restored copy, before the caller opens it.
+   * The deadline is the legal limit, so a restored file past that limit is anonymised
+   * even when a race was not locked. People with long-term consent stay.
+   * A file with no event is left unchanged.
+   */
+  anonymizeRestored(nowMs: number) {
+    let plan: { eventId: string; cutoff: string; deadlinePassed: boolean }
+    try {
+      plan = this.retentionPlan(nowMs)
+    } catch (error) {
+      if (error instanceof AppError && error.code === 'NOT_FOUND') return { anonymized: 0, cutoff: '' }
+      throw error
+    }
+    if (!plan.deadlinePassed) return { anonymized: 0, cutoff: plan.cutoff }
+    return this.applyRetention(plan, nowMs)
+  }
+
+  private applyRetention(plan: { eventId: string; cutoff: string }, nowMs: number) {
     const cutoff = plan.cutoff
     const removedNames: string[] = []
     const removedEmails: string[] = []

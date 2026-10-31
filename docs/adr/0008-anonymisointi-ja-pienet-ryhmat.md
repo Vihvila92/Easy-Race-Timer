@@ -24,4 +24,4 @@ Näyttönimi on "Anonyymi (lyhenne)" tai "Anonyymi". Yksilöivistä huomautuksis
 ## Seuraukset
 
 - Ennen ajoa julkaistuja paperi- ja verkkokopioita järjestelmä ei voi poistaa. Tämä on Vartijan listan kohta 2.
-- Varmuuskopioiden kiertoa ei ole vielä sidottu säilytysaikaan. Palautettu vanha kanta sisältää henkilötiedot, kunnes ajo ajetaan uudelleen.
+- Varmuuskopioiden kierto pitää uusimmat 48 kopiota ja yhden kopion kultakin UTC-päivältä säilytysajan sisällä. Palautus anonymisoi ilman pitkäaikaista suostumusta olevat henkilöt ennen kuin palautettu tiedosto avataan.
