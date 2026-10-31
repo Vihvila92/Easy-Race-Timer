@@ -1,0 +1,3 @@
+# Cognitive complexity ceiling for clippy::cognitive_complexity.
+# This is clippy's own default. The check job denies the lint with -D warnings.
+cognitive-complexity-threshold = 25

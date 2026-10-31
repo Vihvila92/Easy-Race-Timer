@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { timingSafeEqual } from 'node:crypto'
 
-export const LAUNCH_COOKIE = 'ert_launch'
+const LAUNCH_COOKIE = 'ert_launch'
 export const AUTH_CODE_TTL_MS = 15_000
 
 /** 32 bytes, hex encoded. Used for the stdin launch token and the one-time auth code. */

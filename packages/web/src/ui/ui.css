@@ -74,9 +74,11 @@ button.ui-button-danger {
   color: var(--text);
 }
 
+/* Shared control surface for inputs and list rows. */
 .ui-field input,
-.ui-field select {
-  width: 100%;
+.ui-field select,
+button.ui-row,
+.ui-row {
   min-height: var(--target);
   min-width: var(--target);
   background: var(--card);
@@ -84,6 +86,11 @@ button.ui-button-danger {
   border: 1px solid var(--control-border);
   border-radius: var(--radius-control);
   padding: 10px 14px;
+}
+
+.ui-field input,
+.ui-field select {
+  width: 100%;
 }
 
 .ui-field-hint,
@@ -122,16 +129,9 @@ button.ui-row,
   justify-content: space-between;
   gap: var(--space-3);
   width: 100%;
-  min-height: var(--target);
-  min-width: var(--target);
   max-width: 100%;
   text-align: left;
   text-decoration: none;
-  background: var(--card);
-  color: var(--text);
-  border: 1px solid var(--control-border);
-  border-radius: var(--radius-control);
-  padding: 10px 14px;
 }
 
 .ui-row-copy {
