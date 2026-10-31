@@ -1,6 +1,48 @@
 # Contributing
 
-Easy Race Timer v0.1 is a TypeScript monorepo (pnpm 10.33, Node.js 22). By taking part you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+Easy Race Timer v0.1 is a TypeScript monorepo. By taking part you agree to follow the [Code of Conduct](CODE_OF_CONDUCT.md).
+
+## Quick start
+
+These are the versions CI installs. Node.js 22.23.3 is the release workflow's Node and the version in [`.nvmrc`](.nvmrc). The `check` job reads that file.
+
+| Tool | Version | Pin |
+|---|---|---|
+| Node.js | 22.23.3 | [`.nvmrc`](.nvmrc) |
+| pnpm | 10.33.4 | `packageManager` in [`package.json`](package.json) |
+| Rust | 1.90.0 | [`rust-toolchain.toml`](rust-toolchain.toml) |
+
+Rust is for the Tauri shell. `pnpm test` and `pnpm check:lean` use Node and pnpm only. On Linux the shell also needs the libraries named in the [README desktop section](README.md#desktop-app-tauri). The [dev container](.devcontainer/devcontainer.json) has Node, pnpm, Rust and those libraries, and runs `pnpm install` when it is created.
+
+```bash
+git clone https://github.com/Vihvila92/Easy-Race-Timer.git
+cd Easy-Race-Timer
+git fetch origin main
+corepack enable
+corepack prepare pnpm@10.33.4 --activate
+pnpm install --frozen-lockfile
+pnpm rebuild esbuild
+pnpm test
+pnpm check:lean
+```
+
+`nvm use` reads `.nvmrc` when you use nvm. `pnpm check:lean` diffs against `origin/main` (`LEAN_BASE_REF`). Fetch that ref first. On a fork, fetch upstream `main`.
+
+Run the developer server (port 8080, `./data`):
+
+```bash
+pnpm dev:server
+```
+
+Open the address on the `ERT_READY` line. `pnpm dev` starts the Vite UI with a proxy. The desktop shell and the dev key are in [README.md](README.md).
+
+Use your own branch, for example `feat/finish-undo` or `docs/install-guide`, and open the pull request from that branch. Commit messages and the pull request title follow [Conventional Commits](https://www.conventionalcommits.org/), for example `feat(core): add tie-break by chip time`.
+
+Fill in the [pull request template](.github/pull_request_template.md). Add one `Closes #n` line for each issue the pull request fixes, so GitHub closes it on merge. Use `Refs #n` for an issue that should stay open. Sign the [CLA](CLA.md) before merge by commenting on the pull request: `I have read the CLA Document and I hereby sign the CLA`.
+
+## Good first issues
+
+[`good first issue`](https://github.com/Vihvila92/Easy-Race-Timer/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) is a change sized for a first contribution. [`help wanted`](https://github.com/Vihvila92/Easy-Race-Timer/issues?q=is%3Aissue+is%3Aopen+label%3A%22help+wanted%22) means a maintainer would like help. Comment on the issue before you start.
 
 ## Language
 
@@ -10,7 +52,7 @@ Issues, pull requests, commit messages, code comments and technical documentatio
 
 1. Every change starts from an issue with acceptance criteria, a label and a milestone.
 2. Work on a branch of your own, for example `feat/finish-undo` or `docs/install-guide`. Nobody pushes to `main` directly.
-3. Open a pull request and fill in the pull request template. Add a `Closes #n` line for every issue the pull request fixes, so GitHub closes them on merge.
+3. Open a pull request and fill in the pull request template. Add a `Closes #n` line for every issue the pull request fixes, so GitHub closes them on merge. Use `Refs #n` for a related issue that should stay open.
 4. The pull request needs green required checks (`check` and CodeQL), a review and resolved conversations. A maintainer squash-merges it.
 5. Update the documentation in the same pull request as the change. Record architectural decisions as an ADR in [`docs/adr/`](docs/adr/).
 

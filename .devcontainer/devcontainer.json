@@ -1,0 +1,8 @@
+{
+  "name": "Easy Race Timer",
+  "build": {
+    "dockerfile": "Dockerfile"
+  },
+  "remoteUser": "dev",
+  "postCreateCommand": "pnpm install"
+}
