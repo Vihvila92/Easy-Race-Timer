@@ -43,9 +43,9 @@ export async function runScheduledBackup(
 }
 
 /**
- * Copy a backup pair, anonymise the copy when the retention deadline has passed, and close it.
- * The caller opens `destDatabase` only after this resolves. The backup file is not rewritten.
- * An incomplete pair is skipped. A failure while anonymising removes the copy.
+ * Copy a backup pair into a temp pair, anonymise that copy when the retention deadline has passed, and close it.
+ * The database and the key file replace the destination only after that. The caller opens the destination then.
+ * The backup file is not rewritten. An incomplete pair is skipped. A failure leaves the destination in place.
  */
 export async function restoreBackup(databaseBackup: string, destDatabase: string, dataKey: Buffer, now = Date.now()): Promise<boolean> {
   const key = Buffer.from(dataKey)

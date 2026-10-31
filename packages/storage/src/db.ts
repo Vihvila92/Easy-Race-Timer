@@ -558,29 +558,40 @@ export async function backupDatabase(db: AppDb, dest: string): Promise<void> {
   }
 }
 
+function removeSidecars(databasePath: string): void {
+  secureRemove(`${databasePath}-wal`)
+  secureRemove(`${databasePath}-shm`)
+}
+
 /**
- * Copy a complete backup pair over dest.
- * A database without its key file, or a key file that is not a whole stub or envelope, is skipped.
- * `beforeOpen` runs on the copy before this function returns. The caller opens dest only after that.
- * A throw from `beforeOpen` removes the copy so the unprepared file is not left behind.
+ * Restore a complete pair onto dest.
+ * The copy lands in a temp pair first. `beforeOpen` runs there, and only then are the
+ * database and the key file renamed into place. Stale dest `-wal` and `-shm` files are
+ * removed after that succeeds and before the rename. A throw leaves dest untouched.
+ * An incomplete source pair is skipped.
  */
 export async function restoreBackupPair(
   databaseBackup: string,
   destDatabase: string,
-  beforeOpen?: (destDatabase: string) => Promise<void> | void,
+  beforeOpen: (prepared: string) => Promise<void> | void,
 ): Promise<boolean> {
   if (!backupPairComplete(databaseBackup)) return false
-  writeBackupPair(databaseBackup, destDatabase)
-  if (!beforeOpen) return true
+  const directory = path.dirname(destDatabase)
+  const tempDatabase = path.join(directory, `.${path.basename(destDatabase)}.${process.pid}.${Date.now()}.restore`)
   try {
-    await beforeOpen(destDatabase)
+    writeBackupPair(databaseBackup, tempDatabase)
+    await beforeOpen(tempDatabase)
+    removeSidecars(tempDatabase)
   } catch (error) {
-    secureRemove(destDatabase)
-    secureRemove(keyFilePath(destDatabase))
-    secureRemove(`${destDatabase}-wal`)
-    secureRemove(`${destDatabase}-shm`)
+    secureRemove(tempDatabase)
+    secureRemove(keyFilePath(tempDatabase))
+    removeSidecars(tempDatabase)
     throw error
   }
+  removeSidecars(destDatabase)
+  fs.renameSync(tempDatabase, destDatabase)
+  fs.renameSync(keyFilePath(tempDatabase), keyFilePath(destDatabase))
+  fsyncDirectory(directory)
   return true
 }
 
@@ -607,10 +618,12 @@ export function assertBackupIntegrity(file: string, dataKey: Buffer): void {
 const SCHEMA_BACKUP = /\.sqlite\.v\d+\.bak$/
 const KEY_SCHEMA_BACKUP = /\.v\d+\.keys$/
 
+function pastRetention(day: string, retentionMonths: number, today: string): boolean {
+  return addMonths(day, retentionMonths) < today
+}
+
 function olderThanRetention(file: string, retentionMonths: number, today: string): boolean {
-  const stat = fs.statSync(file)
-  const mtime = new Date(stat.mtimeMs).toISOString().slice(0, 10)
-  return addMonths(mtime, retentionMonths) < today
+  return pastRetention(new Date(fs.statSync(file).mtimeMs).toISOString().slice(0, 10), retentionMonths, today)
 }
 
 /** Delete a database backup and the key sidecar copied with it. */
@@ -634,7 +647,7 @@ function removeOrphanKeyBackup(keyBackup: string, retentionMonths: number, today
 }
 
 /**
- * Newest `.sqlite` copies kept in full, plus one copy per UTC day inside the retention period.
+ * Newest complete `.sqlite` pairs kept in full, plus one complete pair per UTC day inside the retention period.
  * 48 is four hours of the five-minute backup schedule.
  */
 export const BACKUP_KEEP_RECENT = 48
@@ -647,37 +660,44 @@ function byNewest(a: { mtime: number; full: string }, b: { mtime: number; full: 
 
 /**
  * Delete backup files older than the retention period, then keep the newest
- * `BACKUP_KEEP_RECENT` `.sqlite` copies plus the newest copy of each other UTC day.
+ * `BACKUP_KEEP_RECENT` complete `.sqlite` pairs plus the newest complete pair of each other UTC day.
+ * An incomplete pair does not count and is not kept. The newest complete pair is never deleted.
  * Schema `.vN.bak` pairs are deleted only by age. Paired key files go with the database.
  */
 export function pruneBackups(directory: string, retentionMonths: number, now = Date.now()): string[] {
   if (!fs.existsSync(directory)) return []
   const today = new Date(now).toISOString().slice(0, 10)
   const removed: string[] = []
-  const retained: { full: string; mtime: number; day: string }[] = []
+  const found: { full: string; mtime: number; day: string; sqlite: boolean; complete: boolean }[] = []
   for (const name of fs.readdirSync(directory)) {
-    const databaseBackup = name.endsWith('.sqlite') || SCHEMA_BACKUP.test(name)
-    if (!databaseBackup) continue
+    if (!name.endsWith('.sqlite') && !SCHEMA_BACKUP.test(name)) continue
     const full = path.join(directory, name)
-    if (olderThanRetention(full, retentionMonths, today)) {
-      removeBackupPair(full, removed)
-      continue
-    }
-    if (!name.endsWith('.sqlite')) continue
     const mtime = fs.statSync(full).mtimeMs
-    retained.push({ full, mtime, day: new Date(mtime).toISOString().slice(0, 10) })
+    found.push({
+      full,
+      mtime,
+      day: new Date(mtime).toISOString().slice(0, 10),
+      sqlite: name.endsWith('.sqlite'),
+      complete: backupPairComplete(full),
+    })
   }
-  retained.sort(byNewest)
+  const complete = found.filter((item) => item.complete).sort(byNewest)
+  const newestComplete = complete[0]?.full
+  const candidates = complete.filter((item) => item.sqlite && !pastRetention(item.day, retentionMonths, today))
   const keep = new Set<string>()
-  for (const item of retained.slice(0, BACKUP_KEEP_RECENT)) keep.add(item.full)
+  if (newestComplete) keep.add(newestComplete)
+  for (const item of candidates.slice(0, BACKUP_KEEP_RECENT)) keep.add(item.full)
   const days = new Set<string>()
-  for (const item of retained) {
+  for (const item of candidates) {
     if (days.has(item.day)) continue
     days.add(item.day)
     keep.add(item.full)
   }
-  for (const item of retained) {
-    if (!keep.has(item.full)) removeBackupPair(item.full, removed)
+  for (const item of found) {
+    if (keep.has(item.full)) continue
+    const expired = pastRetention(item.day, retentionMonths, today)
+    const rotated = item.sqlite && item.complete && !expired
+    if (expired || rotated) removeBackupPair(item.full, removed)
   }
   for (const name of fs.readdirSync(directory)) {
     if (!name.endsWith('.keys') && !KEY_SCHEMA_BACKUP.test(name)) continue

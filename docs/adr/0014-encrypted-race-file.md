@@ -76,11 +76,11 @@ Pre-migration backups are deleted once they are older than the event retention p
 
 Scheduled backups and USB copies use the same order. A stamped backup `ert-<stamp>-<reason>.sqlite` pairs with `ert-<stamp>-<reason>.keys`. Backups do not use the SQLite backup API, which would write plaintext. A crash during an ordinary save leaves the last committed transaction. Uncommitted work is discarded.
 
-Rotation keeps the newest 48 `.sqlite` backups (`BACKUP_KEEP_RECENT`, four hours at the five-minute interval) and the newest backup of each other UTC day that is still inside the event retention period. Anything older than that period is deleted with its key file. Pre-migration `.vN.bak` pairs stay on the age rule above and are not part of this rotation.
+Rotation keeps the newest 48 complete `.sqlite` pairs (`BACKUP_KEEP_RECENT`, four hours at the five-minute interval) and the newest complete pair of each other UTC day that is still inside the event retention period. An incomplete pair does not count. The newest complete pair is never deleted. Anything else older than that period is deleted with its key file. Pre-migration `.vN.bak` pairs stay on the age rule above and are not part of this rotation.
 
 The backup directory is created mode `0700` on macOS and Linux, including when an existing directory we own is `0755`. Windows ignores that mode. The equivalent is `icacls <dir> /inheritance:r /grant:r "<user>:(OI)(CI)F"`.
 
-`restoreBackup` copies the pair through `restoreBackupPair`, runs retention anonymisation on that copy, checkpoints, and closes it. The caller opens the copy only after that returns. People without long-term consent are anonymised when the retention deadline has passed, including when a race was not locked. The backup file is not rewritten. A failed migration leaves the original file and the `.vN.bak` at the previous schema version. The previous app version opens that backup with the same key, without migrating it, and `PRAGMA integrity_check` passes.
+`restoreBackup` copies the pair to a temp pair through `restoreBackupPair`, runs retention anonymisation there, checkpoints, and closes it. Stale `-wal` and `-shm` files beside the destination are removed, then the database and the key file are renamed into place. The caller opens the destination only after that returns. If anonymisation throws, the destination is left unchanged. People without long-term consent are anonymised when the retention deadline has passed, including when a race was not locked. The backup file is not rewritten. A failed migration leaves the original file and the `.vN.bak` at the previous schema version. The previous app version opens that backup with the same key, without migrating it, and `PRAGMA integrity_check` passes.
 
 ### Schema 4
 
@@ -101,7 +101,7 @@ Do not rekey to the dev key unless the same dev-key opt-in applies. Production r
 ## Consequences
 
 - A copy of the file on a USB stick is ciphertext. Plain `sqlite3` cannot open it.
-- Backups rotate to the newest 48 plus one per UTC day inside the retention period. The backup directory is mode 0700. A restore anonymises the copy before it is opened when the retention deadline has passed. The backup file stays readable by the previous version.
+- Backups rotate to the newest 48 complete pairs plus one complete pair per UTC day inside the retention period. The newest complete pair is never deleted. The backup directory is mode 0700. A restore anonymises a temporary copy, then renames it into place. The backup file stays readable by the previous version.
 - Tests assert the pinned cipher settings after open, and they assert that a known name and email are absent from the raw bytes.
 - Power loss is tested by `SIGKILL` during migration, during an uncommitted save, and after each step of plaintext encryption.
 - `file_id` stays the same across rekey. Restart after a rekey still depends on the caller holding the new key, or on the key-file slot once #131 writes it. The stub does not unwrap a new key by itself.
