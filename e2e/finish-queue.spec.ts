@@ -4,41 +4,22 @@ import { expect, test } from './fixtures.ts'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { authorize, killServer, startServer, type RunningServer } from './server.ts'
+import { authorize, killServer, seedMassStart, startServer, type RunningServer } from './server.ts'
 
-test.describe('finish queue', () => {
-  let server: RunningServer
+let server: RunningServer
 
-  test.beforeAll(async () => {
-    server = await startServer(8099, path.join(mkdtempSync(path.join(tmpdir(), 'ert-queue-')), 'ert.sqlite'))
-  })
+test.beforeAll(async () => {
+  server = await startServer(8099, path.join(mkdtempSync(path.join(tmpdir(), 'ert-queue-')), 'ert.sqlite'))
+})
 
-  test.afterAll(async () => {
-    if (server) await killServer(server)
-  })
+test.afterAll(async () => {
+  if (server) await killServer(server)
+})
 
-  test('keeps a tap made offline and syncs the client timestamp', async ({ page, context, request }) => {
-    await authorize(request)
-    expect((await request.post('/api/v1/events/import', {
-      data: {
-        id: 'EV_QUEUE',
-        name: 'Jono',
-        date: '2027-06-12',
-        timezone: 'Europe/Helsinki',
-        sport: 'run',
-        races: [{ id: 'R1', name: { fi: '1 km', en: '1 km' }, distance_m: 1000, start_mode: 'mass' }],
-        categories: [{ id: 'M', race_id: 'R1', name: { fi: 'M', en: 'M' }, gender: 'M', min_age: 0 }],
-      },
-    })).ok()).toBeTruthy()
-    expect((await request.post('/api/v1/entries/late', {
-      data: { firstName: 'Aino', lastName: 'Testi', gender: 'M', birthDate: '1990-01-01', raceId: 'R1', bib: 105, consent: false },
-    })).ok()).toBeTruthy()
-    expect((await request.post('/api/v1/entries/late', {
-      data: { firstName: 'Toinen', lastName: 'Testi', gender: 'M', birthDate: '1990-01-01', raceId: 'R1', bib: 106, consent: false },
-    })).ok()).toBeTruthy()
-    expect((await request.post('/api/v1/races/R1/start', { data: { timeMs: Date.now() - 60_000 } })).ok()).toBeTruthy()
+test('keeps a tap made offline and syncs the client timestamp', async ({ page, context, request }) => {
+  await seedMassStart(request, { id: 'EV_QUEUE', name: 'Jono', bibs: [105, 106], startAgoMs: 60_000 })
 
-    await page.goto('/')
+  await page.goto('/')
     await page.getByTestId('nav-finish').click()
     const stamped = await page.evaluate(() => Date.now())
     await context.setOffline(true)
@@ -116,7 +97,6 @@ test.describe('finish queue', () => {
     expect(saved[0]!.device_time_ms - saved[0]!.time_ms).toBeGreaterThan(80_000)
     expect(saved[0]!.device_time_ms - saved[0]!.time_ms).toBeLessThan(100_000)
   })
-})
 
 async function readQueue(page: Page) {
   return page.evaluate(async () => {
