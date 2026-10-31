@@ -64,7 +64,7 @@ jobs:
           node-version: "22.23.3"
           cache: ${{ github.ref_type != 'tag' && 'pnpm' || '' }}
           package-manager-cache: ${{ github.ref_type != 'tag' && 'true' || 'false' }}
-      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master @ 2026-10-09
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master @ 2026-10-09
         with:
           toolchain: "1.90.0"
       - name: Add macOS universal targets
@@ -171,7 +171,7 @@ jobs:
         with:
           node-version: "22.23.3"
           package-manager-cache: false
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: installers-${{ matrix.platform }}
           path: dist
@@ -195,7 +195,7 @@ jobs:
           node-version: "22.23.3"
           cache: ${{ github.ref_type != 'tag' && 'pnpm' || '' }}
           package-manager-cache: ${{ github.ref_type != 'tag' && 'true' || 'false' }}
-      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master @ 2026-10-09
+      - uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8 # master @ 2026-10-09
         with:
           toolchain: "1.90.0"
       - name: Install JavaScript dependencies
@@ -262,7 +262,7 @@ jobs:
       - name: Install the official Tauri CLI
         working-directory: tools/tauri-signer
         run: npm ci --ignore-scripts --no-audit --no-fund
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: installers-*
           path: unsigned
@@ -322,7 +322,7 @@ jobs:
         run: |
           pnpm install --frozen-lockfile --ignore-scripts
           pnpm rebuild esbuild
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: "*"
           path: release
@@ -362,7 +362,7 @@ jobs:
         with:
           node-version: "22.23.3"
           package-manager-cache: false
-      - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-assets
           path: release
