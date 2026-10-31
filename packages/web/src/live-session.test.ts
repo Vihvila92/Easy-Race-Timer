@@ -7,6 +7,7 @@ import {
   RECONNECT_MAX_MS,
   reconnectDelayMs,
   SESSION_EXPIRED_CLOSE,
+  STABLE_OPEN_MS,
   type LiveConnection,
   type LiveSocket,
 } from './live-session.js'
@@ -50,9 +51,8 @@ class FakeSocket implements LiveSocket {
 
 function harness(random: () => number = () => 1) {
   const opened: FakeSocket[] = []
-  const delays: number[] = []
-  const pending: (() => void)[] = []
-  const wakes: (() => void)[] = []
+  const timers: { delay: number; active: boolean; run: () => void }[] = []
+  const wakes: { kind: 'online' | 'offline' | 'visible'; fire: () => void }[] = []
   const statuses: LiveConnection[] = []
   const state = { pinGate: false, resyncs: 0 }
   const session = new LiveSession({
@@ -72,27 +72,41 @@ function harness(random: () => number = () => 1) {
     },
     random,
     schedule: (callback, delayMs) => {
-      delays.push(delayMs)
-      let active = true
-      const run = () => {
-        if (!active) return
-        active = false
-        callback()
+      const timer = {
+        delay: delayMs,
+        active: true,
+        run: () => {
+          if (!timer.active) return
+          timer.active = false
+          callback()
+        },
       }
-      pending.push(run)
+      timers.push(timer)
       return () => {
-        active = false
+        timer.active = false
       }
     },
-    subscribe: (_kind, listener) => {
-      wakes.push(listener)
+    subscribe: (kind, listener) => {
+      const wake = { kind, fire: listener }
+      wakes.push(wake)
       return () => {
-        const index = wakes.indexOf(listener)
+        const index = wakes.indexOf(wake)
         if (index >= 0) wakes.splice(index, 1)
       }
     },
   })
-  return { session, opened, delays, pending, wakes, statuses, state }
+  const retryDelays = () => timers.map((timer) => timer.delay).filter((delay) => delay !== STABLE_OPEN_MS)
+  const run = (delay: number) => {
+    const timer = timers.find((item) => item.delay === delay && item.active)
+    if (!timer) throw new Error(`no active timer for ${delay}`)
+    timer.run()
+  }
+  const fire = (kind: 'online' | 'offline' | 'visible') => {
+    const wake = wakes.find((item) => item.kind === kind)
+    if (!wake) throw new Error(`no ${kind} listener`)
+    wake.fire()
+  }
+  return { session, opened, timers, retryDelays, run, fire, statuses, state }
 }
 
 describe('reconnect delay', () => {
@@ -133,9 +147,9 @@ describe('refresh messages', () => {
   })
 })
 
-describe('live session', () => {
+describe('live session pin gate', () => {
   it('shows the PIN gate on close 4401 and does not reconnect until a new PIN login', () => {
-    const { session, opened, delays, pending, wakes, state } = harness()
+    const { session, opened, timers, fire, state } = harness()
 
     session.start()
     session.start()
@@ -145,22 +159,27 @@ describe('live session', () => {
     opened[0]?.emit(SESSION_EXPIRED_CLOSE)
     expect(state.pinGate).toBe(true)
     expect(opened).toHaveLength(1)
-    expect(delays).toEqual([])
+    expect(timers).toEqual([])
 
     session.start()
     session.start()
-    for (const wake of wakes) wake()
-    for (const run of pending) run()
+    fire('online')
+    fire('offline')
+    fire('visible')
+    for (const timer of timers) timer.run()
     expect(opened).toHaveLength(1)
-    expect(delays).toEqual([])
+    expect(timers).toEqual([])
 
     session.resume()
     expect(opened).toHaveLength(2)
     expect(state.pinGate).toBe(true)
   })
 
+})
+
+describe('live session retry', () => {
   it('retries a dropped socket with backoff and stops when asked', () => {
-    const { session, opened, delays, pending, statuses, state } = harness()
+    const { session, opened, retryDelays, run, timers, statuses, state } = harness()
 
     session.start()
     opened[0]?.open()
@@ -170,19 +189,19 @@ describe('live session', () => {
     opened[0]?.emit(1006)
     expect(state.pinGate).toBe(false)
     expect(statuses.at(-1)).toBe('reconnecting')
-    expect(delays).toEqual([500])
+    expect(retryDelays()).toEqual([500])
     expect(opened).toHaveLength(1)
 
-    pending[0]?.()
+    run(500)
     expect(opened).toHaveLength(2)
     opened[1]?.emit(1001)
-    pending[1]?.()
+    run(1_000)
     opened[2]?.emit(1006)
-    expect(delays).toEqual([500, 1_000, 2_000])
+    expect(retryDelays()).toEqual([500, 1_000, 2_000])
 
     session.stop()
     expect(state.pinGate).toBe(false)
-    pending[2]?.()
+    for (const timer of timers) timer.run()
     session.start()
     expect(opened).toHaveLength(3)
 
@@ -190,30 +209,75 @@ describe('live session', () => {
     expect(opened).toHaveLength(4)
   })
 
+})
+
+describe('live session unlimited retries', () => {
   it('keeps retrying without a cap', () => {
-    const { session, opened, delays, pending } = harness()
+    const { session, opened, retryDelays, run } = harness()
     session.start()
     for (let attempt = 0; attempt < 8; attempt += 1) {
       opened.at(-1)?.emit(1006)
-      pending.at(-1)?.()
+      run(retryDelays().at(-1) ?? 0)
     }
-    expect(delays).toEqual([500, 1_000, 2_000, 4_000, 8_000, 10_000, 10_000, 10_000])
+    expect(retryDelays()).toEqual([500, 1_000, 2_000, 4_000, 8_000, 10_000, 10_000, 10_000])
     expect(opened.length).toBeGreaterThan(8)
   })
 
-  it('reconnects immediately on online and when the page is visible again', () => {
-    const { session, opened, delays, pending, wakes, statuses, state } = harness()
+})
+
+describe('live session backoff reset', () => {
+  it('does not reset backoff when the socket opens and closes immediately', () => {
+    const { session, opened, retryDelays, run } = harness()
     session.start()
     opened[0]?.open()
     opened[0]?.emit(1006)
-    expect(delays).toEqual([500])
+    run(500)
+    opened[1]?.open()
+    opened[1]?.emit(1006)
+    run(1_000)
+    opened[2]?.open()
+    opened[2]?.emit(1006)
+    expect(retryDelays()).toEqual([500, 1_000, 2_000])
+  })
 
-    const online = wakes[0]
-    const visible = wakes[1]
-    expect(online).toBeTypeOf('function')
-    online?.()
+})
+
+describe('live session stable connection', () => {
+  it('resets backoff after the socket stays open or the first message arrives', () => {
+    const stable = harness()
+    stable.session.start()
+    stable.opened[0]?.open()
+    stable.opened[0]?.emit(1006)
+    stable.run(500)
+    stable.opened[1]?.open()
+    stable.run(STABLE_OPEN_MS)
+    stable.opened[1]?.emit(1006)
+    expect(stable.retryDelays()).toEqual([500, 500])
+
+    const messaged = harness()
+    messaged.session.start()
+    messaged.opened[0]?.open()
+    messaged.opened[0]?.emit(1006)
+    messaged.run(500)
+    messaged.opened[1]?.open()
+    messaged.opened[1]?.message('{"type":"device.status","payload":{"proto":1}}')
+    messaged.opened[1]?.emit(1006)
+    expect(messaged.retryDelays()).toEqual([500, 500])
+  })
+
+})
+
+describe('live session wake', () => {
+  it('reconnects immediately on online and when the page is visible again', () => {
+    const { session, opened, retryDelays, run, fire, statuses, state } = harness()
+    session.start()
+    opened[0]?.open()
+    opened[0]?.emit(1006)
+    expect(retryDelays()).toEqual([500])
+
+    fire('online')
     expect(opened).toHaveLength(2)
-    pending[0]?.()
+    expect(() => run(500)).toThrow(/no active timer/)
     expect(opened).toHaveLength(2)
 
     opened[1]?.open()
@@ -221,11 +285,45 @@ describe('live session', () => {
     expect(statuses.at(-1)).toBe('connected')
 
     const before = state.resyncs
-    visible?.()
+    fire('visible')
     expect(opened).toHaveLength(2)
     expect(state.resyncs).toBe(before + 1)
   })
 
+})
+
+describe('live session offline', () => {
+  it('shows the notice on offline and clears it when the open socket is usable again', () => {
+    const { session, opened, fire, statuses, state } = harness()
+    session.start()
+    opened[0]?.open()
+    expect(statuses).toEqual(['connected'])
+
+    fire('offline')
+    expect(statuses.at(-1)).toBe('reconnecting')
+    expect(opened).toHaveLength(1)
+
+    fire('visible')
+    expect(statuses.at(-1)).toBe('reconnecting')
+    expect(state.resyncs).toBe(1)
+
+    fire('online')
+    expect(statuses.at(-1)).toBe('connected')
+    expect(opened).toHaveLength(1)
+    expect(state.resyncs).toBe(2)
+
+    fire('offline')
+    opened[0]?.emit(1006)
+    fire('online')
+    expect(opened).toHaveLength(2)
+    expect(statuses.at(-1)).toBe('reconnecting')
+    opened[1]?.open()
+    expect(statuses.at(-1)).toBe('connected')
+  })
+
+})
+
+describe('live session messages', () => {
   it('reloads on a refresh notification and not on the hello frame', () => {
     const { session, opened, state } = harness()
     session.start()
@@ -239,13 +337,16 @@ describe('live session', () => {
     expect(state.resyncs).toBe(2)
   })
 
+})
+
+describe('live session resync', () => {
   it('does not resync the first open, only a later one', () => {
-    const { session, opened, pending, state } = harness()
+    const { session, opened, run, state } = harness()
     session.start()
     opened[0]?.open()
     expect(state.resyncs).toBe(0)
     opened[0]?.emit(1006)
-    pending[0]?.()
+    run(500)
     opened[1]?.open()
     expect(state.resyncs).toBe(1)
   })

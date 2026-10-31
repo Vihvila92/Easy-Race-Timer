@@ -50,6 +50,49 @@ export async function startServer(port: number, dbFile: string): Promise<Running
   throw new Error(`server did not start\n${log}`)
 }
 
+/**
+ * One mass-start race with late entries. Shared by the finish-queue and reconnect specs.
+ * Returns the recorded start time.
+ */
+export async function seedMassStart(request: APIRequestContext, options: {
+  id: string
+  name: string
+  bibs: number[]
+  startAgoMs: number
+}): Promise<number> {
+  await authorize(request)
+  const imported = await request.post('/api/v1/events/import', {
+    data: {
+      id: options.id,
+      name: options.name,
+      date: '2027-06-12',
+      timezone: 'Europe/Helsinki',
+      sport: 'run',
+      races: [{ id: 'R1', name: { fi: '1 km', en: '1 km' }, distance_m: 1000, start_mode: 'mass' }],
+      categories: [{ id: 'M', race_id: 'R1', name: { fi: 'M', en: 'M' }, gender: 'M', min_age: 0 }],
+    },
+  })
+  if (!imported.ok()) throw new Error(`import failed ${imported.status()} ${await imported.text()}`)
+  for (const [index, bib] of options.bibs.entries()) {
+    const entry = await request.post('/api/v1/entries/late', {
+      data: {
+        firstName: index === 0 ? 'Aino' : 'Toinen',
+        lastName: 'Testi',
+        gender: 'M',
+        birthDate: '1990-01-01',
+        raceId: 'R1',
+        bib,
+        consent: false,
+      },
+    })
+    if (!entry.ok()) throw new Error(`entry failed ${entry.status()} ${await entry.text()}`)
+  }
+  const startMs = Date.now() - options.startAgoMs
+  const started = await request.post('/api/v1/races/R1/start', { data: { timeMs: startMs } })
+  if (!started.ok()) throw new Error(`start failed ${started.status()} ${await started.text()}`)
+  return startMs
+}
+
 /** Store the device-token cookie on this API client. A PIN is required once one is set. */
 export async function authorize(request: APIRequestContext, pin?: string): Promise<void> {
   const response = await request.post('/api/v1/settings/pin/check', { data: pin ? { pin } : {} })

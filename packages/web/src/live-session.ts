@@ -9,6 +9,9 @@ export const RECONNECT_BASE_MS = 500
 /** Longest reconnect wait. Jitter never exceeds it. */
 export const RECONNECT_MAX_MS = 10_000
 
+/** How long a socket must stay open before the backoff counter returns to zero. */
+export const STABLE_OPEN_MS = 5_000
+
 const REFRESH_TYPES = new Set(['timing_event.created', 'correction.created', 'results.updated'])
 
 export type LiveConnection = 'connected' | 'reconnecting'
@@ -26,14 +29,14 @@ export interface LiveSessionOptions {
   onExpired: () => void
   /** Reload the workspace. Called after a reconnect and on a refresh notification. */
   onResync?: () => void
-  /** `reconnecting` after a non-4401 close, `connected` when the next socket opens. */
+  /** `reconnecting` while the socket is down or the browser is offline. `connected` when it is usable again. */
   onStatus?: (status: LiveConnection) => void
   /** Returns a delay in `[0, 1]`. Values outside that range are clamped. */
   random?: () => number
-  /** Arm a retry. The returned function cancels it. */
+  /** Arm a timer. The returned function cancels it. */
   schedule?: (callback: () => void, delayMs: number) => () => void
-  /** `online` fires on the browser online event. `visible` fires when the page is shown again. */
-  subscribe?: (kind: 'online' | 'visible', listener: () => void) => () => void
+  /** `online` and `offline` follow the browser network events. `visible` fires when the page is shown again. */
+  subscribe?: (kind: 'online' | 'offline' | 'visible', listener: () => void) => () => void
 }
 
 /**
@@ -69,11 +72,11 @@ function defaultSchedule(callback: () => void, delayMs: number): () => void {
   return () => clearTimeout(id)
 }
 
-function defaultSubscribe(kind: 'online' | 'visible', listener: () => void): () => void {
-  if (kind === 'online') {
+function defaultSubscribe(kind: 'online' | 'offline' | 'visible', listener: () => void): () => void {
+  if (kind === 'online' || kind === 'offline') {
     if (typeof window === 'undefined') return () => undefined
-    window.addEventListener('online', listener)
-    return () => window.removeEventListener('online', listener)
+    window.addEventListener(kind, listener)
+    return () => window.removeEventListener(kind, listener)
   }
   if (typeof document === 'undefined') return () => undefined
   const onVisibility = () => {
@@ -94,12 +97,14 @@ export class LiveSession {
   private held = false
   private stopping = false
   private attempt = 0
-  private cancelTimer: (() => void) | null = null
+  private cancelRetry: (() => void) | null = null
+  private cancelStable: (() => void) | null = null
   private unsubOnline: (() => void) | null = null
+  private unsubOffline: (() => void) | null = null
   private unsubVisible: (() => void) | null = null
   private readonly random: () => number
   private readonly schedule: (callback: () => void, delayMs: number) => () => void
-  private readonly subscribe: (kind: 'online' | 'visible', listener: () => void) => () => void
+  private readonly subscribe: (kind: 'online' | 'offline' | 'visible', listener: () => void) => () => void
 
   constructor(private readonly options: LiveSessionOptions) {
     this.random = options.random ?? Math.random
@@ -109,7 +114,7 @@ export class LiveSession {
 
   /** Opens one socket. A second call, a call during backoff, or a call after 4401, does nothing. */
   start(): void {
-    if (this.socket || this.held || this.stopping || this.cancelTimer) return
+    if (this.socket || this.held || this.stopping || this.cancelRetry) return
     this.listen()
     this.openSocket()
   }
@@ -119,7 +124,8 @@ export class LiveSession {
     this.held = false
     this.stopping = false
     this.attempt = 0
-    this.clearTimer()
+    this.clearRetry()
+    this.clearStable()
     this.listen()
     this.openSocket()
   }
@@ -127,7 +133,8 @@ export class LiveSession {
   /** Drop the socket without treating the close as expiry or as a reason to retry. */
   stop(): void {
     this.stopping = true
-    this.clearTimer()
+    this.clearRetry()
+    this.clearStable()
     this.unlisten()
     const socket = this.socket
     this.socket = null
@@ -136,25 +143,38 @@ export class LiveSession {
 
   private listen(): void {
     if (this.unsubOnline) return
-    this.unsubOnline = this.subscribe('online', () => this.wake())
-    this.unsubVisible = this.subscribe('visible', () => this.wake())
+    this.unsubOnline = this.subscribe('online', () => this.wake('online'))
+    this.unsubOffline = this.subscribe('offline', () => this.noteOffline())
+    this.unsubVisible = this.subscribe('visible', () => this.wake('visible'))
   }
 
   private unlisten(): void {
     this.unsubOnline?.()
+    this.unsubOffline?.()
     this.unsubVisible?.()
     this.unsubOnline = null
+    this.unsubOffline = null
     this.unsubVisible = null
   }
 
-  /** Skip the backoff wait. An open socket is refreshed instead of replaced. */
-  private wake(): void {
+  /** The socket can stay open after the browser reports offline, so the notice cannot wait for close. */
+  private noteOffline(): void {
+    if (this.held || this.stopping) return
+    this.options.onStatus?.('reconnecting')
+  }
+
+  /**
+   * Skip the backoff wait. An open socket is refreshed instead of replaced.
+   * Coming back online clears the notice when that socket is still open.
+   */
+  private wake(source: 'online' | 'visible'): void {
     if (this.held || this.stopping) return
     if (this.socket) {
       this.options.onResync?.()
+      if (source === 'online') this.options.onStatus?.('connected')
       return
     }
-    this.clearTimer()
+    this.clearRetry()
     this.openSocket()
   }
 
@@ -165,21 +185,23 @@ export class LiveSession {
     socket.onOpen(() => {
       if (this.socket !== socket || this.stopping) return
       const reconnecting = this.attempt > 0
-      this.attempt = 0
       this.options.onStatus?.('connected')
       if (reconnecting) this.options.onResync?.()
+      this.armStable(socket)
     })
     socket.onMessage((data) => {
       if (this.socket !== socket || this.stopping || this.held) return
+      this.settleAttempt(socket)
       if (isRefreshMessage(data)) this.options.onResync?.()
     })
     socket.onClose((code) => {
       if (this.socket !== socket) return
       this.socket = null
+      this.clearStable()
       if (this.stopping) return
       if (code === SESSION_EXPIRED_CLOSE) {
         this.held = true
-        this.clearTimer()
+        this.clearRetry()
         this.options.onExpired()
         return
       }
@@ -188,19 +210,39 @@ export class LiveSession {
     })
   }
 
+  /** A handshake alone is not a stable connection. Wait for traffic or for the socket to stay open. */
+  private armStable(socket: LiveSocket): void {
+    this.clearStable()
+    this.cancelStable = this.schedule(() => {
+      this.cancelStable = null
+      this.settleAttempt(socket)
+    }, STABLE_OPEN_MS)
+  }
+
+  private settleAttempt(socket: LiveSocket): void {
+    if (this.socket !== socket) return
+    this.attempt = 0
+    this.clearStable()
+  }
+
   private armRetry(): void {
-    this.clearTimer()
+    this.clearRetry()
     const delay = reconnectDelayMs(this.attempt, this.random)
     this.attempt += 1
-    this.cancelTimer = this.schedule(() => {
-      this.cancelTimer = null
+    this.cancelRetry = this.schedule(() => {
+      this.cancelRetry = null
       this.openSocket()
     }, delay)
   }
 
-  private clearTimer(): void {
-    this.cancelTimer?.()
-    this.cancelTimer = null
+  private clearRetry(): void {
+    this.cancelRetry?.()
+    this.cancelRetry = null
+  }
+
+  private clearStable(): void {
+    this.cancelStable?.()
+    this.cancelStable = null
   }
 }
 
