@@ -18,7 +18,7 @@ export const SQLITE_PLAINTEXT_HEADER = Buffer.from('SQLite format 3\0')
  * `plaintext_header_size = 0` keeps the SQLCipher salt at offset 0. There is no custom file header.
  * SQLCipher 4 already stores a random 16-byte IV per page and an HMAC-SHA512 over the page. Those are not changed.
  */
-export const CIPHER_STATEMENTS = [
+const CIPHER_STATEMENTS = [
   "cipher = 'sqlcipher'",
   'legacy = 4',
   'legacy_page_size = 4096',
@@ -74,7 +74,7 @@ export function unlock(raw: SqliteDatabase, dataKey: Buffer): void {
 }
 
 /** Unlock, then the runtime pragmas for a database this process will write. */
-export function applyCipher(raw: SqliteDatabase, dataKey: Buffer): void {
+function applyCipher(raw: SqliteDatabase, dataKey: Buffer): void {
   unlock(raw, dataKey)
   raw.pragma('secure_delete = ON')
   raw.pragma('temp_store = MEMORY')

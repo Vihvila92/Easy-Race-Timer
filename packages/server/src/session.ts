@@ -2,7 +2,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import type { AppDb } from '@ert/storage'
 
-export const SESSION_COOKIE = 'ert_session'
+const SESSION_COOKIE = 'ert_session'
 export const SESSION_TTL_SECONDS = 12 * 60 * 60
 
 export function sessionSecret(db: AppDb): string {

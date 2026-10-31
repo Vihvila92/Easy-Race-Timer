@@ -15,8 +15,14 @@ concurrency:
 jobs:
   check:
     runs-on: ubuntu-latest
+    env:
+      LEAN_BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'origin/main' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Fetch the base branch
+        run: git fetch --no-tags origin ${{ github.base_ref || 'main' }}
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: 10.33.4
@@ -26,15 +32,33 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm rebuild esbuild
-      - run: pnpm lint
+      - run: pnpm check:lean
       - run: pnpm depcruise
       - run: pnpm check:i18n
       - run: pnpm check:licenses
       - run: pnpm check:spdx
       - run: pnpm typecheck
+      - name: Install Linux libraries for Clippy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev libssl-dev libayatana-appindicator3-dev librsvg2-dev patchelf libfuse2
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # master @ 2026-10-09
+        with:
+          toolchain: "1.90.0"
+          components: clippy
+      - name: Clippy
+        working-directory: src-tauri
+        run: |
+          # The real sidecar is built by the release workflow, not by check.
+          # Tauri's build script only needs this path to exist.
+          triple="$(rustc -vV | sed -n 's/^host: //p')"
+          mkdir -p binaries
+          : > "binaries/ert-server-${triple}"
+          cargo clippy --all-targets --locked -- -D warnings
       - run: pnpm test
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm e2e
+      - run: pnpm report:weight
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

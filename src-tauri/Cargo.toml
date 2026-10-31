@@ -23,6 +23,10 @@ tauri-plugin-single-instance = "2"
 tokio = { version = "1", features = ["sync", "time"] }
 url = "2"
 
+[lints.clippy]
+# Allow by default in clippy. -D warnings in CI turns this into an error.
+cognitive_complexity = "warn"
+
 [profile.release]
 codegen-units = 1
 lto = true

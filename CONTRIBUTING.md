@@ -23,7 +23,7 @@ Commit messages and pull request titles follow [Conventional Commits](https://ww
 ```bash
 pnpm install
 pnpm rebuild esbuild
-pnpm lint
+pnpm check:lean
 pnpm depcruise
 pnpm check:i18n
 pnpm check:licenses
@@ -35,7 +35,24 @@ pnpm e2e
 
 Module boundaries are enforced by dependency-cruiser. `core` and `i18n` do not import other workspace packages. The web app does not import the server or SQLite.
 
-See [Strings and guided-mode hints](#strings-and-guided-mode-hints).
+See [Keep code lean](#keep-code-lean) and [Strings and guided-mode hints](#strings-and-guided-mode-hints).
+
+## Keep code lean
+
+No dead code and no duplicated code. Reuse a shared module. Shared UI goes through the design-system components and tokens in [`packages/web/src/ui`](packages/web/src/ui) and [`packages/web/src/styles.css`](packages/web/src/styles.css).
+
+`pnpm check:lean` runs four checks:
+
+- ESLint. `complexity` ≤ 10, `max-lines-per-function` ≤ 60, `max-lines` ≤ 400, `max-depth` ≤ 3 and `max-params` ≤ 4 are warnings for code that already exceeds them. In a file you add or change, those same rules are errors. Leave the code you touch at or under the limits.
+- knip, for unused files, exports and dependencies. A false positive is an entry in [`knip.ts`](knip.ts) with a reason comment.
+- jscpd, for TypeScript, JavaScript, TSX, CSS, Svelte and Rust. It fails when more than 3% of the scanned code is duplication, or when a clone of 50 tokens or more is not listed in [`scripts/duplication-allowlist.ts`](scripts/duplication-allowlist.ts). The comment above each allowlist group is the reason those clones stay. Prefer extracting a shared module to adding an entry.
+- The complexity ratchet described above.
+
+Refactor on touch. When you change a file, remove the dead code and the duplication you are already in. At the end of every phase, open a refactoring and cleanup issue for the warnings and allowlisted clones that are still open.
+
+`cargo clippy --all-targets --locked -- -D warnings` in `src-tauri` includes `clippy::cognitive_complexity` at clippy's default threshold of 25. Tauri's build script expects `src-tauri/binaries/ert-server-<host-triple>` to exist. The check job does not build the real sidecar. It creates an empty file at that path so Clippy can type-check the shell. Do the same locally when the sidecar has not been built.
+
+`pnpm report:weight` prints the frontend bundle size and, when `src-tauri/target/release/bundle` contains packages, the installer size. It also flags runtime dependencies that the base branch does not have. The check job appends that report to the GitHub step summary. Installer packages themselves are built by the release workflow.
 
 ## Strings and guided-mode hints
 

@@ -11,8 +11,8 @@ export function parseIsoDate(iso: string): { year: number; month: number; day: n
   return { year, month, day }
 }
 
-/** Display time, floored to whole seconds. Under an hour: M:SS. */
-export function formatDuration(ms: number): string {
+/** Whole seconds, floored. Under an hour the clock is M:SS. The sign is not included. */
+function durationClock(ms: number): { negative: boolean; clock: string } {
   const negative = ms < 0
   const total = Math.floor(Math.abs(ms) / 1000)
   const hours = Math.floor(total / 3600)
@@ -21,19 +21,19 @@ export function formatDuration(ms: number): string {
   const clock = hours > 0
     ? `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
     : `${minutes}:${String(seconds).padStart(2, '0')}`
+  return { negative, clock }
+}
+
+/** Display time, floored to whole seconds. Under an hour: M:SS. */
+export function formatDuration(ms: number): string {
+  const { negative, clock } = durationClock(ms)
   return negative ? `-${clock}` : clock
 }
 
 /** Offset note uses a unicode minus, matching the Kuulan hölkkä oracle. */
 export function formatOffsetNote(offsetMs: number): string {
-  const sign = offsetMs < 0 ? '−' : '+'
-  const total = Math.floor(Math.abs(offsetMs) / 1000)
-  const hours = Math.floor(total / 3600)
-  const minutes = Math.floor((total % 3600) / 60)
-  const seconds = total % 60
-  const clock = hours > 0
-    ? `${hours}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`
-    : `${minutes}:${String(seconds).padStart(2, '0')}`
+  const { negative, clock } = durationClock(offsetMs)
+  const sign = negative ? '−' : '+'
   return `Siirretty lähtö ${sign}${clock}`
 }
 
