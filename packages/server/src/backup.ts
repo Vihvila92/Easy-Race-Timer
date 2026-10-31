@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import path from 'node:path'
-import { AppDb, backupDatabase, pruneBackups, pruneSchemaBackups } from '@ert/storage'
+import { AppDb, backupDatabase, openDatabase, pruneBackups, pruneSchemaBackups, restoreBackupPair } from '@ert/storage'
+import { ensureOwnerOnlyDirectory } from './private-dir.js'
+import { Clock, RaceService } from './service.js'
 
 export function retentionMonths(db: AppDb): number {
   const row = db.get<{ settings_json: string }>('SELECT settings_json FROM event LIMIT 1')
@@ -14,8 +16,9 @@ export function retentionMonths(db: AppDb): number {
   return 12
 }
 
-/** Write one consistent backup and drop copies older than the retention period. */
+/** Write one consistent backup and rotate copies down to the retention period. */
 export async function writeBackup(db: AppDb, directory: string, reason: string, now = new Date()): Promise<string> {
+  ensureOwnerOnlyDirectory(directory)
   const stamp = now.toISOString().replace(/[:.]/g, '-')
   const dest = path.join(directory, `ert-${stamp}-${reason}.sqlite`)
   await backupDatabase(db, dest)
@@ -36,6 +39,33 @@ export async function runScheduledBackup(
   } catch (error) {
     const detail = error instanceof Error ? error.message : String(error)
     log(`Scheduled backup failed: ${detail}`)
+  }
+}
+
+/**
+ * Copy a backup pair, anonymise the copy when the retention deadline has passed, and close it.
+ * The caller opens `destDatabase` only after this resolves. The backup file is not rewritten.
+ * An incomplete pair is skipped. A failure while anonymising removes the copy.
+ */
+export async function restoreBackup(databaseBackup: string, destDatabase: string, dataKey: Buffer, now = Date.now()): Promise<boolean> {
+  const key = Buffer.from(dataKey)
+  try {
+    return await restoreBackupPair(databaseBackup, destDatabase, (dest) => anonymizeBeforeOpen(dest, key, now))
+  } finally {
+    key.fill(0)
+  }
+}
+
+/** Open the restored copy, run retention anonymisation, checkpoint, and close it. */
+async function anonymizeBeforeOpen(dest: string, dataKey: Buffer, now: number): Promise<void> {
+  const db = await openDatabase(dest, { dataKey })
+  try {
+    const clock = new Clock()
+    clock.set(now)
+    new RaceService(db, clock).anonymizeRestored(now)
+    db.raw.pragma('wal_checkpoint(TRUNCATE)')
+  } finally {
+    db.raw.close()
   }
 }
 

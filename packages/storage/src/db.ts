@@ -561,10 +561,26 @@ export async function backupDatabase(db: AppDb, dest: string): Promise<void> {
 /**
  * Copy a complete backup pair over dest.
  * A database without its key file, or a key file that is not a whole stub or envelope, is skipped.
+ * `beforeOpen` runs on the copy before this function returns. The caller opens dest only after that.
+ * A throw from `beforeOpen` removes the copy so the unprepared file is not left behind.
  */
-export function restoreBackupPair(databaseBackup: string, destDatabase: string): boolean {
+export async function restoreBackupPair(
+  databaseBackup: string,
+  destDatabase: string,
+  beforeOpen?: (destDatabase: string) => Promise<void> | void,
+): Promise<boolean> {
   if (!backupPairComplete(databaseBackup)) return false
   writeBackupPair(databaseBackup, destDatabase)
+  if (!beforeOpen) return true
+  try {
+    await beforeOpen(destDatabase)
+  } catch (error) {
+    secureRemove(destDatabase)
+    secureRemove(keyFilePath(destDatabase))
+    secureRemove(`${destDatabase}-wal`)
+    secureRemove(`${destDatabase}-shm`)
+    throw error
+  }
   return true
 }
 
@@ -617,16 +633,51 @@ function removeOrphanKeyBackup(keyBackup: string, retentionMonths: number, today
   removed.push(keyBackup)
 }
 
-/** Delete backup files older than the retention period, including `<file>.v<version>.bak` and the paired key file. */
+/**
+ * Newest `.sqlite` copies kept in full, plus one copy per UTC day inside the retention period.
+ * 48 is four hours of the five-minute backup schedule.
+ */
+export const BACKUP_KEEP_RECENT = 48
+
+function byNewest(a: { mtime: number; full: string }, b: { mtime: number; full: string }): number {
+  if (a.mtime !== b.mtime) return b.mtime - a.mtime
+  if (a.full === b.full) return 0
+  return a.full < b.full ? 1 : -1
+}
+
+/**
+ * Delete backup files older than the retention period, then keep the newest
+ * `BACKUP_KEEP_RECENT` `.sqlite` copies plus the newest copy of each other UTC day.
+ * Schema `.vN.bak` pairs are deleted only by age. Paired key files go with the database.
+ */
 export function pruneBackups(directory: string, retentionMonths: number, now = Date.now()): string[] {
   if (!fs.existsSync(directory)) return []
   const today = new Date(now).toISOString().slice(0, 10)
   const removed: string[] = []
+  const retained: { full: string; mtime: number; day: string }[] = []
   for (const name of fs.readdirSync(directory)) {
     const databaseBackup = name.endsWith('.sqlite') || SCHEMA_BACKUP.test(name)
     if (!databaseBackup) continue
     const full = path.join(directory, name)
-    if (olderThanRetention(full, retentionMonths, today)) removeBackupPair(full, removed)
+    if (olderThanRetention(full, retentionMonths, today)) {
+      removeBackupPair(full, removed)
+      continue
+    }
+    if (!name.endsWith('.sqlite')) continue
+    const mtime = fs.statSync(full).mtimeMs
+    retained.push({ full, mtime, day: new Date(mtime).toISOString().slice(0, 10) })
+  }
+  retained.sort(byNewest)
+  const keep = new Set<string>()
+  for (const item of retained.slice(0, BACKUP_KEEP_RECENT)) keep.add(item.full)
+  const days = new Set<string>()
+  for (const item of retained) {
+    if (days.has(item.day)) continue
+    days.add(item.day)
+    keep.add(item.full)
+  }
+  for (const item of retained) {
+    if (!keep.has(item.full)) removeBackupPair(item.full, removed)
   }
   for (const name of fs.readdirSync(directory)) {
     if (!name.endsWith('.keys') && !KEY_SCHEMA_BACKUP.test(name)) continue
