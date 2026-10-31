@@ -33,7 +33,7 @@ One current database holds one DEK. The DEK is 32 bytes from a CSPRNG (`crypto.r
 
 The in-database `key_slot` table is not the wrap store. The implementation removes it instead of writing wraps into it.
 
-`file_id` in the key file is also stored in encrypted `schema_meta.file_id`. After a slot unwraps, unlock reads that column and rejects the pair when the ids differ. A backup, a `.vN.bak` migration copy, and a USB copy each take the database and the key file together. Either file alone does not open.
+`file_id` in the key file is also stored in encrypted `schema_meta.file_id`. `key_generation` in the key file is also stored in encrypted `schema_meta.key_generation`. It starts at 1 and increments by 1 when the DEK is rotated, so a crash between the two renames can tell the new key file from the old one. After a slot unwraps, unlock reads both columns and rejects the pair when either differs. A backup, a `.vN.bak` migration copy, and a USB copy each take the database and the key file together. Either file alone does not open.
 
 Argon2id is the password KDF because those secrets are low-entropy. The recovery key already has 160 bits of entropy, so a memory-hard KDF would not raise the offline cost. HKDF only expands it to a 256-bit AES key. New admin slots store `m = 64 MiB` (65536 KiB), `t = 3`, `p = 1`, Argon2 version `0x13`, and a 16-byte salt. Unlock refuses an Argon2id slot below that minimum, or above the resource ceiling in the spec, before it runs the KDF.
 
@@ -65,7 +65,8 @@ All multi-byte integers are big-endian. Version 1 of `ert.keys` is exactly these
 | 8 | 16 | `file_id` | CSPRNG, not secret. The same value is stored in `schema_meta.file_id`. It stays the same across DEK rotation |
 | 24 | 1 | `slot_count` | `3` |
 | 25 | 1 | `flags` | `0` |
-| 26 | 6 | reserved | `0` |
+| 26 | 4 | `key_generation` | uint32, starts at `1`, increments by 1 when the DEK is rotated. The same value is stored in `schema_meta.key_generation` |
+| 30 | 2 | reserved | `0` |
 
 ### Slot record (96 bytes)
 

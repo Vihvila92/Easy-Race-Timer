@@ -8,6 +8,7 @@
   },
   "dependencies": {
     "@ert/core": "workspace:*",
+    "argon2": "0.44.0",
     "better-sqlite3-multiple-ciphers": "13.0.3"
   },
   "scripts": {

@@ -78,17 +78,18 @@ export function backupPairComplete(databasePath: string): boolean {
   return info.kind === 'stub' || info.kind === 'envelope'
 }
 
-export function writeKeyStub(keyPath: string, fileIdHex: string): void {
-  const directory = path.dirname(keyPath)
+/** Temp file, fsync, rename, directory fsync, mode 0600. Shared by the stub, the envelope and the backoff file. */
+export function writePrivateBytes(filePath: string, bytes: Buffer): void {
+  const directory = path.dirname(filePath)
   fs.mkdirSync(directory, { recursive: true })
-  const tmp = path.join(directory, `.${path.basename(keyPath)}.${process.pid}.${Date.now()}.tmp`)
+  const tmp = path.join(directory, `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`)
   try {
-    fs.writeFileSync(tmp, encodeKeyStub(fileIdHex), { mode: 0o600 })
+    fs.writeFileSync(tmp, bytes, { mode: 0o600 })
     fsyncFile(tmp)
-    fs.renameSync(tmp, keyPath)
+    fs.renameSync(tmp, filePath)
     fsyncDirectory(directory)
     try {
-      fs.chmodSync(keyPath, 0o600)
+      fs.chmodSync(filePath, 0o600)
     } catch {
       // Permissions are best-effort on filesystems that ignore them.
     }
@@ -96,6 +97,10 @@ export function writeKeyStub(keyPath: string, fileIdHex: string): void {
     fs.rmSync(tmp, { force: true })
     throw error
   }
+}
+
+export function writeKeyStub(keyPath: string, fileIdHex: string): void {
+  writePrivateBytes(keyPath, encodeKeyStub(fileIdHex))
 }
 
 /**

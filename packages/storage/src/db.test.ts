@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { peekSchemaVersion } from './cipher.js'
-import { assertBackupIntegrity, backupDatabase, migrationHooks, openDatabase, pruneBackups, pruneSchemaBackups, restoreBackupPair } from './db.js'
+import { assertBackupIntegrity, backupDatabase, backupHooks, migrationHooks, openDatabase, pruneBackups, pruneSchemaBackups, restoreBackupPair } from './db.js'
 import { keyFilePath } from './key-file.js'
 import { devDataKey } from './key.js'
 import { SCHEMA_VERSION } from './schema.js'
@@ -20,6 +20,7 @@ function tempDir(): string {
 afterEach(() => {
   migrationHooks.beforeCommit = undefined
   migrationHooks.failBackup = false
+  backupHooks.onStep = undefined
   for (const file of files.splice(0)) fs.rmSync(file, { recursive: true, force: true })
 })
 
@@ -43,6 +44,20 @@ describe('backupDatabase', () => {
     expect(fs.statSync(dest).mode & 0o777).toBe(0o600)
     expect(fs.readFileSync(keyFilePath(dest)).equals(fs.readFileSync(keyFilePath(file)))).toBe(true)
     expect(fs.statSync(keyFilePath(dest)).mode & 0o777).toBe(0o600)
+  })
+
+  it('writes the database, then the key file, then fsyncs the directory', async () => {
+    const dir = tempDir()
+    const file = path.join(dir, 'ert.sqlite')
+    const db = await openDatabase(file)
+    const steps: string[] = []
+    backupHooks.onStep = (step) => steps.push(step)
+    const dest = path.join(dir, 'backups', 'copy.sqlite')
+    await backupDatabase(db, dest)
+    db.raw.close()
+    expect(steps).toEqual(['database', 'key', 'directory'])
+    expect(fs.existsSync(dest)).toBe(true)
+    expect(fs.existsSync(keyFilePath(dest))).toBe(true)
   })
 
   it('copies the key file with the database and with the pre-migration backup', async () => {
@@ -218,5 +233,20 @@ describe('pruneBackups', () => {
     expect(fs.existsSync(liveKey)).toBe(true)
     expect(fs.existsSync(aged)).toBe(false)
     expect(fs.existsSync(agedKey)).toBe(false)
+  })
+
+  it('leaves a half pair in place', () => {
+    const dir = tempDir()
+    const now = Date.parse('2028-06-13T00:00:00Z')
+    const databaseOnly = path.join(dir, 'ert-half.sqlite')
+    const keyOnly = path.join(dir, 'ert-orphan.keys')
+    fs.writeFileSync(databaseOnly, 'half')
+    fs.writeFileSync(keyOnly, 'orphan')
+    fs.utimesSync(databaseOnly, now / 1000, Date.parse('2027-01-01T00:00:00Z') / 1000)
+    fs.utimesSync(keyOnly, now / 1000, Date.parse('2027-01-01T00:00:00Z') / 1000)
+    expect(pruneBackups(dir, 12, now)).toEqual([])
+    expect(fs.existsSync(databaseOnly)).toBe(true)
+    expect(fs.existsSync(keyOnly)).toBe(true)
+    expect(restoreBackupPair(databaseOnly, path.join(dir, 'restored.sqlite'))).toBe(false)
   })
 })

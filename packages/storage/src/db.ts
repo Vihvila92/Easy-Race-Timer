@@ -10,9 +10,10 @@ import { isPlaintextSqlite, openEncrypted, peekSchemaVersion, rawKeyPragma, rest
 import { RaceFileError } from './errors.js'
 import { omitInternal } from './internal.js'
 import { devKeyOptIn, isDevDataKey, resolveDataKey, type OpenOptions } from './key.js'
-import { backupPairComplete, databasePathForKeyFile, ensureKeyFile, inspectKeyFile, keyFilePath, rekeyTempPaths, writeKeyStub } from './key-file.js'
+import { backupPairComplete, ensureKeyFile, inspectKeyFile, keyFilePath, rekeyTempPaths, writeKeyStub } from './key-file.js'
 import { migratePlaintextFile, purgeExpiredQuarantine, quarantinePlaintextCopies, recoverPlaintextMigration } from './plaintext.js'
-import { ensureFileId, MIGRATIONS, SCHEMA_SQL, SCHEMA_VERSION } from './schema.js'
+import { readEnvelopeIdentity } from './key-envelope.js'
+import { ensureFileId, ensureKeyColumns, MIGRATIONS, SCHEMA_SQL, SCHEMA_VERSION, setKeyGeneration } from './schema.js'
 
 export const APP_VERSION = '0.1.0'
 export const ORG_ID = 'local'
@@ -28,9 +29,37 @@ export const migrationHooks: {
   failBackup?: boolean
 } = {}
 
+export type RekeyPhase =
+  | 'checkpoint-before-copy'
+  | 'journal-delete'
+  | 'before-rekey'
+  | 'rekey'
+  | 'integrity-ok'
+  | 'journal-wal'
+  | 'checkpoint-after-rekey'
+
+export interface RekeyPhaseInfo {
+  file: string
+  journal?: string
+}
+
 /** Test seam. Production never sets this. A throw leaves the original pair in place. */
 export const rekeyHooks: {
   beforeRename?: () => void
+  afterDatabaseRename?: () => void
+  onPhase?: (phase: RekeyPhase, info: RekeyPhaseInfo) => void
+} = {}
+
+export interface RekeyOptions {
+  /** Runs on the copy after journal_mode DELETE and before PRAGMA rekey. */
+  prepareCopy?: (copy: SqliteDatabase) => void
+  /** Writes the key temp. The default copies the current key file. */
+  writeKeyFile?: (tempKeyPath: string) => void
+}
+
+/** Test seam for backup pair order. Production never sets this. */
+export const backupHooks: {
+  onStep?: (step: 'database' | 'key' | 'directory') => void
 } = {}
 
 export { plaintextHooks, QUARANTINE_RETENTION_MS, deleteQuarantinedPlaintext, plaintextQuarantinePending, type PlaintextStep } from './plaintext.js'
@@ -44,9 +73,16 @@ function zeroKeyOnClose(raw: SqliteDatabase, dataKey: Buffer): void {
   }
 }
 
+export interface KeySession {
+  kind: 'admin' | 'recovery-gate' | 'temporary-password'
+  slotIndex: 0 | 1 | 2
+}
+
 export class AppDb {
   /** Basenames moved to plaintext-quarantine on this open. Empty for a memory database. */
   readonly quarantinedPlaintext: readonly string[]
+  /** Set when a slot unwrap opened this handle. A dev-key open leaves it null. */
+  keySession: KeySession | null = null
 
   constructor(
     readonly raw: SqliteDatabase,
@@ -112,6 +148,7 @@ function applyFreshSchema(raw: SqliteDatabase): void {
     raw.prepare('INSERT INTO schema_meta (id, schema_version, app_version, installation_id) VALUES (1, ?, ?, ?)').run(SCHEMA_VERSION, APP_VERSION, createId())
   }
   ensureFileId(raw)
+  ensureKeyColumns(raw)
 }
 
 function removeMigrationTemp(tmp: string): void {
@@ -317,8 +354,15 @@ function recoverRekeyTemps(filePath: string, dataKey: Buffer): void {
     raw = openEncrypted(filePath, dataKey)
     const fileId = ensureFileId(raw)
     const info = inspectKeyFile(temps.key)
+    const columns = ensureKeyColumns(raw)
     raw.close()
     raw = undefined
+    if (info.kind === 'envelope') {
+      const identity = readEnvelopeIdentity(fs.readFileSync(temps.key))
+      if (!identity || identity.fileId !== fileId || identity.keyGeneration !== columns.keyGeneration) {
+        throw new Error(`Key file recovery failed for ${path.basename(filePath)}.`)
+      }
+    }
     if ((info.kind === 'stub' || info.kind === 'envelope') && info.fileId === fileId) {
       fs.renameSync(temps.key, keyFilePath(filePath))
       fsyncDirectory(path.dirname(filePath))
@@ -415,6 +459,33 @@ export function openDataFile(filePath: string, dataKey: Buffer): Promise<AppDb> 
   return openDatabase(filePath, { dataKey })
 }
 
+/** Create a new race file and bind `file_id` and `key_generation`. Does not write the key file. */
+export function initializeEncryptedFile(filePath: string, dataKey: Buffer, fileIdHex: string, keyGeneration: number): AppDb {
+  if (filePath === ':memory:') throw new Error('A memory database has no key file')
+  if (!/^[0-9a-f]{32}$/.test(fileIdHex)) throw new Error('file id must be 32 hex characters')
+  const resolved = path.resolve(filePath)
+  if (fs.existsSync(resolved)) throw new Error('Race file already exists')
+  fs.mkdirSync(path.dirname(resolved), { recursive: true })
+  const raw = openEncrypted(resolved, dataKey)
+  try {
+    applyFreshSchema(raw)
+    raw.prepare('UPDATE schema_meta SET file_id = ? WHERE id = 1').run(fileIdHex)
+    setKeyGeneration(raw, keyGeneration)
+    restrictPermissions(resolved)
+    return new AppDb(raw, resolved, Buffer.from(dataKey))
+  } catch (error) {
+    try {
+      raw.close()
+    } catch {
+      // The handle may already be closed.
+    }
+    secureRemove(resolved)
+    secureRemove(`${resolved}-wal`)
+    secureRemove(`${resolved}-shm`)
+    throw error
+  }
+}
+
 function adoptConnection(db: AppDb, raw: SqliteDatabase): void {
   ;(db as { raw: SqliteDatabase }).raw = raw
 }
@@ -423,9 +494,10 @@ function adoptConnection(db: AppDb, raw: SqliteDatabase): void {
  * Rotate the data key on a copy. The live connection is not rekeyed in place.
  * SQLite3 Multiple Ciphers cannot rekey a database that is in WAL mode, so the
  * copy is switched to DELETE for the rekey and back to WAL after integrity_check.
- * The key stub is copied unchanged. #131 writes the new envelope at that step.
+ * `wal_checkpoint(TRUNCATE)` runs before the copy and again after rekey.
+ * The key file is copied unless `writeKeyFile` supplies the new envelope.
  */
-export function rekeyDataFile(db: AppDb, newKey: Buffer): void {
+export function rekeyDataFile(db: AppDb, newKey: Buffer, options: RekeyOptions = {}): void {
   if (db.filePath === ':memory:' || !db.dataKey) throw new Error('A memory database has no data key to rotate')
   if (newKey.length !== 32) throw new Error('Data key must be 32 bytes')
   if (isDevDataKey(newKey) && !devKeyOptIn()) throw new RaceFileError('', process.env.NODE_ENV === 'production' ? 'dev-key' : 'missing-key')
@@ -438,18 +510,26 @@ export function rekeyDataFile(db: AppDb, newKey: Buffer): void {
   let renamedDatabase = false
   try {
     db.raw.pragma('wal_checkpoint(TRUNCATE)')
+    rekeyHooks.onPhase?.('checkpoint-before-copy', { file: db.filePath })
     atomicCopyFile(db.filePath, temps.database)
     copy = openEncrypted(temps.database, previous)
     copy.pragma('journal_mode = DELETE')
+    rekeyHooks.onPhase?.('journal-delete', { file: temps.database, journal: String(copy.pragma('journal_mode', { simple: true })) })
+    rekeyHooks.onPhase?.('before-rekey', { file: temps.database, journal: 'delete' })
+    options.prepareCopy?.(copy)
     copy.pragma(rawKeyPragma('rekey', incoming))
+    rekeyHooks.onPhase?.('rekey', { file: temps.database })
     const result = copy.pragma('integrity_check', { simple: true })
     if (result !== 'ok') throw new Error('Rekey integrity check failed')
+    rekeyHooks.onPhase?.('integrity-ok', { file: temps.database })
     copy.pragma('journal_mode = WAL')
+    rekeyHooks.onPhase?.('journal-wal', { file: temps.database, journal: String(copy.pragma('journal_mode', { simple: true })) })
     copy.close()
     copy = undefined
     const settled = openEncrypted(temps.database, incoming)
     try {
       settled.pragma('wal_checkpoint(TRUNCATE)')
+      rekeyHooks.onPhase?.('checkpoint-after-rekey', { file: temps.database })
     } finally {
       settled.close()
     }
@@ -458,7 +538,8 @@ export function rekeyDataFile(db: AppDb, newKey: Buffer): void {
     secureRemove(`${temps.database}-shm`)
     const sourceKey = keyFilePath(db.filePath)
     if (!backupPairComplete(db.filePath)) throw new Error('Rekey failed')
-    atomicCopyFile(sourceKey, temps.key)
+    if (options.writeKeyFile) options.writeKeyFile(temps.key)
+    else atomicCopyFile(sourceKey, temps.key)
     fsyncFile(temps.key)
     rekeyHooks.beforeRename?.()
     db.raw.close()
@@ -466,6 +547,7 @@ export function rekeyDataFile(db: AppDb, newKey: Buffer): void {
     fs.renameSync(temps.database, db.filePath)
     renamedDatabase = true
     fsyncDirectory(directory)
+    rekeyHooks.afterDatabaseRename?.()
     fs.renameSync(temps.key, sourceKey)
     fsyncDirectory(directory)
     restrictPermissions(db.filePath)
@@ -516,9 +598,12 @@ export function rekeyDataFile(db: AppDb, newKey: Buffer): void {
 function writeBackupPair(databaseSource: string, databaseDest: string): void {
   if (!backupPairComplete(databaseSource)) throw new Error('key file missing')
   atomicCopyFile(databaseSource, databaseDest)
+  backupHooks.onStep?.('database')
   try {
     atomicCopyFile(keyFilePath(databaseSource), keyFilePath(databaseDest))
+    backupHooks.onStep?.('key')
     fsyncDirectory(path.dirname(databaseDest))
+    backupHooks.onStep?.('directory')
   } catch (error) {
     secureRemove(databaseDest)
     secureRemove(keyFilePath(databaseDest))
@@ -589,7 +674,6 @@ export function assertBackupIntegrity(file: string, dataKey: Buffer): void {
 }
 
 const SCHEMA_BACKUP = /\.sqlite\.v\d+\.bak$/
-const KEY_SCHEMA_BACKUP = /\.v\d+\.keys$/
 
 function olderThanRetention(file: string, retentionMonths: number, today: string): boolean {
   const stat = fs.statSync(file)
@@ -608,46 +692,30 @@ function removeBackupPair(databaseBackup: string, removed: string[]): void {
   }
 }
 
-/** An aged sidecar whose database copy is already gone. A sidecar still paired with a database stays. */
-function removeOrphanKeyBackup(keyBackup: string, retentionMonths: number, today: string, removed: string[]): void {
-  if (!fs.existsSync(keyBackup)) return
-  if (fs.existsSync(databasePathForKeyFile(keyBackup))) return
-  if (!olderThanRetention(keyBackup, retentionMonths, today)) return
-  secureRemove(keyBackup)
-  removed.push(keyBackup)
+/** Delete aged complete pairs. A database without its key file, or a key file without its database, is left in place. */
+function pruneCompletePairs(directory: string, retentionMonths: number, today: string, include: (name: string) => boolean): string[] {
+  const removed: string[] = []
+  for (const name of fs.readdirSync(directory)) {
+    if (!include(name)) continue
+    const full = path.join(directory, name)
+    if (!olderThanRetention(full, retentionMonths, today)) continue
+    const key = keyFilePath(full)
+    if (key === full || !fs.existsSync(key)) continue
+    removeBackupPair(full, removed)
+  }
+  return removed
 }
 
 /** Delete backup files older than the retention period, including `<file>.v<version>.bak` and the paired key file. */
 export function pruneBackups(directory: string, retentionMonths: number, now = Date.now()): string[] {
   if (!fs.existsSync(directory)) return []
   const today = new Date(now).toISOString().slice(0, 10)
-  const removed: string[] = []
-  for (const name of fs.readdirSync(directory)) {
-    const databaseBackup = name.endsWith('.sqlite') || SCHEMA_BACKUP.test(name)
-    if (!databaseBackup) continue
-    const full = path.join(directory, name)
-    if (olderThanRetention(full, retentionMonths, today)) removeBackupPair(full, removed)
-  }
-  for (const name of fs.readdirSync(directory)) {
-    if (!name.endsWith('.keys') && !KEY_SCHEMA_BACKUP.test(name)) continue
-    removeOrphanKeyBackup(path.join(directory, name), retentionMonths, today, removed)
-  }
-  return removed
+  return pruneCompletePairs(directory, retentionMonths, today, (name) => name.endsWith('.sqlite') || SCHEMA_BACKUP.test(name))
 }
 
 /** Delete aged pre-migration backups beside the live race file. Does not touch the live file or its key sidecar. */
 export function pruneSchemaBackups(directory: string, retentionMonths: number, now = Date.now()): string[] {
   if (!fs.existsSync(directory)) return []
   const today = new Date(now).toISOString().slice(0, 10)
-  const removed: string[] = []
-  for (const name of fs.readdirSync(directory)) {
-    if (!SCHEMA_BACKUP.test(name)) continue
-    const full = path.join(directory, name)
-    if (olderThanRetention(full, retentionMonths, today)) removeBackupPair(full, removed)
-  }
-  for (const name of fs.readdirSync(directory)) {
-    if (!KEY_SCHEMA_BACKUP.test(name)) continue
-    removeOrphanKeyBackup(path.join(directory, name), retentionMonths, today, removed)
-  }
-  return removed
+  return pruneCompletePairs(directory, retentionMonths, today, (name) => SCHEMA_BACKUP.test(name))
 }

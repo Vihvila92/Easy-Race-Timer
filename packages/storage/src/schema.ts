@@ -149,13 +149,68 @@ export function ensureFileId(raw: SqliteDatabase, preferred?: string): string {
   return fileId
 }
 
+export interface KeyColumns {
+  keyGeneration: number
+  temporarySlot: 0 | 1 | null
+}
+
+function asTemporarySlot(value: number | null): 0 | 1 | null {
+  if (value === 0 || value === 1) return value
+  return null
+}
+
+/** `key_generation` starts at 1. `temporary_slot` is set only for a password that must be replaced. */
+export function ensureKeyColumns(raw: SqliteDatabase): KeyColumns {
+  const columns = columnNames(raw, 'schema_meta')
+  if (!columns.has('key_generation')) raw.exec('ALTER TABLE schema_meta ADD COLUMN key_generation INTEGER')
+  if (!columns.has('temporary_slot')) raw.exec('ALTER TABLE schema_meta ADD COLUMN temporary_slot INTEGER')
+  const row = raw.prepare('SELECT key_generation, temporary_slot FROM schema_meta WHERE id = 1').get() as { key_generation: number | null; temporary_slot: number | null } | undefined
+  const temporarySlot = asTemporarySlot(row?.temporary_slot ?? null)
+  if (row?.key_generation && Number.isInteger(row.key_generation) && row.key_generation >= 1) {
+    return { keyGeneration: row.key_generation, temporarySlot }
+  }
+  raw.prepare('UPDATE schema_meta SET key_generation = 1 WHERE id = 1').run()
+  return { keyGeneration: 1, temporarySlot }
+}
+
+export function setKeyGeneration(raw: SqliteDatabase, value: number): void {
+  if (!Number.isInteger(value) || value < 1) throw new Error('key generation must be a positive integer')
+  ensureKeyColumns(raw)
+  raw.prepare('UPDATE schema_meta SET key_generation = ? WHERE id = 1').run(value)
+}
+
+export function setTemporarySlot(raw: SqliteDatabase, slot: 0 | 1 | null): void {
+  ensureKeyColumns(raw)
+  raw.prepare('UPDATE schema_meta SET temporary_slot = ? WHERE id = 1').run(slot)
+}
+
+/** Encrypted audit row. `reason` is `temporary_password` or `other_admin_present`, never a secret. */
+export function recordKeyAudit(raw: SqliteDatabase, action: string, reason: string): void {
+  raw.exec(`CREATE TABLE IF NOT EXISTS key_audit (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  )`)
+  raw.prepare('INSERT INTO key_audit (action, reason, created_at) VALUES (?, ?, ?)').run(action, reason, Date.now())
+}
+
 export const SCHEMA_SQL = `
 CREATE TABLE IF NOT EXISTS schema_meta (
   id INTEGER PRIMARY KEY CHECK (id = 1),
   schema_version INTEGER NOT NULL,
   app_version TEXT NOT NULL,
   installation_id TEXT NOT NULL,
-  file_id TEXT
+  file_id TEXT,
+  key_generation INTEGER,
+  temporary_slot INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS key_audit (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  action TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  created_at INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS event (
