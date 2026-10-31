@@ -1,0 +1,65 @@
+# Runs the CONTRIBUTING quick start on Ubuntu, Windows and macOS.
+# Pull requests that touch docs, the toolchain or workflow files, and a weekly run on the default branch.
+name: Onboarding
+
+permissions:
+  contents: read
+
+on:
+  pull_request:
+    paths:
+      - "CONTRIBUTING.md"
+      - "README.md"
+      - "README.fi.md"
+      - "CLA.md"
+      - "CODE_OF_CONDUCT.md"
+      - "SECURITY.md"
+      - "docs/**"
+      - "packages/**/README.md"
+      - ".nvmrc"
+      - "package.json"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".npmrc"
+      - "rust-toolchain.toml"
+      - ".devcontainer/**"
+      - ".github/workflows/**"
+      - ".github/pull_request_template.md"
+  schedule:
+    - cron: "0 6 * * 1"
+
+concurrency:
+  group: onboarding-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quick-start:
+    name: quick-start (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    defaults:
+      run:
+        shell: bash
+    env:
+      LEAN_BASE_REF: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || 'origin/main' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 10.33.4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - name: Fetch the lean base ref
+        run: git fetch origin "${{ github.base_ref || 'main' }}"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm rebuild esbuild
+      - run: pnpm test
+      - run: pnpm check:lean

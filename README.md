@@ -26,7 +26,7 @@ The 2025 Postgres draft exists only on the tag `legacy-2025`.
 
 ## Quick start for developers
 
-You need Node.js 22 and pnpm 10.33. These commands are for developers. The club volunteer's path is a later installer, not a terminal. See [docs/roadmap.md](docs/roadmap.md).
+You need the Node.js and pnpm versions pinned in [CONTRIBUTING.md](CONTRIBUTING.md). These commands are for developers. The club volunteer's path is a later installer, not a terminal. See [docs/roadmap.md](docs/roadmap.md).
 
 ```bash
 pnpm install
@@ -82,7 +82,7 @@ v0.1 is this repository. A tagged release publishes unsigned installers for Wind
 
 ## Contributing
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) and the [Code of Conduct](CODE_OF_CONDUCT.md). Report security issues privately as described in [`SECURITY.md`](SECURITY.md).
+Run `pnpm check:lean` before a pull request. Setup and the checklist are in [`CONTRIBUTING.md`](CONTRIBUTING.md). See also the [Code of Conduct](CODE_OF_CONDUCT.md). Report security issues privately as described in [`SECURITY.md`](SECURITY.md).
 
 ## License and SaaS
 
