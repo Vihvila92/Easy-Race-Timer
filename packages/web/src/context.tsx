@@ -7,8 +7,7 @@ import type { Workspace } from './types.js'
 import { parseGuidance, parseThemeChoice, resolveColorScheme, type Guidance, type ThemeChoice } from './ui/preferences.js'
 import { unreachableDetail, validateWorkspaceResponse } from './workspace.js'
 
-export type Theme = ThemeChoice
-export type { Guidance }
+type Theme = ThemeChoice
 
 interface AppContextValue {
   locale: Locale

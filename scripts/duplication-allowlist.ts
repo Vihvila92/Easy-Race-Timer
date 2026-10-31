@@ -38,10 +38,6 @@ export const allowedClones: AllowedClone[] = [
   { hash: '4bc4b269b7af914b6804ece8b12465c43250dbb9d50c5d8ba6bf4400f3b79bc4', files: 'e2e/a11y.ts | e2e/unreachable.spec.ts' },
 
   // Repeated test setup. These files are already over the ESLint size limits, so a shared fixture waits for the complexity follow-up instead of turning those warnings into errors.
-  { hash: 'a996edc05e91cb39191c0517c99e287dccb47f8e205c69e0fd06302e402c5a9f', files: 'e2e/finish-queue.spec.ts | e2e/finish-review.spec.ts' },
-  { hash: '0a00586d7e0a290ea90ef746232437421ac829567b2be35f768b7f07bd1ba4cf', files: 'e2e/finish-queue.spec.ts | packages/server/src/finish-flags.test.ts; e2e/finish-queue.spec.ts | packages/server/src/ws.test.ts' },
-  { hash: '811e092bf1c4eb86253fdeda5411195f2230efab22f6b6bdb21db3c03be3367a', files: 'e2e/finish-queue.spec.ts | packages/server/src/headers.test.ts; e2e/finish-queue.spec.ts | packages/server/src/retention.test.ts' },
-  { hash: '2d7c2d97fca5019d9e199071ff12aa81e087241c2c6dca265d168c495f6f4598', files: 'e2e/finish-queue.spec.ts | packages/server/src/consent.test.ts' },
   { hash: 'fb5775dc0cfb3ac5889bdbbe8a7a52aeccea3181910f0d210a4314402fcfa072', files: 'e2e/kuulan-holkka.spec.ts | e2e/kuulan-holkka.spec.ts' },
   { hash: '962d4c71ce442035432381e663a71e06887651abe75164d52007f3b24d0ac0fa', files: 'e2e/preview.spec.ts | e2e/server.ts' },
   { hash: 'f0cb8a03b980fd03adef141d8d780c78ed332bcd1c40b8d9600db604acaddcd6', files: 'packages/server/src/auth.test.ts | packages/server/src/auth.test.ts' },
@@ -66,6 +62,11 @@ export const allowedClones: AllowedClone[] = [
   { hash: 'c0671d58613d06f38ddfd68b0fe7f7dc90328aa59d893c061ee840d9cc5e17a8', files: 'packages/server/src/ws.test.ts | packages/server/src/ws.test.ts' },
   { hash: 'b3c0765524174797e33e842ea1ddbf90a9bccfb0538058e840694a6287882bc0', files: 'packages/storage/src/cipher.test.ts | packages/storage/src/cipher.test.ts' },
   { hash: 'e57df36a8f233c45eeed023eec435f4c6005b63adbf92623ddc48b08af0fe4ec', files: 'packages/storage/src/cipher.test.ts | packages/storage/src/cipher.test.ts' },
-  { hash: 'd4745829d6633ffaa212e122a20a2d85168cad789f7e2495947d4ff307536fb4', files: 'packages/web/src/live-session.test.ts | packages/web/src/live-session.test.ts' },
+
+  // The browser helper and the server unit tests both describe a one-race event.
+  // Those unit tests stay inline: they do not use Playwright, and the files are already over the size limit.
+  { hash: '1bb6cc2c7cfaf0be71a831c6f3af5a9d09f65b80341b5980df464f6c921045dc', files: 'e2e/server.ts | packages/server/src/finish-flags.test.ts; e2e/server.ts | packages/server/src/ws.test.ts' },
+  { hash: '5d6d84700228e88ba4d16ef7d053d61c327dbed9dada6fe3d26a9916a4df7ab0', files: 'e2e/server.ts | packages/server/src/headers.test.ts; e2e/server.ts | packages/server/src/retention.test.ts' },
+  { hash: 'dc8839b25f0d216b7eac742532bda4faf0388406aa217bcff13bbe0cefeec184', files: 'e2e/server.ts | packages/server/src/consent.test.ts' },
 
 ]
