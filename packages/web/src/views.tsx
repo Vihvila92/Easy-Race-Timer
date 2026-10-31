@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { blockerLink } from './blockers.js'
 import { ApiError, api, clientNow, clockMs, createTapId, deviceNow, localDeviceId, nextTapLabel, readClockOffset, syncServerClock } from './api.js'
 import { useApp } from './context.js'
+import { RecoveryGuide } from './keys.js'
 import { licenseUrl, sourceCodeUrl } from './source-link.js'
 import { Banner, Checkbox, TextLink } from './ui/components.js'
 import { flush, pendingCount, recordTap } from './queue.js'
@@ -740,6 +741,7 @@ export function About() {
         <TextLink href={licenseUrl(__ERT_SOURCE_REF__)} rel="noreferrer" testId="about-license-link">{t('about.licenseLink')}</TextLink>
       </div>
       <Banner tone="info" testId="about-license">{t('about.license')}</Banner>
+      <RecoveryGuide />
     </section>
   )
 }
