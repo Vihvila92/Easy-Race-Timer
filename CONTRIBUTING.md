@@ -41,14 +41,14 @@ See [Keep code lean](#keep-code-lean) and [Strings and guided-mode hints](#strin
 
 No dead code and no duplicated code. Reuse a shared module. Shared UI goes through the design-system components and tokens in [`packages/web/src/ui`](packages/web/src/ui) and [`packages/web/src/styles.css`](packages/web/src/styles.css).
 
-`pnpm check:lean` runs four checks:
+`pnpm check:lean` runs these scripts in order: `lint`, `knip`, `check:duplication`, `check:complexity`.
 
-- ESLint. `complexity` ≤ 10, `max-lines-per-function` ≤ 60, `max-lines` ≤ 400, `max-depth` ≤ 3 and `max-params` ≤ 4 are warnings for code that already exceeds them. In a file you add or change, those same rules are errors. Leave the code you touch at or under the limits.
-- knip, for unused files, exports and dependencies. A false positive is an entry in [`knip.ts`](knip.ts) with a reason comment.
-- jscpd, for TypeScript, JavaScript, TSX, CSS, Svelte and Rust. It fails when more than 3% of the scanned code is duplication, or when a clone of 50 tokens or more is not listed in [`scripts/duplication-allowlist.ts`](scripts/duplication-allowlist.ts). The comment above each allowlist group is the reason those clones stay. Prefer extracting a shared module to adding an entry.
-- The complexity ratchet described above.
+- `lint` is ESLint. `complexity` ≤ 10, `max-lines-per-function` ≤ 60, `max-lines` ≤ 400, `max-depth` ≤ 3 and `max-params` ≤ 4 are warnings for code that already exceeds them.
+- `knip` reports unused files, exports and dependencies. A false positive is an entry in [`knip.ts`](knip.ts) with a reason comment.
+- `check:duplication` runs jscpd on TypeScript, JavaScript, TSX, CSS, Svelte and Rust. It fails when more than 3% of the scanned code is duplication, or when a clone of 50 tokens or more is not listed in [`scripts/duplication-allowlist.ts`](scripts/duplication-allowlist.ts). The comment above each allowlist group is the reason those clones stay. Prefer extracting a shared module to adding an entry.
+- `check:complexity` is the ESLint ratchet for the limits above. In a file you add or change, those rules are errors. Leave the code you touch at or under the limits. On a fresh clone or a fork, run `git fetch origin main` before `pnpm check:lean`. `LEAN_BASE_REF` defaults to `origin/main`.
 
-Refactor on touch. When you change a file, remove the dead code and the duplication you are already in. At the end of every phase, open a refactoring and cleanup issue for the warnings and allowlisted clones that are still open.
+Refactor on touch. When you change a file, remove the dead code and the duplication you are already in. At the end of every phase, open an issue titled "Phase N cleanup", link it to that phase's milestone, and list the warnings and allowlisted clones that are still open.
 
 `cargo clippy --all-targets --locked -- -D warnings` in `src-tauri` includes `clippy::cognitive_complexity` at clippy's default threshold of 25. Tauri's build script expects `src-tauri/binaries/ert-server-<host-triple>` to exist. The check job does not build the real sidecar. It creates an empty file at that path so Clippy can type-check the shell. Do the same locally when the sidecar has not been built.
 

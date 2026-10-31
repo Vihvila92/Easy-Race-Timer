@@ -10,9 +10,6 @@ export interface AllowedClone {
 }
 
 export const allowedClones: AllowedClone[] = [
-  // The Tauri error page is a standalone document and cannot import the web design-system stylesheet. The light tokens are copied so the page still renders when the sidecar fails.
-  { hash: '3bbb5870bce03dc9312e8ccbb10b69d1605d1131007fd8909bd35818d775c4c7', files: 'packages/web/src/styles.css | src-tauri/shell/style.css' },
-
   // The server CSV parser keeps the header row and then drops empty data rows. packages/core parseCsv drops empty rows before it reads the header. One function would change import behaviour.
   { hash: '939477773ceccc3147c2c563a9b09b8704dc90013456d1bb015c867db67024e2', files: 'packages/core/src/csv.ts | packages/server/src/service.ts' },
   { hash: '19a00ff8a8e8fa3b05aaaa5fa682e175b306ff94b6026f376caca56981ea8464', files: 'packages/core/src/csv.ts | packages/server/src/service.ts' },
@@ -27,7 +24,7 @@ export const allowedClones: AllowedClone[] = [
   { hash: 'f155838fd8594a8c0e086bb407b69126a828c16081d1fe7ed33c5758e38d9c09', files: 'packages/storage/src/plaintext.ts | packages/storage/src/plaintext.ts' },
   { hash: 'a4f57836694bff353f862e51a5d5cde31a2cc618fca9eb6adfa9afe601e76aba', files: 'packages/storage/src/schema.ts | packages/storage/src/schema.ts' },
 
-  // Repeated view markup. Shared UI belongs in the design system (issue 165), and this file is over the size limit.
+  // Repeated view markup. Shared UI belongs in the design system (cleanup issue #211), and this file is over the size limit.
   { hash: '91212ad50621ba0d9646214025076a0d1224b005b4038734c1402078d821c593', files: 'packages/web/src/views.tsx | packages/web/src/views.tsx' },
 
   // Repeated release-asset classification in a file that is already over the size limit.
