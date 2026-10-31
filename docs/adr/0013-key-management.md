@@ -3,7 +3,7 @@
 - Status: proposed. Implementation of [#131](https://github.com/Vihvila92/Easy-Race-Timer/issues/131) starts only after Santtu approves the spec on that issue. This ADR is not that approval.
 - Date: 2026-10-21
 - Spec: [../spec/key-management.md](../spec/key-management.md)
-- Number: 0013. Number 0012 is [the encrypted race file](https://github.com/Vihvila92/Easy-Race-Timer/blob/valtteriv/encrypted-race-file-ab9f/docs/adr/0012-encrypted-race-file.md) on [#175](https://github.com/Vihvila92/Easy-Race-Timer/pull/175).
+- Number: 0013. The encrypted race file is [ADR 0014](0014-encrypted-race-file.md), merged from [#175](https://github.com/Vihvila92/Easy-Race-Timer/pull/175). Number 0012 is SPDX headers and the versioned source link.
 
 ## Context
 

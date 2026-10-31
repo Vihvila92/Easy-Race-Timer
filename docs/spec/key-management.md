@@ -2,7 +2,7 @@
 
 - Status: proposed for Santtu's review. This is the key-handling spec requested on [#131](https://github.com/Vihvila92/Easy-Race-Timer/issues/131#issuecomment-6308842611). Implementation starts only after Santtu approves it in a comment on that issue. This document is not that approval.
 - Date: 2026-10-21
-- Decision and byte layout: [ADR 0013](../adr/0013-key-management.md). Number 0012 is the encrypted race file on [#175](https://github.com/Vihvila92/Easy-Race-Timer/pull/175).
+- Decision and byte layout: [ADR 0013](../adr/0013-key-management.md). The encrypted race file is [ADR 0014](../adr/0014-encrypted-race-file.md), merged from [#175](https://github.com/Vihvila92/Easy-Race-Timer/pull/175).
 - Depends on [#130](https://github.com/Vihvila92/Easy-Race-Timer/issues/130) and [#175](https://github.com/Vihvila92/Easy-Race-Timer/pull/175) (one SQLCipher file, one 256-bit DEK, random per-page IV, HMAC-SHA512). Sessions are [#132](https://github.com/Vihvila92/Easy-Race-Timer/issues/132) and are out of scope here.
 
 The ADR and this spec match. The ADR owns the slot layout and the USB-stick threat model. This spec owns parameters, procedures, user-facing text and the tests. Update both in the same change.
