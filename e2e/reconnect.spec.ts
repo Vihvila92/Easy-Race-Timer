@@ -65,11 +65,12 @@ test.describe('live socket reconnect', () => {
       data: { id: 'F100', timeMs: start + 10_000, bib: 42, mode: 'time_first' },
     })).ok()).toBeTruthy()
     await expect(page.getByTestId('finish-row-F100')).toContainText('42')
-    await expect(page.getByTestId('connection-status')).toHaveCount(0)
+    const notice = page.getByTestId('connection-status')
+    await expect(notice).toBeAttached()
+    await expect(notice).toHaveText('')
 
     accept = false
     await sockets.at(-1)?.close({ code: 1001, reason: 'restart' })
-    const notice = page.getByTestId('connection-status')
     await expect(notice).toBeVisible()
     await expect(notice).toHaveText(fiNotice)
     await expect(notice).toHaveAttribute('role', 'status')
@@ -94,7 +95,7 @@ test.describe('live socket reconnect', () => {
 
     await expect(page.getByTestId('finish-row-F101')).toContainText('42', { timeout: 25_000 })
     await expect(page.getByTestId('finish-row-F100')).toContainText('42')
-    await expect(notice).toHaveCount(0)
+    await expect(notice).toHaveText('')
     expect(await violations(page), 'reconnected').toEqual([])
   })
 

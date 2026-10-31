@@ -130,11 +130,9 @@ export function App() {
         <Preferences />
       </nav>
       <main className="main">
-        {connection === 'reconnecting' && (
-          <Banner tone="info" role="status" live="polite" testId="connection-status">
-            {t('connection.reconnecting')}
-          </Banner>
-        )}
+        <div role="status" aria-live="polite" aria-atomic="true" data-testid="connection-status">
+          {connection === 'reconnecting' ? <Banner tone="info">{t('connection.reconnecting')}</Banner> : null}
+        </div>
         {error && <p className="error" role="alert" data-testid="form-error">{t('common.error')}: {error}</p>}
         {preview && PreviewPage ? (
           <Suspense fallback={<p>{t('common.loading')}</p>}>
