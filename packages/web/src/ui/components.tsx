@@ -195,8 +195,15 @@ export function Banner({
   testId?: string
   role?: 'alert' | 'status'
 }) {
+  const live = role === 'status' ? 'polite' : role === 'alert' ? 'assertive' : undefined
   return (
-    <p className={`ui-banner ui-banner-${tone}`} role={role} data-testid={testId}>
+    <p
+      className={`ui-banner ui-banner-${tone}`}
+      role={role}
+      aria-live={live}
+      aria-atomic={live ? true : undefined}
+      data-testid={testId}
+    >
       {children}
     </p>
   )
