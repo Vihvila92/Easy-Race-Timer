@@ -7,6 +7,7 @@ import { keyFilePath, openDatabase } from '@ert/storage'
 import { createApp } from './app.js'
 import { restoreBackup, runScheduledBackup, writeBackup } from './backup.js'
 import { windowsPrivateDirectoryArgs } from './private-dir.js'
+import { seedRetentionRace } from './retention-seed.js'
 import { Clock, RaceService } from './service.js'
 
 const dirs: string[] = []
@@ -114,18 +115,8 @@ async function peopleDb() {
   const dir = tempDir()
   const db = await openDatabase(path.join(dir, 'ert.sqlite'))
   const service = new RaceService(db, new Clock())
-  service.importEvent({
-    id: 'EV',
-    name: 'Retention',
-    date: '2027-06-12',
-    timezone: 'Europe/Helsinki',
-    sport: 'run',
-    races: [{ id: 'R1', name: { fi: '1 km', en: '1 km' }, distance_m: 1000, start_mode: 'mass' }],
-    categories: [{ id: 'M', race_id: 'R1', name: { fi: 'M', en: 'M' }, gender: 'M', min_age: 16 }],
-  })
-  service.registerLate({
-    firstName: 'Aino', lastName: 'Testi', gender: 'M', birthDate: '1990-01-01', email: 'aino@example.test', raceId: 'R1', bib: 1, consent: false,
-  })
+  seedRetentionRace(service)
+  db.run(`UPDATE person SET email = ? WHERE first_name = 'Aino'`, 'aino@example.test')
   service.registerLate({
     firstName: 'Pekka', lastName: 'Suoja', gender: 'M', birthDate: '1988-04-04', raceId: 'R1', bib: 2, consent: true,
   })
@@ -189,7 +180,9 @@ describe('restoreBackup', () => {
     expect(firstNames(db)).toEqual(['Aino', 'Pekka'])
     db.raw.close()
   })
+})
 
+describe('restore before the deadline', () => {
   it('leaves a restored file unchanged when the retention deadline has not passed', async () => {
     const { dir, db } = await peopleDb()
     const backup = await writeBackup(db, path.join(dir, 'backups'), 'manual')

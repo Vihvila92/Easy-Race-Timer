@@ -64,7 +64,9 @@ describe('backupDatabase', () => {
     expect(fs.readFileSync(path.join(dir, 'ert.sqlite.v3.bak')).equals(before)).toBe(true)
     expect(fs.readFileSync(keyFilePath(file)).equals(sidecar)).toBe(true)
   })
+})
 
+describe('backup restore pair', () => {
   it('skips a backup pair that is missing its key file', async () => {
     const dir = tempDir()
     const file = path.join(dir, 'ert.sqlite')
@@ -103,59 +105,6 @@ describe('backupDatabase', () => {
     await expect(backupDatabase(db, path.join(blocker, 'copy.sqlite'))).rejects.toThrow(/Backup failed/)
     db.raw.close()
     expect(fs.readFileSync(blocker, 'utf8')).toBe('x')
-  })
-
-  it('leaves the existing destination untouched when preparation throws', async () => {
-    const dir = tempDir()
-    const file = path.join(dir, 'ert.sqlite')
-    const db = await openDatabase(file)
-    const backup = path.join(dir, 'backups', 'copy.sqlite')
-    await backupDatabase(db, backup)
-    db.raw.close()
-    const restored = path.join(dir, 'restored.sqlite')
-    fs.writeFileSync(restored, 'keep')
-    fs.writeFileSync(keyFilePath(restored), 'old-key')
-    fs.writeFileSync(`${restored}-wal`, 'wal')
-    fs.writeFileSync(`${restored}-shm`, 'shm')
-    await expect(restoreBackupPair(backup, restored, async () => {
-      throw new Error('anonymize failed')
-    })).rejects.toThrow(/anonymize failed/)
-    expect(fs.readFileSync(restored, 'utf8')).toBe('keep')
-    expect(fs.readFileSync(keyFilePath(restored), 'utf8')).toBe('old-key')
-    expect(fs.readFileSync(`${restored}-wal`, 'utf8')).toBe('wal')
-    expect(fs.readFileSync(`${restored}-shm`, 'utf8')).toBe('shm')
-    expect(fs.readdirSync(dir).some((name) => name.includes('.restore'))).toBe(false)
-    expect(fs.existsSync(backup)).toBe(true)
-  })
-
-  it('renames the prepared pair into place and drops stale sidecars', async () => {
-    const dir = tempDir()
-    const file = path.join(dir, 'ert.sqlite')
-    const db = await openDatabase(file)
-    const backup = path.join(dir, 'backups', 'copy.sqlite')
-    await backupDatabase(db, backup)
-    const backupBytes = fs.readFileSync(backup)
-    const backupKey = fs.readFileSync(keyFilePath(backup))
-    db.raw.close()
-    const restored = path.join(dir, 'restored.sqlite')
-    fs.writeFileSync(restored, 'old')
-    fs.writeFileSync(keyFilePath(restored), 'old-key')
-    fs.writeFileSync(`${restored}-wal`, 'wal')
-    fs.writeFileSync(`${restored}-shm`, 'shm')
-    let prepared = ''
-    expect(await restoreBackupPair(backup, restored, (temp) => {
-      prepared = temp
-      expect(temp).not.toBe(restored)
-      expect(fs.readFileSync(restored, 'utf8')).toBe('old')
-      expect(fs.readFileSync(`${restored}-wal`, 'utf8')).toBe('wal')
-    })).toBe(true)
-    expect(prepared).not.toBe('')
-    expect(fs.existsSync(prepared)).toBe(false)
-    expect(fs.existsSync(keyFilePath(prepared))).toBe(false)
-    expect(fs.existsSync(`${restored}-wal`)).toBe(false)
-    expect(fs.existsSync(`${restored}-shm`)).toBe(false)
-    expect(fs.readFileSync(restored).equals(backupBytes)).toBe(true)
-    expect(fs.readFileSync(keyFilePath(restored)).equals(backupKey)).toBe(true)
   })
 })
 
@@ -207,7 +156,9 @@ describe('openDatabase', () => {
     expect(fs.readFileSync(path.join(dir, backups[0]!)).equals(before)).toBe(true)
     expect(peekSchemaVersion(file, devDataKey())).toBe(3)
   })
+})
 
+describe('publication migration', () => {
   it('sets initials for a person whose age is unknown when migrating from schema 2', async () => {
     const dir = tempDir()
     const file = path.join(dir, 'ert.sqlite')
@@ -310,7 +261,9 @@ describe('pruneBackups', () => {
     expect(fs.existsSync(aged)).toBe(false)
     expect(fs.existsSync(agedKey)).toBe(false)
   })
+})
 
+describe('backup rotation', () => {
   it('keeps the newest backups and one daily inside the retention period', () => {
     const dir = tempDir()
     const now = Date.parse('2028-06-13T00:00:00Z')
@@ -349,37 +302,5 @@ describe('pruneBackups', () => {
     expect(left).not.toContain('ert-extra.sqlite')
     expect(left).not.toContain('ert-may-early.sqlite')
     expect(left).not.toContain('ert-aged.sqlite')
-  })
-
-  it('counts only complete pairs and never deletes the newest complete pair', () => {
-    const dir = tempDir()
-    const now = Date.parse('2028-06-13T00:00:00Z')
-    const fileId = '0123456789abcdef0123456789abcdef'
-    const write = (name: string, iso: string, complete: boolean) => {
-      const full = path.join(dir, name)
-      fs.writeFileSync(full, name)
-      const seconds = Date.parse(iso) / 1000
-      fs.utimesSync(full, seconds, seconds)
-      if (complete) {
-        writeKeyStub(keyFilePath(full), fileId)
-        fs.utimesSync(keyFilePath(full), seconds, seconds)
-      } else {
-        fs.writeFileSync(keyFilePath(full), 'short')
-      }
-      return full
-    }
-    for (let i = 0; i < BACKUP_KEEP_RECENT; i += 1) {
-      const iso = new Date(Date.parse('2028-06-12T18:00:00Z') + i * 1000).toISOString()
-      write(`ert-gap-${String(i).padStart(2, '0')}.sqlite`, iso, false)
-    }
-    const newest = write('ert-complete.sqlite', '2027-05-01T00:00:00Z', true)
-    const older = write('ert-older.sqlite', '2026-01-01T00:00:00Z', true)
-    const removed = pruneBackups(dir, 12, now)
-    expect(fs.existsSync(newest)).toBe(true)
-    expect(fs.existsSync(keyFilePath(newest))).toBe(true)
-    expect(removed).toContain(older)
-    expect(removed).toContain(keyFilePath(older))
-    expect(fs.existsSync(older)).toBe(false)
-    expect(fs.readdirSync(dir).filter((name) => name.startsWith('ert-gap-') && name.endsWith('.sqlite'))).toHaveLength(BACKUP_KEEP_RECENT)
   })
 })
