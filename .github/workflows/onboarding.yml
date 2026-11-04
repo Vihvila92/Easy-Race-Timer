@@ -1,5 +1,6 @@
 # Runs the CONTRIBUTING quick start on Ubuntu, Windows and macOS.
 # Pull requests that touch docs, the toolchain or workflow files, and a weekly run on the default branch.
+# The dev container job runs on that weekly schedule and when .devcontainer changes.
 name: Onboarding
 
 permissions:
@@ -25,6 +26,8 @@ on:
       - ".devcontainer/**"
       - ".github/workflows/**"
       - ".github/pull_request_template.md"
+      - ".gitattributes"
+      - ".githooks/**"
   schedule:
     - cron: "0 6 * * 1"
 
@@ -50,6 +53,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: 10.33.4
@@ -57,9 +61,38 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: pnpm
-      - name: Fetch the lean base ref
-        run: git fetch origin "${{ github.base_ref || 'main' }}"
       - run: pnpm install --frozen-lockfile
       - run: pnpm rebuild esbuild
       - run: pnpm test
       - run: pnpm check:lean
+
+  devcontainer:
+    name: devcontainer
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: scope
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          set -eu
+          if [ "$EVENT_NAME" = "schedule" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if git diff --name-only "origin/${BASE_REF}...HEAD" -- .devcontainer | grep -q .; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Build the dev container and run tests
+        if: steps.scope.outputs.run == 'true'
+        uses: devcontainers/ci@513af61f4de4f75d37e4438f184ba4358f0fc1ca # v0.3.1900000450
+        with:
+          push: never
+          runCmd: pnpm test

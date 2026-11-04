@@ -4,5 +4,5 @@
     "dockerfile": "Dockerfile"
   },
   "remoteUser": "dev",
-  "postCreateCommand": "pnpm install"
+  "postCreateCommand": "pnpm install --frozen-lockfile"
 }

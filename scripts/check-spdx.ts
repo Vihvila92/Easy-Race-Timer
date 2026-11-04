@@ -27,7 +27,8 @@ export function sourceFiles(root: string): string[] {
 export function missingSpdxHeaders(root: string): string[] {
   return sourceFiles(root).flatMap((file) => {
     const head = readFileSync(file, 'utf8').split(/\r?\n/).slice(0, 5).join('\n')
-    return head.includes(HEADER) ? [] : [path.relative(root, file)]
+    const relative = path.relative(root, file).split(path.sep).join('/')
+    return head.includes(HEADER) ? [] : [relative]
   })
 }
 

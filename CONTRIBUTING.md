@@ -4,7 +4,7 @@ Easy Race Timer v0.1 is a TypeScript monorepo. By taking part you agree to follo
 
 ## Quick start
 
-These are the versions CI installs. Node.js 22.23.3 is the release workflow's Node and the version in [`.nvmrc`](.nvmrc). The `check` job reads that file.
+CI uses these same versions. `.npmrc` sets `engine-strict=true`, so `pnpm install` fails when Node or pnpm is outside the `engines` range.
 
 | Tool | Version | Pin |
 |---|---|---|
@@ -12,11 +12,13 @@ These are the versions CI installs. Node.js 22.23.3 is the release workflow's No
 | pnpm | 10.33.4 | `packageManager` in [`package.json`](package.json) |
 | Rust | 1.90.0 | [`rust-toolchain.toml`](rust-toolchain.toml) |
 
-Rust is for the Tauri shell. `pnpm test` and `pnpm check:lean` use Node and pnpm only. On Linux the shell also needs the libraries named in the [README desktop section](README.md#desktop-app-tauri). The [dev container](.devcontainer/devcontainer.json) has Node, pnpm, Rust and those libraries, and runs `pnpm install` when it is created.
+Rust is for the Tauri shell. `pnpm test` and `pnpm check:lean` use Node and pnpm only. On Linux the shell also needs the libraries named in the [README desktop section](README.md#desktop-app-tauri). The [dev container](.devcontainer/devcontainer.json) has Node, pnpm, Rust and those libraries, and runs `pnpm install --frozen-lockfile` when it is created.
 
 ```bash
 git clone https://github.com/Vihvila92/Easy-Race-Timer.git
 cd Easy-Race-Timer
+nvm install
+node --version
 git fetch origin main
 corepack enable
 corepack prepare pnpm@10.33.4 --activate
@@ -26,7 +28,7 @@ pnpm test
 pnpm check:lean
 ```
 
-`nvm use` reads `.nvmrc` when you use nvm. `pnpm check:lean` diffs against `origin/main` (`LEAN_BASE_REF`). Fetch that ref first. On a fork, fetch upstream `main`.
+`nvm install` reads `.nvmrc`. `node --version` should print `v22.23.3`. `pnpm rebuild esbuild` installs the esbuild binary for this machine, which Vitest uses to load TypeScript. `pnpm check:lean` diffs against `origin/main` (`LEAN_BASE_REF`). Fetch that ref first. On a fork, fetch upstream `main`. `prepare` sets `core.hooksPath` to `.githooks`, and that pre-commit hook runs `pnpm lint` and `pnpm check:lean`.
 
 Run the developer server (port 8080, `./data`):
 
