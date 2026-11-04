@@ -306,7 +306,7 @@ DEK, admin KEKs, the recovery KEK, password bytes and recovery-key bytes are `Bu
 
 The DEK buffer that SQLCipher needs stays alive until the database is closed or the file is locked. Closing the database is what clears that copy. Zeroizing it earlier would be a use-after-free of the key. On close, the storage module zeroizes its DEK buffer. A rewrap zeroizes the slot KEK before it returns. Setup and the regeneration screen zeroize the recovery secret when the screen closes.
 
-JavaScript strings cannot be wiped. The only places a secret may be a string are the input boundary (the field the operator typed, copied into a `Buffer` immediately) and the hex argument of `PRAGMA key` / `PRAGMA rekey` described under [Passing the DEK to SQLCipher](#passing-the-dek-to-sqlcipher). The handler does not put a password or a recovery key on an object the logger serializes, in an `Error`, in a template string, or in any SQL other than that hex pragma. The redaction list below is the backstop for the request object. The pragma text is not logged.
+JavaScript strings cannot be wiped. The only places a secret may be a string are the input boundary (the field the operator typed, copied into a `Buffer` immediately), the hex argument of `PRAGMA key` / `PRAGMA rekey` described under [Passing the DEK to SQLCipher](#passing-the-dek-to-sqlcipher), and the print view. The print view may hold the recovery key as a string so the operator can print it on paper. That view clears the React state after printing and when the view unmounts. The characters themselves cannot be wiped. The key is not saved as a PDF and is not written to a log. The handler does not put a password or a recovery key on an object the logger serializes, in an `Error`, in a template string, or in any SQL other than that hex pragma. The redaction list below is the backstop for the request object. The pragma text is not logged.
 
 `mlock` / `sodium_mlock` is used when the process can take it. Failure to lock memory is not an unlock failure. The threat model does not claim the key is absent from swap.
 
@@ -441,26 +441,13 @@ The implementation PR adds these keys to `packages/i18n/locales/en.json` and `fi
 
 | Key | English | Finnish |
 |---|---|---|
-| `unlock.password` | Password | Salasana |
-| `unlock.open` | Open the file | Avaa tiedosto |
-| `unlock.failed` | That did not open the file. | Tiedosto ei auennut. |
-| `unlock.wait` | Wait before trying again. | Odota ennen uutta yritystä. |
-| `unlock.useRecovery` | I don't have the passwords | Minulla ei ole salasanoja |
-| `unlock.recoveryKey` | Recovery key | Palautusavain |
-| `unlock.recoveryChecksum` | This recovery key has a typing error. Check the groups against the paper. Nothing was unlocked. | Palautusavaimessa on kirjoitusvirhe. Vertaa ryhmiä paperiin. Tiedostoa ei avattu. |
-| `unlock.paramsRejected` | This file's key settings are not allowed, so it was not opened. | Tiedoston avainasetukset eivät ole sallittuja, joten sitä ei avattu. |
-| `unlock.headerInvalid` | This file cannot be opened. | Tätä tiedostoa ei voi avata. |
-| `unlock.newAdminPassword` | Set a new admin password to continue. | Aseta uusi ylläpitäjän salasana jatkaaksesi. |
-| `unlock.unrecoverable` | If both admin passwords and this recovery key are lost, the race file cannot be opened. There is no way to reset it and no one else has a copy of the key. The names, results and consents in the file would be gone. | Jos molemmat ylläpitäjän salasanat ja tämä palautusavain katoavat, kisa-tiedostoa ei voi avata. Avainta ei voi nollata, eikä kellään muulla ole siitä kopiota. Tiedoston nimet, tulokset ja suostumukset katoavat. |
-| `unlock.hint.password` | Either admin types their own password here. A wrong password does not say which admin it was. | Kumpikin ylläpitäjä kirjoittaa oman salasanansa tähän. Väärä salasana ei kerro, kummasta ylläpitäjästä on kyse. |
-| `unlock.hint.recovery` | Type the printed groups, including the last group. The program checks for a typing error before it tries to open the file. | Kirjoita tulostetut ryhmät, myös viimeinen. Ohjelma tarkistaa kirjoitusvirheen ennen kuin se yrittää avata tiedoston. |
-| `keys.oldCopies` | Changing this password does not lock old copies. A USB backup made earlier still opens with the old password. If a former admin may have a copy, rotate the data key and destroy the backups you still have. | Salasanan vaihto ei lukitse vanhoja kopioita. Aiempi USB-varmuuskopio aukeaa yhä vanhalla salasanalla. Jos entisellä ylläpitäjällä voi olla kopio, vaihda data-avain ja hävitä varmuuskopiot, jotka sinulla vielä on. |
+| `keys.oldCopies` | Rotating the data key protects new copies only. A copy that someone else already has stays readable with the old password or paper. Destroy the copies you hold, and rotate the key so new copies need the new passwords. | Data-avaimen vaihto suojaa vain uudet kopiot. Kopio, joka on jo jollakulla toisella, pysyy luettavana vanhalla salasanalla tai paperilla. Hävitä kopiot, jotka sinulla on, ja vaihda avain, jotta uudet kopiot tarvitsevat uudet salasanat. |
 | `keys.rotateLeftover` | A copy you do not have anymore stays readable. This program cannot erase someone else's stick. | Kopio, joka ei ole enää sinulla, pysyy luettavana. Ohjelma ei voi hävittää toisen henkilön tikkua. |
 | `keys.singleAdmin` | Both passwords are now held by one person. Ask a second admin to set their own password as soon as you can. | Molemmat salasanat ovat nyt yhdellä henkilöllä. Pyydä toista ylläpitäjää asettamaan oma salasanansa heti kun se on mahdollista. |
 | `keys.temporaryPassword` | The other admin's password is temporary. They must set their own password the next time the file is opened. | Toisen ylläpitäjän salasana on väliaikainen. Hänen on asetettava oma salasanansa, kun tiedosto avataan seuraavan kerran. |
 | `keys.pairFiles` | A backup has to include both the race database and the key file next to it. The paper recovery key does not replace the key file. | Varmuuskopiossa on oltava sekä kisatietokanta että sen vieressä oleva avaintiedosto. Paperinen palautusavain ei korvaa avaintiedostoa. |
 
-`unlock.unrecoverable` is shown at setup, on the print view, on the recovery screen, and in the guide. `keys.oldCopies` is shown when changing or resetting an admin password. `keys.singleAdmin` is shown when one person ends up holding both slots. `keys.temporaryPassword` is shown when rotation sets a temporary password for the other admin, and again at the next unlock until that password is replaced. `keys.pairFiles` is shown wherever the app offers a backup or a USB copy. `keys.rotateLeftover` is shown at the end of DEK rotation.
+`keys.oldCopies` is the loss warning, shown when changing or resetting an admin password. The same statement is not given a second key. `keys.singleAdmin` is shown when one person ends up holding both slots. `keys.temporaryPassword` is shown when rotation sets a temporary password for the other admin, and again at the next unlock until that password is replaced. `keys.pairFiles` is shown wherever the app offers a backup or a USB copy. `keys.rotateLeftover` is shown at the end of DEK rotation.
 
 ## Errors
 
