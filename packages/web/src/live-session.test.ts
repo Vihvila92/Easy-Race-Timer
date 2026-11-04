@@ -243,7 +243,7 @@ describe('live session backoff reset', () => {
 })
 
 describe('live session stable connection', () => {
-  it('resets backoff after the socket stays open or the first message arrives', () => {
+  it('resets backoff only after the socket has stayed open', () => {
     const stable = harness()
     stable.session.start()
     stable.opened[0]?.open()
@@ -253,16 +253,28 @@ describe('live session stable connection', () => {
     stable.run(STABLE_OPEN_MS)
     stable.opened[1]?.emit(1006)
     expect(stable.retryDelays()).toEqual([500, 500])
+  })
 
-    const messaged = harness()
-    messaged.session.start()
-    messaged.opened[0]?.open()
-    messaged.opened[0]?.emit(1006)
-    messaged.run(500)
-    messaged.opened[1]?.open()
-    messaged.opened[1]?.message('{"type":"device.status","payload":{"proto":1}}')
-    messaged.opened[1]?.emit(1006)
-    expect(messaged.retryDelays()).toEqual([500, 500])
+})
+
+describe('live session hello frame', () => {
+  it('keeps growing the wait when the hello arrives and the socket closes quickly', () => {
+    const hello = '{"type":"device.status","payload":{"proto":1}}'
+    const refresh = '{"type":"timing_event.created","payload":{"id":"F1"}}'
+    const { session, opened, retryDelays, run, state } = harness()
+    session.start()
+    const waits = [500, 1_000, 2_000]
+    for (let i = 0; i < 4; i += 1) {
+      const socket = opened[i]
+      socket?.open()
+      socket?.message(hello)
+      socket?.message(refresh)
+      socket?.emit(1006)
+      const wait = waits[i]
+      if (wait != null) run(wait)
+    }
+    expect(retryDelays()).toEqual([500, 1_000, 2_000, 4_000])
+    expect(state.resyncs).toBe(7)
   })
 
 })

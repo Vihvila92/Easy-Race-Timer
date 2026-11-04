@@ -191,7 +191,6 @@ export class LiveSession {
     })
     socket.onMessage((data) => {
       if (this.socket !== socket || this.stopping || this.held) return
-      this.settleAttempt(socket)
       if (isRefreshMessage(data)) this.options.onResync?.()
     })
     socket.onClose((code) => {
@@ -210,7 +209,7 @@ export class LiveSession {
     })
   }
 
-  /** A handshake alone is not a stable connection. Wait for traffic or for the socket to stay open. */
+  /** The hello frame arrives immediately, so only a socket that stays open resets the counter. */
   private armStable(socket: LiveSocket): void {
     this.clearStable()
     this.cancelStable = this.schedule(() => {
