@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 /* global console, process */
 /**
- * Run a built sidecar and ask it to hash one password with the embedded argon2
- * prebuild. The child prints `argon2 smoke ok` and nothing else.
+ * Run a built sidecar. ERT_ARGON2_SMOKE is readable in that binary and is
+ * harmless: the child hashes one password, opens an in-memory database,
+ * prints `argon2 smoke ok`, and exits. It prints nothing else.
  */
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { argonPrebuildRel, sidecarLibc } from './sidecar-native.js'
+import { argonPrebuildRel, sidecarEntry, sidecarLibc } from './sidecar-native.js'
 import {
   NODE_TARBALLS,
   NODE_VERSION,
@@ -90,6 +90,16 @@ describe('argon2 prebuild', () => {
     expect(sidecarLibc('linux', false)).toBe('glibc')
     expect(sidecarLibc('darwin', false)).toBe('glibc')
     expect(() => argonPrebuildRel('freebsd', 'x64', 'glibc')).toThrow(/argon2/)
+  })
+})
+
+describe('sidecar smoke', () => {
+  it('hashes a password and opens an in-memory database before it exits', () => {
+    const entry = sidecarEntry()
+    expect(entry).toContain('ERT_ARGON2_SMOKE is readable in the shipped sidecar')
+    expect(entry).toContain('better-sqlite3-multiple-ciphers')
+    expect(entry).toContain("new Database(':memory:')")
+    expect(entry).toContain('argon2 smoke ok')
   })
 })
 

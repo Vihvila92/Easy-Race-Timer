@@ -142,6 +142,7 @@ export function sidecarEntry(): string {
   return `
     import os from 'node:os'
     import path from 'node:path'
+    import Database from 'better-sqlite3-multiple-ciphers'
     import argon2 from 'argon2'
     import { extractTree } from './sidecar-assets.ts'
     import { startServer } from '../packages/server/src/index.ts'
@@ -149,6 +150,9 @@ export function sidecarEntry(): string {
     import { ensurePrivateDirectory } from '../packages/server/src/private-dir.ts'
     import { files, hashes } from 'virtual:web-assets'
     if (!process.env.NODE_ENV) process.env.NODE_ENV = 'production'
+    // ERT_ARGON2_SMOKE is readable in the shipped sidecar. Setting it is harmless:
+    // the process hashes one password, opens an in-memory database, prints one
+    // line, and exits. It does not open the race file and it does not print the hash.
     if (process.env.ERT_ARGON2_SMOKE === '1') {
       smokeArgon(argon2).catch(() => {
         console.error('argon2 smoke failed')
@@ -168,9 +172,16 @@ export function sidecarEntry(): string {
     }
     async function smokeArgon(mod) {
       const hash = await mod.hash('smoke', { raw: true, type: mod.argon2id, memoryCost: 65536, timeCost: 3, parallelism: 1, hashLength: 32 })
-      const ok = Buffer.isBuffer(hash) && hash.length === 32
+      const hashOk = Buffer.isBuffer(hash) && hash.length === 32
       if (Buffer.isBuffer(hash)) hash.fill(0)
-      if (!ok) throw new Error('argon2 smoke failed')
+      if (!hashOk) throw new Error('argon2 smoke failed')
+      const db = new Database(':memory:')
+      try {
+        const row = db.prepare('SELECT 1 AS ok').get()
+        if (!row || row.ok !== 1) throw new Error('argon2 smoke failed')
+      } finally {
+        db.close()
+      }
       console.log('argon2 smoke ok')
       process.exit(0)
     }
