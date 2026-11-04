@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import js from '@eslint/js'
 import tseslint from 'typescript-eslint'
+import { leanRules } from './scripts/lean-limits.js'
 
 export default tseslint.config(
   {
@@ -24,6 +25,9 @@ export default tseslint.config(
     rules: {
       '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       '@typescript-eslint/no-explicit-any': 'off',
+      // Warnings on the whole tree. scripts/check-complexity.ts reruns these
+      // as errors for files added or changed against the base branch.
+      ...leanRules('warn'),
     },
   },
 )

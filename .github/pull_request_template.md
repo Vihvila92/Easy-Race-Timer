@@ -19,6 +19,7 @@ Closes #
 - [ ] Documentation updated in this PR, if behavior changed
 - [ ] Security-sensitive change noted for the security reviewer, if any
 - [ ] UI reuses design-system components/tokens; no duplicated styles or components
+- [ ] No dead code or duplication added; shared modules reused
 
 ## Notes
 

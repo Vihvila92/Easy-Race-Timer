@@ -4,7 +4,7 @@ import { AppDb, backupDatabase, openDatabase, pruneBackups, pruneSchemaBackups, 
 import { ensureOwnerOnlyDirectory } from './private-dir.js'
 import { Clock, RaceService } from './service.js'
 
-export function retentionMonths(db: AppDb): number {
+function retentionMonths(db: AppDb): number {
   const row = db.get<{ settings_json: string }>('SELECT settings_json FROM event LIMIT 1')
   if (!row) return 12
   try {
