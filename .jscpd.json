@@ -1,0 +1,19 @@
+{
+  "minTokens": 50,
+  "minLines": 1,
+  "threshold": 3,
+  "format": ["javascript", "typescript", "tsx", "css", "svelte", "rust"],
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/target/**",
+    "**/coverage/**",
+    "**/testdata/**",
+    "**/playwright-report/**",
+    "**/test-results/**",
+    "**/.git/**",
+    "**/.jscpd-report/**"
+  ],
+  "reporters": ["console"],
+  "output": ".jscpd-report"
+}

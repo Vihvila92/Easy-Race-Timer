@@ -16,6 +16,10 @@
     "tauri": "tauri",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "eslint .",
+    "check:duplication": "tsx scripts/check-duplication.ts",
+    "check:complexity": "tsx scripts/check-complexity.ts",
+    "check:lean": "pnpm lint && knip && pnpm check:duplication && pnpm check:complexity",
+    "report:weight": "tsx scripts/report-weight.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "depcruise": "depcruise packages --config .dependency-cruiser.cjs",
@@ -25,7 +29,9 @@
     "e2e": "pnpm build && playwright test"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild"]
+    "onlyBuiltDependencies": [
+      "esbuild"
+    ]
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.10.2",
@@ -37,8 +43,9 @@
     "dependency-cruiser": "^17.3.0",
     "esbuild": "^0.28.2",
     "eslint": "^9.36.0",
-    "fast-check": "^4.2.0",
     "happy-dom": "^21.0.4",
+    "jscpd": "5.4.2",
+    "knip": "6.44.0",
     "node-gyp": "10.3.1",
     "postject": "1.0.0-alpha.6",
     "tsx": "^4.20.5",

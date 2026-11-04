@@ -12,7 +12,6 @@
     "@ert/i18n": "workspace:*",
     "@ert/people": "workspace:*",
     "@ert/race-formats": "workspace:*",
-    "@ert/sports": "workspace:*",
     "@ert/storage": "workspace:*",
     "@ert/sync": "workspace:*",
     "@ert/timing-sources": "workspace:*",
@@ -28,5 +27,8 @@
     "typecheck": "tsc --noEmit",
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts"
+  },
+  "devDependencies": {
+    "fflate": "^0.8.3"
   }
 }

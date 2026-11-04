@@ -1,4 +1,7 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
+/* Light and dark tokens are copied from packages/web/src/styles.css.
+   This page is a standalone document and cannot import that stylesheet,
+   so the shell can still render when the sidecar fails. */
 :root {
   color-scheme: light;
   --bg: #f2f2f7;

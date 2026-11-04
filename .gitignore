@@ -19,6 +19,7 @@ data/
 
 test-results/
 playwright-report/
+.jscpd-report/
 *.log
 
 .DS_Store
