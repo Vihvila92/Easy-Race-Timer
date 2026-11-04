@@ -88,6 +88,9 @@ jobs:
       - name: Build the Node sidecar
         env:
           TAURI_ENV_TARGET_TRIPLE: ${{ matrix.target }}
+          # Readable in the shipped sidecar. Harmless: it only hashes, opens
+          # an in-memory database, and exits.
+          ERT_ARGON2_SMOKE: "1"
         run: |
           set -euo pipefail
           pnpm build:sidecar
@@ -97,6 +100,11 @@ jobs:
             echo "sidecar binary was not built" >&2
             exit 1
           fi
+          # Hash one password and open an in-memory database. Each binary
+          # must print exactly "argon2 smoke ok".
+          for sidecar in "${files[@]}"; do
+            node scripts/argon-smoke.mjs "$sidecar"
+          done
       - name: Show the universal sidecar architectures
         if: matrix.platform == 'macos'
         run: |

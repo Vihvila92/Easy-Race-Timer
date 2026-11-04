@@ -11,7 +11,7 @@ const config = {
   // jscpd is started from scripts/check-duplication.ts via createRequire, which knip does not follow.
   ignoreDependencies: ['node-gyp', 'postject', 'jscpd'],
   // Operating-system tools used by the sidecar build, cipher tests, and desktop smoke.
-  ignoreBinaries: ['sqlite3', 'rustc', 'file', 'arch', 'lipo', 'pgrep', 'tasklist', 'hdiutil', 'xattr'],
+  ignoreBinaries: ['sqlite3', 'rustc', 'file', 'arch', 'lipo', 'pgrep', 'tasklist', 'hdiutil', 'xattr', 'softwareupdate'],
   ignoreIssues: {
     // parseHost is used only in this module. The file is over the complexity limit.
     'packages/server/src/guard.ts': ['exports'],

@@ -53,7 +53,7 @@ The database path stays the one [#175](https://github.com/Vihvila92/Easy-Race-Ti
 
 Wraps are not stored in the `key_slot` table. That table sits inside the encrypted database, so it cannot be read before unlock. The implementation drops `key_slot` instead of writing slot rows.
 
-`file_id` from the key file is also written to `schema_meta.file_id` inside the encrypted database. That column is distinct from `installation_id`. After GCM unwrap, the app opens SQLCipher with the DEK and compares the two ids with `crypto.timingSafeEqual`. A mismatch closes the database, zeroizes the DEK, and returns `UNLOCK_FAILED`.
+`file_id` from the key file is also written to `schema_meta.file_id` inside the encrypted database. That column is distinct from `installation_id`. `key_generation` is a uint32 at offset 26 of `ert.keys` and in `schema_meta.key_generation`. It starts at 1 and increments by 1 on DEK rotation. The last two bytes of the 32-byte prefix stay zero. After GCM unwrap, the app opens SQLCipher with the DEK and compares the file id and the generation with `crypto.timingSafeEqual`. A mismatch closes the database, zeroizes the DEK, and returns `UNLOCK_FAILED` before the handle is attached.
 
 Creation writes the database, `schema_meta.file_id`, and all three slots before the file is opened for normal use. The operator sees the recovery key and sets both admin passwords in that same setup. Cancelling setup deletes the partial database and the partial key file and zeroizes every buffer.
 
@@ -182,7 +182,7 @@ A recovery slot is accepted only when `kdf_id` is HKDF-SHA-256 (`2`), the Argon2
 
 If any slot fails these checks, the whole file is refused with `KEY_PARAMS_REJECTED`. The app does not open the other slots and does not run Argon2id. A weak wrap of the same DEK must not remain usable beside a strong slot. The password form is not shown for that file.
 
-Unknown `envelope_version`, bad magic, a wrong header length, a non-zero reserved byte, or a nonce length other than 12 is `FILE_HEADER_INVALID`, also before the KDF.
+Unknown `envelope_version`, bad magic, a wrong header length, a non-zero byte in the 2-byte reserved tail, a `key_generation` of 0, or a nonce length other than 12 is `FILE_HEADER_INVALID`, also before the KDF.
 
 ### Salts
 
@@ -358,8 +358,8 @@ If a former admin may still have a copy, the operator rotates the DEK with `PRAG
 
 1. An authenticated admin unlocks the current pair.
 2. Generate a new 32-byte DEK from the CSPRNG.
-3. Copy the database to a temporary file in the same directory (`.ert.sqlite.rekey`). Do not rekey the live file. `file_id` inside `schema_meta` stays the same, so the backoff file is unchanged.
-4. Open the copy with the current DEK using the hex `PRAGMA key` from [Passing the DEK to SQLCipher](#passing-the-dek-to-sqlcipher). Set `PRAGMA journal_mode = DELETE`. Run `PRAGMA rekey` with the new DEK in the same `x'<hex>'` form. Run `PRAGMA integrity_check` and require `ok`. Set `PRAGMA journal_mode = WAL`, checkpoint, close, and `fsync` the copy. If any step fails, delete the temp and keep the original pair.
+3. Run `wal_checkpoint(TRUNCATE)` on the open database, then copy it to a temporary file in the same directory (`.ert.sqlite.rekey`). Do not rekey the live file. `file_id` inside `schema_meta` stays the same, so the backoff file is unchanged. `key_generation` on the copy becomes the current value plus 1.
+4. Open the copy with the current DEK using the hex `PRAGMA key` from [Passing the DEK to SQLCipher](#passing-the-dek-to-sqlcipher). Set `PRAGMA journal_mode = DELETE`. Run `PRAGMA rekey` with the new DEK in the same `x'<hex>'` form. Run `PRAGMA integrity_check` and require `ok`. Set `PRAGMA journal_mode = WAL`, run `wal_checkpoint(TRUNCATE)`, close, and `fsync` the copy. If any step fails, delete the temp and keep the original pair.
 5. Write the new key file to `.ert.keys.rekey` and `fsync` it. The acting admin confirms their own password, and that slot is rewrapped under it. The other admin either types their password during the rotation, or the acting admin sets a temporary password for that slot. A temporary password must be replaced at the next unlock of that slot before normal use (`keys.temporaryPassword`). The encrypted audit log records `dek_rotation` with reason `other_admin_present` or `temporary_password`, and it does not record the password or the DEK. The recovery key is regenerated and shown once. The old paper key does not unwrap the new database.
 6. Rename the database temp over the database, `fsync` the directory, rename the key temp over the key file, and `fsync` the directory. Zeroize the old DEK when rekey returns. Zeroize the new recovery secret after the print screen closes. The open database keeps the new DEK until it closes.
 7. A crash before either rename leaves the original pair; startup deletes the temps when the original pair still opens. A crash after the database rename and before the key rename leaves `.ert.keys.rekey`. Startup renames it over the key file only when its `file_id` matches `schema_meta.file_id` and a slot opens the database. Otherwise it stops with a clear error and leaves both files in place. It does not attach a key file that fails the `file_id` check.
@@ -503,7 +503,8 @@ The implementation pull request adds these tests. None of them are in the docume
 | Passwords | 9 code points are rejected. 10 are accepted when not on the list. 64 are accepted when not on the list. 129 are rejected and the stored wrap does not exist (no truncation). `password123` is rejected. Two equal admin passwords are rejected. |
 | Dev key | With `NODE_ENV` unset, the process refuses to open a race file without a slot unwrap. `NODE_ENV=production` and `ERT_DEV_KEY=1` also refuse. `NODE_ENV=test` without `ERT_DEV_KEY=1` refuses. `NODE_ENV=development` and `ERT_DEV_KEY=1` opens and logs the opt-in warning, with no key bytes in that warning. |
 | Key file binding | `ert.sqlite` starts with the SQLCipher header, not `ERTK`. A `file_id` mismatch between `ert.keys` and `schema_meta.file_id` returns `UNLOCK_FAILED`. The database has no `key_slot` rows and no `key_slot` table. |
-| Backup pair | A scheduled backup and a `.vN.bak` migration copy each leave a sibling key file from the same moment. Restoring only the database fails. Restoring both opens. |
+| Key generation | `key_generation` in the key file and in `schema_meta` starts at 1 and both become 2 on rotation. The old key file plus the rekeyed database fails before the database is attached. |
+| Backup pair | A scheduled backup and a `.vN.bak` migration copy each leave a sibling key file from the same moment. The database is written first, the key file second, then the directory is fsynced. Restoring only the database fails. Restoring both opens. Pruning and restore skip a half pair. |
 
 ## Implementation note
 
