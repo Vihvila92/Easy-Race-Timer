@@ -28,10 +28,6 @@ export interface ArgonParams {
 
 let commonPasswords: Set<string> | null = null
 
-function resetPasswordListCache(): void {
-  commonPasswords = null
-}
-
 function passwordListFile(): string {
   const override = process.env.ERT_PASSWORD_LIST?.trim()
   if (override) return override
