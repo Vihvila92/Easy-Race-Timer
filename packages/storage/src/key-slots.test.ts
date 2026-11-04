@@ -11,7 +11,7 @@ import { keyFilePath } from './key-file.js'
 import { BASELINE_ARGON, deriveAdminKek, formatRecoveryKey, kdfHooks, normalizeRecoveryText, parseRecoveryKey, passwordBytes, utf8Password } from './key-kdf.js'
 import { redactCrash } from './key-log.js'
 import { keyRandom } from './key-random.js'
-import { ADMIN_A, ADMIN_B, bodyHash, clonePair, contains, installSlotHooks, logs, openProtected, originalBytes, secretEncodings, slotBytes, tempDir, writeKey } from './key-slots-fixture.js'
+import { ADMIN_A, ADMIN_B, bodyHash, clonePair, contains, installSlotHooks, logs, openProtected, originalBytes, rejectedUnlock, secretEncodings, slotBytes, tempDir, writeKey } from './key-slots-fixture.js'
 import { regenerateRecoveryKey, rewrapAdminSlot } from './key-rewrap.js'
 import { createProtectedRaceFile, keyHooks, normalUseAllowed, sealEnvelope, unlockWithPassword, unlockWithRecovery } from './key-slots.js'
 
@@ -205,7 +205,7 @@ describe('tampered key file', () => {
       kdfHooks.onDerive = () => {
         derived = true
       }
-      const error = await unlockWithPassword(file, ADMIN_A).then(() => null, (caught: unknown) => caught)
+      const error = await rejectedUnlock(file, ADMIN_A)
       expect(error).toBeInstanceOf(KeyError)
       expect((error as KeyError).code).toBe(item.code)
       expect(derived).toBe(item.derives)
@@ -222,7 +222,7 @@ describe('tampered key file', () => {
     kdfHooks.onDerive = () => {
       derived = true
     }
-    const refused = await unlockWithPassword(file, ADMIN_A).then(() => null, (caught: unknown) => caught)
+    const refused = await rejectedUnlock(file, ADMIN_A)
     expect(refused).toMatchObject({ code: 'KEY_PARAMS_REJECTED' })
     expect(derived).toBe(false)
   })

@@ -3,11 +3,13 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { rejectedUnlock } from './key-slots-fixture.js'
 import { setKeyLogger } from './key-log.js'
 import { openDatabase, rekeyHooks } from './db.js'
 import { KeyError } from './errors.js'
 import { keyFilePath, rekeyTempPaths } from './key-file.js'
-import { createProtectedRaceFile, keyHooks, normalUseAllowed, rewrapAdminSlot, unlockWithPassword, unlockWithRecovery } from './key-slots.js'
+import { rewrapAdminSlot } from './key-rewrap.js'
+import { createProtectedRaceFile, keyHooks, normalUseAllowed, unlockWithPassword, unlockWithRecovery } from './key-slots.js'
 import { rotateDataKey } from './key-rotate.js'
 import { devDataKey } from './key.js'
 
@@ -106,7 +108,9 @@ describe('data key rotation', () => {
     shown.fill(0)
     dek.fill(0)
   })
+})
 
+describe('other admin during rotation', () => {
   it('records the other admin when they set a password during rotation', async () => {
     const { file, db } = await createdFile()
     await rotateDataKey(db, { actingPassword: ADMIN_A, other: { kind: 'password', password: { password: 'other-admin-present-now', confirm: 'other-admin-present-now' } } })
@@ -117,7 +121,9 @@ describe('data key rotation', () => {
     expect(other.get('SELECT birth_year FROM person WHERE id = ?', 'p1')).toEqual({ birth_year: 2014 })
     other.raw.close()
   })
+})
 
+describe('interrupted rekey', () => {
   it('leaves the original pair usable when rekey of the copy is interrupted', async () => {
     const { file, db } = await createdFile()
     rekeyHooks.onPhase = (phase) => {
@@ -132,7 +138,9 @@ describe('data key rotation', () => {
     expect(fs.readFileSync(keyFilePath(file)).readUInt32BE(26)).toBe(1)
     opened.raw.close()
   })
+})
 
+describe('rename then stop', () => {
   it('attaches the new key file when rotation stops after the database rename', async () => {
     const { file, db } = await createdFile()
     rekeyHooks.afterDatabaseRename = () => {
@@ -148,7 +156,9 @@ describe('data key rotation', () => {
     expect(fs.existsSync(rekeyTempPaths(file).key)).toBe(false)
     opened.raw.close()
   })
+})
 
+describe('old key file', () => {
   it('does not attach an old key file to the rekeyed database', async () => {
     const { file, db } = await createdFile()
     const oldKey = fs.readFileSync(keyFilePath(file))
@@ -160,7 +170,7 @@ describe('data key rotation', () => {
     keyHooks.beforeAttach = () => {
       attached = true
     }
-    const error = await unlockWithPassword(file, ADMIN_A).then(() => null, (caught: unknown) => caught)
+    const error = await rejectedUnlock(file, ADMIN_A)
     expect(error).toBeInstanceOf(KeyError)
     expect((error as KeyError).code).toBe('UNLOCK_FAILED')
     expect(attached).toBe(false)

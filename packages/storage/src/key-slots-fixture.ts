@@ -10,7 +10,7 @@ import { keyFilePath } from './key-file.js'
 import { kdfHooks } from './key-kdf.js'
 import { setKeyLogger } from './key-log.js'
 import { keyRandom } from './key-random.js'
-import { createProtectedRaceFile, keyHooks } from './key-slots.js'
+import { createProtectedRaceFile, keyHooks, unlockWithPassword } from './key-slots.js'
 
 export const ADMIN_A = 'correct-horse-battery'
 export const ADMIN_B = 'staple-river-margin'
@@ -64,6 +64,10 @@ export function secretEncodings(secret: Buffer): Buffer[] {
 
 export function writeKey(file: string, bytes: Buffer): void {
   fs.writeFileSync(keyFilePath(file), bytes, { mode: 0o600 })
+}
+
+export function rejectedUnlock(file: string, password: string): Promise<unknown> {
+  return unlockWithPassword(file, password).then(() => null, (caught: unknown) => caught)
 }
 
 export async function openProtected(): Promise<{ dir: string; file: string; created: Awaited<ReturnType<typeof createProtectedRaceFile>> }> {
