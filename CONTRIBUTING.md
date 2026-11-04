@@ -28,7 +28,7 @@ pnpm test
 pnpm check:lean
 ```
 
-`nvm install` reads `.nvmrc`. `node --version` should print `v22.23.3`. `pnpm rebuild esbuild` installs the esbuild binary for this machine, which Vitest uses to load TypeScript. `pnpm check:lean` diffs against `origin/main` (`LEAN_BASE_REF`). Fetch that ref first. On a fork, fetch upstream `main`. `prepare` sets `core.hooksPath` to `.githooks`, and that pre-commit hook runs `pnpm lint` and `pnpm check:lean`.
+`nvm install` reads `.nvmrc`. `node --version` should print `v22.23.3`. `pnpm rebuild esbuild` installs the esbuild binary for this machine, which Vitest uses to load TypeScript. `pnpm check:lean` diffs against `origin/main` (`LEAN_BASE_REF`). Fetch that ref first. On a fork, fetch upstream `main`. `pnpm install` runs `prepare`, which sets `core.hooksPath` to `.githooks`. That pre-commit hook runs `pnpm lint` and `pnpm check:lean` and adds no dependencies. Opt out with `git config --unset core.hooksPath`.
 
 Run the developer server (port 8080, `./data`):
 
