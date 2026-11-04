@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import fs from 'node:fs'
 import path from 'node:path'
-import { atomicCopyFile, fsyncDirectory, secureRemove } from './atomic.js'
+import { atomicCopyFile, fsyncDirectory, fsyncFile, secureRemove } from './atomic.js'
 import { openEncrypted, restrictPermissions, type SqliteDatabase } from './cipher.js'
 import type { AppDb } from './db.js'
 import { RaceFileError } from './errors.js'
-import { backupPairComplete, ensureKeyFile, keyFilePath } from './key-file.js'
+import { backupPairComplete, ensureKeyFile, inspectKeyFile, keyFilePath } from './key-file.js'
 import { ensureFileId } from './schema.js'
 
-/** Test seam. Production never sets this. A throw stops the restore after that step. */
-export const restoreHooks: { crashAt?: 'prepared' | 'prev' | 'database' | 'keys' } = {}
+/** Test seam. Production never sets these. `crashAt` stops after a step and leaves the files. `failRename` throws once per listed rename, then continues. */
+export const restoreHooks: {
+  crashAt?: 'prepared' | 'prev' | 'database' | 'keys'
+  failRename?: Array<'prev-db' | 'prev-wal' | 'prev-shm' | 'prev-key' | 'place-db' | 'place-key' | 'back-db' | 'back-wal' | 'back-shm' | 'back-key'>
+} = {}
 
 interface RestoreSet {
   dest: string
@@ -53,9 +56,24 @@ function fsyncParent(file: string): void {
   fsyncDirectory(path.dirname(file))
 }
 
-function moveAside(from: string, to: string): void {
-  if (!exists(from) || exists(to)) return
+function throwIo(): never {
+  const error = new Error('EIO') as NodeJS.ErrnoException
+  error.code = 'EIO'
+  throw error
+}
+
+function renameStep(step: NonNullable<typeof restoreHooks.failRename>[number], from: string, to: string): void {
+  const plan = restoreHooks.failRename
+  if (plan?.[0] === step) {
+    plan.shift()
+    throwIo()
+  }
   fs.renameSync(from, to)
+}
+
+function moveAside(step: NonNullable<typeof restoreHooks.failRename>[number], from: string, to: string): void {
+  if (!exists(from) || exists(to)) return
+  renameStep(step, from, to)
 }
 
 function secureEach(files: readonly string[]): void {
@@ -64,10 +82,10 @@ function secureEach(files: readonly string[]): void {
 
 /** The previous pair stays on disk until the prepared pair has replaced it. */
 function moveCurrentToPrev(set: RestoreSet): void {
-  moveAside(set.dest, set.prev)
-  moveAside(set.wal, set.prevWal)
-  moveAside(set.shm, set.prevShm)
-  moveAside(set.key, set.prevKey)
+  moveAside('prev-db', set.dest, set.prev)
+  moveAside('prev-wal', set.wal, set.prevWal)
+  moveAside('prev-shm', set.shm, set.prevShm)
+  moveAside('prev-key', set.key, set.prevKey)
   fsyncParent(set.dest)
 }
 
@@ -76,8 +94,20 @@ function deletePrev(set: RestoreSet): void {
   fsyncParent(set.dest)
 }
 
+function readyMarker(set: RestoreSet): string {
+  return `${set.restore}.ready`
+}
+
 function deletePrepared(set: RestoreSet): void {
-  secureEach([set.restore, set.restoreKey, `${set.restore}-wal`, `${set.restore}-shm`])
+  secureEach([set.restore, set.restoreKey, `${set.restore}-wal`, `${set.restore}-shm`, readyMarker(set)])
+}
+
+/** Drop a prepared copy that never finished anonymisation. Do not open it. */
+function discardUnready(set: RestoreSet): void {
+  const files = [set.restore, set.restoreKey, `${set.restore}-wal`, `${set.restore}-shm`, readyMarker(set)]
+  if (!files.some(exists)) return
+  secureEach(files)
+  console.warn('Discarded an incomplete restore')
 }
 
 function prevFiles(set: RestoreSet): string[] {
@@ -88,12 +118,25 @@ function preparedFiles(set: RestoreSet): string[] {
   return [set.restore, set.restoreKey]
 }
 
+function keyReady(keyPath: string): boolean {
+  const info = inspectKeyFile(keyPath)
+  return info.kind === 'stub' || info.kind === 'envelope'
+}
+
+function prevPairReady(set: RestoreSet): boolean {
+  return exists(set.prev) && keyReady(set.prevKey)
+}
+
+function livePairReady(set: RestoreSet): boolean {
+  return exists(set.dest) && keyReady(set.key)
+}
+
 /** Finish a commit. Does not simulate crashes. */
 function swapInPrepared(set: RestoreSet): void {
   moveCurrentToPrev(set)
-  if (exists(set.restore)) fs.renameSync(set.restore, set.dest)
+  if (exists(set.restore)) renameStep('place-db', set.restore, set.dest)
   fsyncParent(set.dest)
-  if (exists(set.restoreKey)) fs.renameSync(set.restoreKey, set.key)
+  if (exists(set.restoreKey)) renameStep('place-key', set.restoreKey, set.key)
   fsyncParent(set.dest)
   deletePrev(set)
   deletePrepared(set)
@@ -102,40 +145,50 @@ function swapInPrepared(set: RestoreSet): void {
 function rollBackPrev(set: RestoreSet): void {
   if (exists(set.dest) && exists(set.prev)) secureRemove(set.dest)
   if (exists(set.key) && exists(set.prevKey)) secureRemove(set.key)
-  moveAside(set.prev, set.dest)
-  moveAside(set.prevWal, set.wal)
-  moveAside(set.prevShm, set.shm)
-  moveAside(set.prevKey, set.key)
+  moveAside('back-db', set.prev, set.dest)
+  moveAside('back-wal', set.prevWal, set.wal)
+  moveAside('back-shm', set.prevShm, set.shm)
+  moveAside('back-key', set.prevKey, set.key)
   deletePrepared(set)
   fsyncParent(set.dest)
 }
 
-function destinationOccupied(set: RestoreSet): boolean {
-  return [set.dest, set.key, set.wal, set.shm].some(exists)
+function markedReady(set: RestoreSet): boolean {
+  return exists(readyMarker(set))
 }
 
-/** The commit has not started. Keep an existing destination and drop the prepared copy. */
+function canFinish(set: RestoreSet): boolean {
+  if (!markedReady(set)) return false
+  if (exists(set.restore) && keyReady(set.restoreKey)) return true
+  return exists(set.dest) && keyReady(set.restoreKey)
+}
+
+/** The commit has not started. Commit a prepared copy only after anonymisation marked it ready. */
 function recoverBeforeCommit(set: RestoreSet): void {
-  if (destinationOccupied(set) || !backupPairComplete(set.restore)) {
-    deletePrepared(set)
+  if (!canFinish(set)) {
+    discardUnready(set)
     return
   }
   swapInPrepared(set)
 }
 
 /** The commit has started. Finish the new pair, or put the previous pair back. */
-function recoverDuringCommit(set: RestoreSet): void {
-  if (backupPairComplete(set.dest)) {
+function recoverDuringCommit(set: RestoreSet): 'live' | 'back' {
+  if (livePairReady(set)) {
     deletePrev(set)
     deletePrepared(set)
-    return
+    return 'live'
   }
-  const keyLeft = exists(set.dest) && exists(set.restoreKey)
-  if (backupPairComplete(set.restore) || keyLeft) {
+  if (canFinish(set)) {
     swapInPrepared(set)
-    return
+    return 'live'
   }
-  if (backupPairComplete(set.prev)) rollBackPrev(set)
+  if (prevPairReady(set)) {
+    rollBackPrev(set)
+    return 'back'
+  }
+  discardUnready(set)
+  return 'back'
 }
 
 /**
@@ -210,11 +263,15 @@ export async function backupDatabase(db: AppDb, dest: string): Promise<void> {
 
 /**
  * Restore a complete pair onto dest.
- * Preparation writes `.restore` files and runs `beforeOpen` there. The commit then moves the
- * current database, `-wal`, `-shm` and key file to `.prev`, renames the prepared pair into
- * place, and deletes `.prev` last. The old journal is not removed before the new files land.
+ * Preparation writes `.restore` files and runs `beforeOpen` there. That callback must close
+ * the prepared database before it returns. A ready marker is written and fsynced only after
+ * that return. The commit then moves the current database, `-wal`, `-shm` and key file to
+ * `.prev`, renames the prepared pair into place, and deletes `.prev` last. The old journal
+ * is not removed before the new files land. Startup commits a prepared pair only when the
+ * marker is present. Otherwise those prepared files are discarded without being opened.
  * The caller must close any handle on `destDatabase` before this runs. An open handle keeps
- * the previous inode. A throw before the commit leaves that file untouched.
+ * the previous inode. A throw before the commit leaves that file untouched. A rename error
+ * after the commit has started finishes the swap or puts the previous pair back.
  */
 export async function restoreBackupPair(
   databaseBackup: string,
@@ -228,20 +285,51 @@ export async function restoreBackupPair(
     await beforeOpen(set.restore)
     secureEach([`${set.restore}-wal`, `${set.restore}-shm`])
     crash('prepared')
+    markRestoreReady(set)
     moveCurrentToPrev(set)
     crash('prev')
-    if (exists(set.restore)) fs.renameSync(set.restore, set.dest)
+    if (exists(set.restore)) renameStep('place-db', set.restore, set.dest)
     fsyncParent(set.dest)
     crash('database')
-    if (exists(set.restoreKey)) fs.renameSync(set.restoreKey, set.key)
+    if (exists(set.restoreKey)) renameStep('place-key', set.restoreKey, set.key)
     fsyncParent(set.dest)
     crash('keys')
     deletePrev(set)
   } catch (error) {
-    if (!restoreHooks.crashAt) deletePrepared(set)
+    if (restoreHooks.crashAt) throw error
+    if (!prevFiles(set).some(exists)) {
+      deletePrepared(set)
+      throw error
+    }
+    const outcome = settleCommit(set)
+    if (outcome === 'live') return true
     throw error
   }
   return true
+}
+
+/** Written only after anonymisation has returned and that database is closed. */
+function markRestoreReady(set: RestoreSet): void {
+  const marker = readyMarker(set)
+  fs.writeFileSync(marker, '1', { mode: 0o600 })
+  fsyncFile(marker)
+  fsyncParent(set.dest)
+}
+
+function settleCommit(set: RestoreSet): 'live' | 'back' {
+  try {
+    const outcome = recoverDuringCommit(set)
+    if (outcome === 'live') return 'live'
+  } catch {
+    // The retry failed. Put the previous pair back.
+  }
+  try {
+    if (prevPairReady(set)) rollBackPrev(set)
+    else discardUnready(set)
+  } catch {
+    return 'back'
+  }
+  return 'back'
 }
 
 export function assertBackupIntegrity(file: string, dataKey: Buffer): void {

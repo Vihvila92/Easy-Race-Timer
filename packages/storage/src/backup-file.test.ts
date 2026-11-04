@@ -2,7 +2,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { backupDatabase, recoverRestore, restoreBackupPair, restoreHooks } from './backup-file.js'
 import { BACKUP_KEEP_RECENT, pruneBackups } from './backup-prune.js'
 import { openDatabase } from './db.js'
@@ -19,6 +19,7 @@ function tempDir(): string {
 
 afterEach(() => {
   restoreHooks.crashAt = undefined
+  restoreHooks.failRename = undefined
   for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true })
 })
 
@@ -60,6 +61,8 @@ it('drops a prepared copy when the crash is before the previous pair moves', asy
 
 it('keeps the old journal until the new pair is in place', async () => {
   const { restored, backupBytes, backupKey } = await crashAt('prev')
+  const marker = path.join(path.dirname(restored), `.${path.basename(restored)}.restore.ready`)
+  expect(fs.existsSync(marker)).toBe(true)
   expect(fs.existsSync(restored)).toBe(false)
   expect(fs.existsSync(`${restored}-wal`)).toBe(false)
   expect(fs.readFileSync(`${restored}.prev`, 'utf8')).toBe('old-db')
@@ -156,6 +159,145 @@ it('does not let incomplete copies fill the recent window', () => {
   pruneBackups(dir, 12, now)
   expect(fs.existsSync(kept)).toBe(true)
   expect(fs.existsSync(keyFilePath(kept))).toBe(true)
+})
+
+function insertEvent(db: { run: (sql: string, name: string) => unknown }, name: string): void {
+  db.run(
+    `INSERT INTO event (id, org_id, name, date_start, timezone, sport, settings_json, created_at, updated_at, hlc)
+     VALUES ('EV', 'local', ?, '2027-06-12', 'Europe/Helsinki', 'run', '{}', 1, 1, '1')`,
+    name,
+  )
+}
+
+async function eventName(file: string): Promise<string | undefined> {
+  const db = await openDatabase(file)
+  try {
+    return db.get<{ name: string }>('SELECT name FROM event')?.name
+  } finally {
+    db.raw.close()
+  }
+}
+
+async function liveAndBackup(): Promise<{ dest: string; backup: string }> {
+  const dir = tempDir()
+  const dest = path.join(dir, 'ert.sqlite')
+  const source = path.join(dir, 'source.sqlite')
+  const live = await openDatabase(dest)
+  insertEvent(live, 'Original')
+  live.raw.close()
+  const incoming = await openDatabase(source)
+  insertEvent(incoming, 'Incoming')
+  const backup = path.join(dir, 'backup.sqlite')
+  await backupDatabase(incoming, backup)
+  incoming.raw.close()
+  return { dest, backup }
+}
+
+function plantJournals(dest: string): void {
+  if (!fs.existsSync(`${dest}-wal`)) fs.writeFileSync(`${dest}-wal`, 'wal')
+  if (!fs.existsSync(`${dest}-shm`)) fs.writeFileSync(`${dest}-shm`, 'shm')
+}
+
+function restoreLeftovers(dest: string): boolean {
+  return fs.readdirSync(path.dirname(dest)).some((name) => name.includes('.restore') || name.includes('.prev'))
+}
+
+async function expectPair(dest: string, name: string): Promise<void> {
+  expect(await eventName(dest)).toBe(name)
+  expect(restoreLeftovers(dest)).toBe(false)
+}
+
+const FORWARD = ['prev-db', 'prev-wal', 'prev-shm', 'prev-key', 'place-db', 'place-key'] as const
+
+it('survives a thrown error at each rename', async () => {
+  for (const step of FORWARD) {
+    const { dest, backup } = await liveAndBackup()
+    if (step !== 'prev-db') plantJournals(dest)
+    restoreHooks.failRename = [step]
+    const committed = step !== 'prev-db'
+    if (committed) expect(await restoreBackupPair(backup, dest, () => {})).toBe(true)
+    else await expect(restoreBackupPair(backup, dest, () => {})).rejects.toThrow('EIO')
+    await expectPair(dest, committed ? 'Incoming' : 'Original')
+    expect(restoreHooks.failRename ?? []).toEqual([])
+  }
+})
+
+it('restores the previous pair when the database rename keeps failing', async () => {
+  const { dest, backup } = await liveAndBackup()
+  restoreHooks.failRename = ['place-db', 'place-db']
+  await expect(restoreBackupPair(backup, dest, () => {})).rejects.toThrow('EIO')
+  await expectPair(dest, 'Original')
+})
+
+it('opens the previous pair before creating a database', async () => {
+  const { dest } = await liveAndBackup()
+  fs.renameSync(dest, `${dest}.prev`)
+  fs.renameSync(keyFilePath(dest), `${keyFilePath(dest)}.prev`)
+  for (const suffix of ['-wal', '-shm'] as const) {
+    if (fs.existsSync(`${dest}${suffix}`)) fs.renameSync(`${dest}${suffix}`, `${dest}${suffix}.prev`)
+  }
+  expect(fs.existsSync(dest)).toBe(false)
+  expect(await eventName(dest)).toBe('Original')
+  expect(fs.existsSync(`${dest}.prev`)).toBe(false)
+})
+
+const BACK = ['back-db', 'back-wal', 'back-shm', 'back-key'] as const
+
+it('keeps both copies when rolling back throws', async () => {
+  for (const step of BACK) {
+    const { dest, backup } = await liveAndBackup()
+    plantJournals(dest)
+    restoreHooks.failRename = ['place-db', 'place-db', step]
+    await expect(restoreBackupPair(backup, dest, () => {})).rejects.toThrow('EIO')
+    const names = fs.readdirSync(path.dirname(dest))
+    expect(names.some((name) => name.includes('.prev'))).toBe(true)
+    expect(names.some((name) => name.includes('.restore'))).toBe(true)
+    restoreHooks.failRename = undefined
+    await expectPair(dest, 'Incoming')
+  }
+})
+
+it('leaves the destination when anonymisation throws', async () => {
+  const { dest, backup } = await liveAndBackup()
+  await expect(restoreBackupPair(backup, dest, () => {
+    throw new Error('stopped')
+  })).rejects.toThrow('stopped')
+  await expectPair(dest, 'Original')
+})
+
+it('drops a copy that died during anonymisation before the next open', async () => {
+  const dir = tempDir()
+  const source = path.join(dir, 'source.sqlite')
+  const db = await openDatabase(source)
+  db.run(`INSERT INTO person (id, first_name, last_name, gender, birth_year, publication, created_at, updated_at, hlc)
+    VALUES ('p1', 'Secret', 'Name', 'F', 1990, 'full', 1, 1, '1')`)
+  const backup = path.join(dir, 'backup.sqlite')
+  await backupDatabase(db, backup)
+  db.raw.close()
+  const dest = path.join(dir, 'ert.sqlite')
+  restoreHooks.crashAt = 'prepared'
+  await expect(restoreBackupPair(backup, dest, async (prepared) => {
+    const opened = await openDatabase(prepared)
+    const row = opened.get<{ first_name: string }>('SELECT first_name FROM person')
+    opened.raw.close()
+    if (row?.first_name !== 'Secret') throw new Error('fixture')
+    throw new Error('killed')
+  })).rejects.toThrow('killed')
+  expect(fs.existsSync(dest)).toBe(false)
+  expect(fs.existsSync(path.join(dir, '.ert.sqlite.restore.ready'))).toBe(false)
+  restoreHooks.crashAt = undefined
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  try {
+    const opened = await openDatabase(dest)
+    const row = opened.get<{ first_name: string }>('SELECT first_name FROM person')
+    opened.raw.close()
+    expect(row).toBeUndefined()
+    expect(warn).toHaveBeenCalledWith('Discarded an incomplete restore')
+    expect(warn.mock.calls.flat().join(' ')).not.toContain('Secret')
+  } finally {
+    warn.mockRestore()
+  }
+  expect(fs.readdirSync(dir).some((name) => name.includes('.restore'))).toBe(false)
 })
 
 it('keeps the newest complete sqlite pair after the retention period', () => {
