@@ -145,10 +145,6 @@ function keyReady(keyPath: string): boolean {
   return info.kind === 'stub' || info.kind === 'envelope'
 }
 
-function prevPairReady(set: RestoreSet): boolean {
-  return exists(set.prev) && keyReady(set.prevKey)
-}
-
 function livePairReady(set: RestoreSet): boolean {
   return exists(set.dest) && keyReady(set.key)
 }
@@ -164,13 +160,18 @@ function swapInPrepared(set: RestoreSet): void {
   deletePrepared(set)
 }
 
+/** Put one aside file back on the path its live counterpart uses. */
+function putBack(step: NonNullable<typeof restoreHooks.failRename>[number], from: string, to: string): void {
+  if (!exists(from)) return
+  if (exists(to)) secureRemove(to)
+  renameStep(step, from, to)
+}
+
 function rollBackPrev(set: RestoreSet): void {
-  if (exists(set.dest) && exists(set.prev)) secureRemove(set.dest)
-  if (exists(set.key) && exists(set.prevKey)) secureRemove(set.key)
-  moveAside('back-db', set.prev, set.dest)
-  moveAside('back-wal', set.prevWal, set.wal)
-  moveAside('back-shm', set.prevShm, set.shm)
-  moveAside('back-key', set.prevKey, set.key)
+  putBack('back-db', set.prev, set.dest)
+  putBack('back-wal', set.prevWal, set.wal)
+  putBack('back-shm', set.prevShm, set.shm)
+  putBack('back-key', set.prevKey, set.key)
   deletePrepared(set)
   fsyncParent(set.dest)
 }
@@ -201,7 +202,7 @@ function recoverDuringCommit(set: RestoreSet): 'live' | 'back' {
     swapInPrepared(set)
     return 'live'
   }
-  if (prevPairReady(set)) {
+  if (prevFiles(set).some(exists)) {
     rollBackPrev(set)
     return 'back'
   }
@@ -220,6 +221,7 @@ export function recoverRestore(dest: string): void {
   if (!started && !prepared) return
   if (!started) recoverBeforeCommit(set)
   else recoverDuringCommit(set)
+  if (!exists(set.dest) && prevFiles(set).some(exists)) throw new Error('Restore failed')
 }
 
 /**
@@ -291,7 +293,8 @@ export async function backupDatabase(db: AppDb, dest: string): Promise<void> {
  * without being opened.
  * The caller must close any handle on `destDatabase` before this runs. An open handle keeps
  * the previous inode. A throw before the commit leaves that file untouched. A rename error
- * after the commit has started finishes the swap or puts the previous pair back.
+ * after the commit has started finishes the swap or puts every aside file back. A new
+ * database is not created while an aside file remains.
  */
 export async function restoreBackupPair(
   databaseBackup: string,
@@ -346,7 +349,7 @@ function settleCommit(set: RestoreSet): 'live' | 'back' {
     // The retry failed. Put the previous pair back.
   }
   try {
-    if (prevPairReady(set)) rollBackPrev(set)
+    if (prevFiles(set).some(exists)) rollBackPrev(set)
     else discardUnready(set)
   } catch {
     return 'back'

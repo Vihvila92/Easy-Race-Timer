@@ -179,13 +179,25 @@ async function eventName(file: string): Promise<string | undefined> {
   }
 }
 
+function keepJournals(file: string, saved: ReadonlyMap<string, Buffer>): void {
+  for (const [suffix, bytes] of saved) {
+    if (!fs.existsSync(`${file}${suffix}`)) fs.writeFileSync(`${file}${suffix}`, bytes)
+  }
+}
+
 async function liveAndBackup(): Promise<{ dest: string; backup: string }> {
   const dir = tempDir()
   const dest = path.join(dir, 'ert.sqlite')
   const source = path.join(dir, 'source.sqlite')
   const live = await openDatabase(dest)
+  live.raw.pragma('wal_autocheckpoint = 0')
   insertEvent(live, 'Original')
+  const journals = new Map<string, Buffer>()
+  for (const suffix of ['-wal', '-shm']) {
+    if (fs.existsSync(`${dest}${suffix}`)) journals.set(suffix, fs.readFileSync(`${dest}${suffix}`))
+  }
   live.raw.close()
+  keepJournals(dest, journals)
   const incoming = await openDatabase(source)
   insertEvent(incoming, 'Incoming')
   const backup = path.join(dir, 'backup.sqlite')
@@ -220,6 +232,19 @@ it('survives a thrown error at each rename', async () => {
     else await expect(restoreBackupPair(backup, dest, () => {})).rejects.toThrow('EIO')
     await expectPair(dest, committed ? 'Incoming' : 'Original')
     expect(restoreHooks.failRename ?? []).toEqual([])
+  }
+})
+
+const ASIDE = ['prev-db', 'prev-wal', 'prev-shm', 'prev-key'] as const
+
+it('puts the previous pair back when moving it aside keeps failing', async () => {
+  for (const step of ASIDE) {
+    const { dest, backup } = await liveAndBackup()
+    restoreHooks.failRename = Array.from({ length: 8 }, () => step)
+    await expect(restoreBackupPair(backup, dest, () => {})).rejects.toThrow('EIO')
+    expect(fs.existsSync(dest)).toBe(true)
+    expect(fs.existsSync(keyFilePath(dest))).toBe(true)
+    await expectPair(dest, 'Original')
   }
 })
 
