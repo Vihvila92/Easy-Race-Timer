@@ -2,8 +2,7 @@
 import { Writable } from 'node:stream'
 import pino from 'pino'
 import { describe, expect, it } from 'vitest'
-import { redactCrash } from '@ert/storage'
-import { productionLoggerOptions } from './app.js'
+import { pinoRedactPaths, redactCrash } from '@ert/storage'
 
 describe('key log redaction', () => {
   it('drops password, recovery key and data key fields from pino and the crash serializer', async () => {
@@ -14,7 +13,7 @@ describe('key log redaction', () => {
         callback()
       },
     })
-    const log = pino(productionLoggerOptions(), stream)
+    const log = pino({ level: 'info', redact: { paths: pinoRedactPaths(), censor: '[Redacted]' } }, stream)
     const canary = 'canary-horse-battery-staple'
     const printed = 'XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-CCCC'
     log.info({ password: canary, nested: { recoveryKey: printed, dek: 'secret-dek' } }, 'unlock failed')

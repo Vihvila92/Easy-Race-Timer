@@ -8,7 +8,7 @@ import rateLimit from '@fastify/rate-limit'
 import fastifyStatic from '@fastify/static'
 import websocket from '@fastify/websocket'
 import { AppError, errorBody, resultProjection } from '@ert/core'
-import { AppDb, pinoRedactPaths, plaintextQuarantinePending } from '@ert/storage'
+import { AppDb, plaintextQuarantinePending } from '@ert/storage'
 import { isLoopbackAddress, routeAccess } from './access.js'
 import { allowedOriginsFromEnv, desktopHostAllowed, desktopOriginAllowed, hostAllowed, jsonContentType, originAllowed } from './guard.js'
 import { launchCookie, launchCredentialMatches, redactRequestUrl, type LaunchCodes } from './launch-auth.js'
@@ -48,18 +48,6 @@ export interface AppOptions {
   logStream?: NodeJS.WritableStream
 }
 
-export function productionLoggerOptions() {
-  return {
-    level: 'info' as const,
-    redact: { paths: pinoRedactPaths(), censor: '[Redacted]' },
-    serializers: {
-      req(request: { method: string; url: string }) {
-        return { method: request.method, url: redactRequestUrl(request.url) }
-      },
-    },
-  }
-}
-
 export async function createApp(options: AppOptions): Promise<{ app: FastifyInstance; service: RaceService; clock: Clock; discovered: DiscoveredRoute[] }> {
   const clock = new Clock()
   const service = new RaceService(options.db, clock)
@@ -68,7 +56,15 @@ export async function createApp(options: AppOptions): Promise<{ app: FastifyInst
   const app = Fastify({
     logger: options.testMode && !options.logStream
       ? false
-      : { ...productionLoggerOptions(), stream: options.logStream },
+      : {
+          level: 'info',
+          stream: options.logStream,
+          serializers: {
+            req(request: { method: string; url: string }) {
+              return { method: request.method, url: redactRequestUrl(request.url) }
+            },
+          },
+        },
   })
   // Helmet's default policy would add upgrade-insecure-requests. This server is
   // plain HTTP on loopback, so that directive would break the UI and the API.

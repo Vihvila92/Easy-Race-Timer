@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { Button, HintFrame, TextField } from './ui/components.js'
+import { useEffect, useState } from 'react'
+import type { MessageKey } from '@ert/i18n'
+import { Button } from './ui/components.js'
 import { useApp } from './context.js'
 
-/** Plain-language recovery guide. It is on setup, the print view, and About. */
+/** Plain-language recovery guide. Shown with the printed recovery key. */
 export function RecoveryGuide() {
   const { t } = useApp()
   return (
@@ -30,7 +32,20 @@ export type UnlockNotice =
   | 'temporary'
   | 'rotated'
 
-/** Locked screen. One password field. The recovery path is a separate control. */
+const NOTICE_KEYS: Record<UnlockNotice, MessageKey> = {
+  failed: 'unlock.failed',
+  wait: 'unlock.wait',
+  checksum: 'unlock.recoveryChecksum',
+  params: 'unlock.paramsRejected',
+  header: 'unlock.headerInvalid',
+  'new-admin': 'unlock.newAdminPassword',
+  'old-copies': 'keys.oldCopies',
+  'single-admin': 'keys.singleAdmin',
+  temporary: 'keys.temporaryPassword',
+  rotated: 'keys.rotateLeftover',
+}
+
+/** The recovery key is rendered only while this print view is on screen. */
 export function UnlockPanel({
   mode,
   notice,
@@ -41,49 +56,26 @@ export function UnlockPanel({
   recoveryKey?: string
 }) {
   const { t } = useApp()
-  const noticeKey = notice === 'failed'
-    ? 'unlock.failed'
-    : notice === 'wait'
-      ? 'unlock.wait'
-      : notice === 'checksum'
-        ? 'unlock.recoveryChecksum'
-        : notice === 'params'
-          ? 'unlock.paramsRejected'
-          : notice === 'header'
-            ? 'unlock.headerInvalid'
-            : notice === 'new-admin'
-              ? 'unlock.newAdminPassword'
-              : notice === 'old-copies'
-                ? 'keys.oldCopies'
-                : notice === 'single-admin'
-                  ? 'keys.singleAdmin'
-                  : notice === 'temporary'
-                    ? 'keys.temporaryPassword'
-                    : notice === 'rotated'
-                      ? 'keys.rotateLeftover'
-                      : null
+  const [printed, setPrinted] = useState(mode === 'print' ? recoveryKey ?? '' : '')
+  useEffect(() => {
+    if (mode !== 'print') return undefined
+    const clear = () => setPrinted('')
+    window.addEventListener('afterprint', clear)
+    return () => {
+      window.removeEventListener('afterprint', clear)
+      clear()
+    }
+  }, [mode])
+  const noticeKey = notice ? NOTICE_KEYS[notice] : undefined
   return (
     <section data-testid="unlock-panel">
       {mode === 'print' ? (
         <>
-          {recoveryKey ? <p data-testid="recovery-groups">{recoveryKey}</p> : null}
+          {printed ? <p data-testid="recovery-groups">{printed}</p> : null}
           <RecoveryGuide />
-          {noticeKey ? <p role="alert" data-testid="unlock-notice">{t(noticeKey)}</p> : null}
         </>
-      ) : (
-        <HintFrame hintKey={mode === 'recovery' ? 'unlock.hint.recovery' : 'unlock.hint.password'} testId="unlock-hint">
-          {mode === 'recovery' ? (
-            <TextField id="recovery-key" label={t('unlock.recoveryKey')} value="" onChange={() => undefined} testId="recovery-key" autoComplete="off" />
-          ) : (
-            <TextField id="unlock-password" label={t('unlock.password')} type="password" value="" onChange={() => undefined} testId="unlock-password" autoComplete="current-password" />
-          )}
-          {noticeKey ? <p role="alert" data-testid="unlock-notice">{t(noticeKey)}</p> : null}
-          <div className="ui-actions">
-            <Button data-testid="unlock-open">{t('unlock.open')}</Button>
-            {mode === 'password' ? <Button variant="secondary" data-testid="unlock-recovery">{t('unlock.useRecovery')}</Button> : null}
-          </div>
-        </HintFrame>
-      )}
+      ) : null}
+      {noticeKey ? <p role="alert" data-testid="unlock-notice">{t(noticeKey)}</p> : null}
     </section>
   )
 }
