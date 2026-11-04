@@ -31,7 +31,13 @@ RUN if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then \
         patchelf \
         libfuse2 \
     && rm -rf /var/lib/apt/lists/* \
-    && useradd --create-home --shell /bin/bash --uid 1000 dev
+    && if id ubuntu >/dev/null 2>&1; then \
+         usermod -l dev -d /home/dev -m ubuntu \
+         && groupmod -n dev ubuntu \
+         && usermod -s /bin/bash dev; \
+       elif ! id dev >/dev/null 2>&1; then \
+         useradd --create-home --shell /bin/bash --uid 1000 dev; \
+       fi
 
 # Checksums are the linux rows in scripts/sidecar-plan.ts.
 ARG NODE_VERSION=22.23.3
