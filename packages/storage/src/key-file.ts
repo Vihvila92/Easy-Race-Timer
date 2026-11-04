@@ -103,6 +103,17 @@ export function writeKeyStub(keyPath: string, fileIdHex: string): void {
   writePrivateBytes(keyPath, encodeKeyStub(fileIdHex))
 }
 
+const keyWrites = new Map<string, Promise<void>>()
+
+/** One writer at a time for a key file, including across awaits. */
+export function withKeyFileLock<T>(keyPath: string, fn: () => Promise<T>): Promise<T> {
+  const previous = keyWrites.get(keyPath) ?? Promise.resolve()
+  const run = previous.then(fn, fn)
+  const settled = run.then(() => undefined, () => undefined)
+  keyWrites.set(keyPath, settled)
+  return run
+}
+
 /**
  * Create the stub when the companion is missing or truncated and is not an ERTK file.
  * Leave a matching stub or a complete ERTK envelope in place. #131 owns that format.

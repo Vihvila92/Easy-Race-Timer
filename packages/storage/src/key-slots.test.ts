@@ -1,97 +1,21 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { createHash, randomBytes } from 'node:crypto'
+import { randomBytes } from 'node:crypto'
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
+import { initializeEncryptedFile } from './db.js'
 import { KeyError } from './errors.js'
 import { backoffClock } from './key-backoff.js'
-import { initializeEncryptedFile } from './db.js'
 import { openSlot, parseEnvelope, SLOT_OFFSETS } from './key-envelope.js'
 import { keyFilePath } from './key-file.js'
 import { BASELINE_ARGON, deriveAdminKek, formatRecoveryKey, kdfHooks, normalizeRecoveryText, parseRecoveryKey, passwordBytes, utf8Password } from './key-kdf.js'
-import { redactCrash, setKeyLogger } from './key-log.js'
+import { redactCrash } from './key-log.js'
 import { keyRandom } from './key-random.js'
-import {
-  createProtectedRaceFile,
-  keyHooks,
-  normalUseAllowed,
-  regenerateRecoveryKey,
-  rewrapAdminSlot,
-  sealEnvelope,
-  unlockWithPassword,
-  unlockWithRecovery,
-} from './key-slots.js'
+import { ADMIN_A, ADMIN_B, bodyHash, clonePair, contains, installSlotHooks, logs, openProtected, originalBytes, secretEncodings, slotBytes, tempDir, writeKey } from './key-slots-fixture.js'
+import { regenerateRecoveryKey, rewrapAdminSlot } from './key-rewrap.js'
+import { createProtectedRaceFile, keyHooks, normalUseAllowed, sealEnvelope, unlockWithPassword, unlockWithRecovery } from './key-slots.js'
 
-const ADMIN_A = 'correct-horse-battery'
-const ADMIN_B = 'staple-river-margin'
-const dirs: string[] = []
-const originalBytes = keyRandom.bytes
-const logs: string[] = []
-
-function tempDir(): string {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ert-slots-'))
-  dirs.push(dir)
-  return dir
-}
-
-function clonePair(file: string): string {
-  const dir = tempDir()
-  const dest = path.join(dir, path.basename(file))
-  fs.copyFileSync(file, dest)
-  fs.copyFileSync(keyFilePath(file), keyFilePath(dest))
-  return dest
-}
-
-function slotBytes(file: string, index: number): Buffer {
-  const bytes = fs.readFileSync(keyFilePath(file))
-  const offset = SLOT_OFFSETS[index]!
-  return Buffer.from(bytes.subarray(offset, offset + 96))
-}
-
-function bodyHash(file: string): string {
-  return createHash('sha256').update(fs.readFileSync(file)).digest('hex')
-}
-
-function contains(directory: string, needle: Buffer): boolean {
-  if (needle.length < 8) return false
-  for (const name of fs.readdirSync(directory)) {
-    const full = path.join(directory, name)
-    const stat = fs.statSync(full)
-    if (stat.isDirectory()) {
-      if (contains(full, needle)) return true
-      continue
-    }
-    if (!stat.isFile()) continue
-    if (fs.readFileSync(full).includes(needle)) return true
-  }
-  return false
-}
-
-function secretEncodings(secret: Buffer): Buffer[] {
-  const hex = secret.toString('hex')
-  return [Buffer.from(secret), Buffer.from(hex), Buffer.from(hex.toUpperCase()), Buffer.from(secret.toString('base64')), Buffer.from(secret.toString('base64url'))]
-}
-
-beforeEach(() => {
-  setKeyLogger((event, fields) => {
-    logs.push(fields.failureCount === undefined ? event : `${event} ${fields.failureCount}`)
-  })
-})
-
-afterEach(() => {
-  keyRandom.bytes = originalBytes
-  kdfHooks.onDerive = undefined
-  kdfHooks.onKek = undefined
-  kdfHooks.onHkdf = undefined
-  keyHooks.beforeAttach = undefined
-  backoffClock.now = () => Date.now()
-  setKeyLogger((event, fields) => {
-    logs.push(fields.failureCount === undefined ? event : `${event} ${fields.failureCount}`)
-  })
-  logs.length = 0
-  for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true })
-})
+installSlotHooks()
 
 describe('recovery key text', () => {
   it('accepts Crockford aliases and rejects a checksum typo before HKDF', () => {
@@ -136,7 +60,7 @@ describe('password policy', () => {
   })
 })
 
-describe('protected race file', () => {
+describe('either admin', () => {
   it('draws a fresh 32-byte data key and opens for either admin', async () => {
     const deks = [Buffer.alloc(32, 0x21), Buffer.alloc(32, 0x22)]
     let drawn = 0
@@ -178,11 +102,11 @@ describe('protected race file', () => {
     expect(JSON.stringify(keyError)).not.toContain('slot')
     expect(calls).toEqual([0, 1])
   })
+})
 
+describe('recovery gate', () => {
   it('opens with the recovery key, then requires a new admin password', async () => {
-    const dir = tempDir()
-    const file = path.join(dir, 'ert.sqlite')
-    const created = await createProtectedRaceFile(file, { password: ADMIN_A, confirm: ADMIN_A }, { password: ADMIN_B, confirm: ADMIN_B })
+    const { file, created } = await openProtected()
     const printed = created.recoveryKey.toString('ascii')
     created.db.raw.pragma('wal_checkpoint(TRUNCATE)')
     const before = slotBytes(file, 1)
@@ -195,11 +119,11 @@ describe('protected race file', () => {
     gated.raw.close()
     created.recoveryKey.fill(0)
   })
+})
 
+describe('one slot rewrap', () => {
   it('rewraps one slot, leaves the body and the other slot, and rejects an unauthenticated caller', async () => {
-    const dir = tempDir()
-    const file = path.join(dir, 'ert.sqlite')
-    const created = await createProtectedRaceFile(file, { password: ADMIN_A, confirm: ADMIN_A }, { password: ADMIN_B, confirm: ADMIN_B })
+    const { file, created } = await openProtected()
     created.db.run(`INSERT INTO person (id, first_name, last_name, gender, birth_year, publication, created_at, updated_at, hlc)
       VALUES ('p1', 'Aino', 'Testi', 'F', 2014, 'full', 1, 1, '1')`)
     created.db.raw.pragma('wal_checkpoint(TRUNCATE)')
@@ -226,11 +150,11 @@ describe('protected race file', () => {
     expect(old.get('SELECT birth_year FROM person WHERE id = ?', 'p1')).toEqual({ birth_year: 2014 })
     old.raw.close()
   })
+})
 
+describe('fresh nonce', () => {
   it('replaces the nonce even when the password bytes stay the same', async () => {
-    const dir = tempDir()
-    const file = path.join(dir, 'ert.sqlite')
-    const created = await createProtectedRaceFile(file, { password: ADMIN_A, confirm: ADMIN_A }, { password: ADMIN_B, confirm: ADMIN_B })
+    const { file, created } = await openProtected()
     const key = fs.readFileSync(keyFilePath(file))
     const existing = Buffer.from(key.subarray(SLOT_OFFSETS[0]! + 36, SLOT_OFFSETS[0]! + 48))
     let nonceDraws = 0
@@ -251,11 +175,11 @@ describe('protected race file', () => {
     expect(salts[0]).not.toBe(key.subarray(SLOT_OFFSETS[0]! + 20, SLOT_OFFSETS[0]! + 36).toString('hex'))
     created.db.raw.close()
   })
+})
 
+describe('tampered key file', () => {
   it('fails closed on a tampered header and refuses a downgraded slot before Argon2id', async () => {
-    const dir = tempDir()
-    const file = path.join(dir, 'ert.sqlite')
-    const created = await createProtectedRaceFile(file, { password: ADMIN_A, confirm: ADMIN_A }, { password: ADMIN_B, confirm: ADMIN_B })
+    const { file, created } = await openProtected()
     created.db.raw.pragma('wal_checkpoint(TRUNCATE)')
     created.db.raw.close()
     const original = fs.readFileSync(keyFilePath(file))
@@ -267,6 +191,7 @@ describe('protected race file', () => {
       { edit: (bytes) => { bytes[SLOT_OFFSETS[0]! + 20]! ^= 0xff }, code: 'UNLOCK_FAILED', derives: true },
       { edit: (bytes) => bytes.writeUInt8(9, SLOT_OFFSETS[0]! + 2), code: 'KEY_PARAMS_REJECTED', derives: false },
       { edit: (bytes) => bytes.writeUInt8(2, SLOT_OFFSETS[0]! + 1), code: 'KEY_PARAMS_REJECTED', derives: false },
+      { edit: (bytes) => bytes.writeUInt8(1, SLOT_OFFSETS[2]! + 1), code: 'KEY_PARAMS_REJECTED', derives: false },
       { edit: (bytes) => { bytes[8]! ^= 0xff }, code: 'UNLOCK_FAILED', derives: true },
       { edit: (bytes) => bytes.writeUInt32BE(8192, SLOT_OFFSETS[0]! + 4), code: 'KEY_PARAMS_REJECTED', derives: false },
       { edit: (bytes) => bytes.writeUInt32BE(2, SLOT_OFFSETS[0]! + 8), code: 'KEY_PARAMS_REJECTED', derives: false },
@@ -301,7 +226,9 @@ describe('protected race file', () => {
     expect(refused).toMatchObject({ code: 'KEY_PARAMS_REJECTED' })
     expect(derived).toBe(false)
   })
+})
 
+describe('stored memory cost', () => {
   it('derives a slot with its stored memory cost', async () => {
     const dir = tempDir()
     const file = path.join(dir, 'ert.sqlite')
@@ -341,11 +268,11 @@ describe('protected race file', () => {
     expect(() => openSlot(bytes, 0, kek)).toThrow(KeyError)
     kek.fill(0)
   })
+})
 
+describe('file id mismatch', () => {
   it('rejects a key file whose file id does not match the database', async () => {
-    const dir = tempDir()
-    const file = path.join(dir, 'ert.sqlite')
-    const created = await createProtectedRaceFile(file, { password: ADMIN_A, confirm: ADMIN_A }, { password: ADMIN_B, confirm: ADMIN_B })
+    const { file, created } = await openProtected()
     const dek = Buffer.from(created.db.dataKey!)
     const secret = parseRecoveryKey(created.recoveryKey.toString('ascii'))
     const first = utf8Password(ADMIN_A)
@@ -370,11 +297,11 @@ describe('protected race file', () => {
     await expect(unlockWithPassword(file, ADMIN_A)).rejects.toMatchObject({ code: 'UNLOCK_FAILED' })
     expect(attached).toBe(false)
   })
+})
 
+describe('unlock backoff', () => {
   it('counts checksum failures, backs off, and clears the counter after a success', async () => {
-    const dir = tempDir()
-    const file = path.join(dir, 'ert.sqlite')
-    const created = await createProtectedRaceFile(file, { password: ADMIN_A, confirm: ADMIN_A }, { password: ADMIN_B, confirm: ADMIN_B })
+    const { dir, file, created } = await openProtected()
     const printed = created.recoveryKey.toString('ascii')
     created.db.raw.close()
     let now = 10_000
@@ -399,7 +326,9 @@ describe('protected race file', () => {
     expect(cleared.failureCount).toBe(0)
     created.recoveryKey.fill(0)
   })
+})
 
+describe('secret zeroization', () => {
   it('zeroizes key buffers and keeps secrets out of the directory and the logs', async () => {
     const dir = tempDir()
     const file = path.join(dir, 'ert.sqlite')
@@ -439,7 +368,3 @@ describe('protected race file', () => {
     rawRecovery.fill(0)
   })
 })
-
-function writeKey(file: string, bytes: Buffer): void {
-  fs.writeFileSync(keyFilePath(file), bytes, { mode: 0o600 })
-}

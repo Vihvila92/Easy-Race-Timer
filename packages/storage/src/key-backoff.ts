@@ -51,32 +51,35 @@ function writeRecord(file: string, record: BackoffRecord): void {
   writePrivateBytes(file, body)
 }
 
+function tryAcquire(lock: string): boolean {
+  try {
+    fs.mkdirSync(lock)
+    return true
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+    return false
+  }
+}
+
+function lockIsStale(lock: string): boolean {
+  try {
+    return Date.now() - fs.statSync(lock).mtimeMs > 30_000
+  } catch {
+    return true
+  }
+}
+
 function acquire(directory: string): void {
   const lock = path.join(directory, 'unlock-backoff.lock')
   const deadline = Date.now() + 10_000
   for (;;) {
-    try {
-      fs.mkdirSync(lock)
-      return
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
-      let stale = false
-      try {
-        stale = Date.now() - fs.statSync(lock).mtimeMs > 30_000
-      } catch {
-        stale = true
-      }
-      if (stale) {
-        try {
-          fs.rmdirSync(lock)
-        } catch {
-          // Another attempt removed or replaced the lock.
-        }
-        continue
-      }
-      if (Date.now() > deadline) throw new KeyError('UNLOCK_FAILED')
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 15)
+    if (tryAcquire(lock)) return
+    if (lockIsStale(lock)) {
+      try { fs.rmdirSync(lock) } catch { /* Another attempt removed the lock. */ }
+      continue
     }
+    if (Date.now() > deadline) throw new KeyError('UNLOCK_FAILED')
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 15)
   }
 }
 

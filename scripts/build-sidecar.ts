@@ -11,17 +11,16 @@
 import { execFileSync } from 'node:child_process'
 import crypto from 'node:crypto'
 import fs from 'node:fs'
-import { createRequire } from 'node:module'
 import path from 'node:path'
 import { Readable } from 'node:stream'
 import { fileURLToPath } from 'node:url'
 import * as esbuild from 'esbuild'
+import { argonPlugin, assertFileArch, embed, readTree, rebuildSqlite, sidecarEntry, sqlitePlugin } from './sidecar-native.ts'
 import {
   NODE_TARBALLS,
   NODE_VERSION,
   SEA_FUSE,
   assertHostNode,
-  fileDescribesArch,
   lipoInfoHasBoth,
   nodeLaunchArgs,
   pnpmLaunch,
@@ -29,7 +28,6 @@ import {
 } from './sidecar-plan.ts'
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
-const nodeRequire = createRequire(import.meta.url)
 
 function run(command: string, args: string[]) {
   if (command === 'pnpm') {
@@ -48,55 +46,6 @@ function hostTriple(): string {
   return match[1]
 }
 
-function prebuildName(platform: string, arch: string): string {
-  if (platform === 'linux') {
-    const report = process.report?.getReport() as { header?: { glibcVersionRuntime?: string } } | undefined
-    const musl = !report?.header?.glibcVersionRuntime
-    return `${musl ? 'linuxmusl' : 'linux'}-${arch}.node`
-  }
-  if (platform === 'darwin' || platform === 'win32') return `${platform}-${arch}.node`
-  throw new Error(`No better-sqlite3-multiple-ciphers sidecar prebuild for ${platform}-${arch}`)
-}
-
-function readTree(dir: string, prefix: string, files: Record<string, Buffer>, accept: (rel: string) => boolean) {
-  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-    const full = path.join(dir, entry.name)
-    const rel = prefix ? `${prefix}/${entry.name}` : entry.name
-    if (entry.isDirectory()) readTree(full, rel, files, accept)
-    else if (entry.isFile() && accept(rel)) files[rel] = fs.readFileSync(full)
-  }
-}
-
-function embed(files: Record<string, Buffer>): { files: Record<string, string>; hashes: Record<string, string> } {
-  const encoded: Record<string, string> = {}
-  const hashes: Record<string, string> = {}
-  for (const [rel, bytes] of Object.entries(files)) {
-    encoded[rel] = bytes.toString('base64')
-    hashes[rel] = crypto.createHash('sha256').update(bytes).digest('hex')
-  }
-  return { files: encoded, hashes }
-}
-
-function sqlitePackageRoot(): string {
-  return path.dirname(nodeRequire.resolve('better-sqlite3-multiple-ciphers/package.json'))
-}
-
-function sqlitePayload(natives: { name: string; file: string }[]): { files: Record<string, string>; hashes: Record<string, string> } {
-  const pkgRoot = sqlitePackageRoot()
-  const files: Record<string, Buffer> = {}
-  readTree(path.join(pkgRoot, 'lib'), 'lib', files, (rel) => rel.endsWith('.js'))
-  for (const native of natives) {
-    if (!fs.existsSync(native.file)) throw new Error(`Missing better-sqlite3-multiple-ciphers build ${native.file}`)
-    files[`prebuilds/${native.name}`] = fs.readFileSync(native.file)
-  }
-  files['package.json'] = Buffer.from(JSON.stringify({
-    name: 'better-sqlite3-multiple-ciphers',
-    main: 'lib/index.js',
-    type: 'commonjs',
-  }))
-  return embed(files)
-}
-
 function webPayload(): { files: Record<string, string>; hashes: Record<string, string> } {
   const dist = path.join(root, 'packages/web/dist')
   if (!fs.existsSync(path.join(dist, 'index.html'))) {
@@ -105,35 +54,6 @@ function webPayload(): { files: Record<string, string>; hashes: Record<string, s
   const files: Record<string, Buffer> = {}
   readTree(dist, '', files, () => true)
   return embed(files)
-}
-
-function sqlitePlugin(payload: { files: Record<string, string>; hashes: Record<string, string> }): esbuild.Plugin {
-  return {
-    name: 'sqlite-prebuild',
-    setup(build) {
-      build.onResolve({ filter: /^better-sqlite3-multiple-ciphers$/ }, () => ({ path: 'better-sqlite3-multiple-ciphers', namespace: 'sqlite-prebuild' }))
-      build.onLoad({ filter: /.*/, namespace: 'sqlite-prebuild' }, () => ({
-        loader: 'js',
-        resolveDir: path.join(root, 'scripts'),
-        contents: `
-          import { createRequire } from 'node:module'
-          import os from 'node:os'
-          import path from 'node:path'
-          import { pathToFileURL } from 'node:url'
-          import { extractTree } from './sidecar-assets.ts'
-          import { resolveDataDir } from '../packages/server/src/config.ts'
-          import { ensurePrivateDirectory } from '../packages/server/src/private-dir.ts'
-          const files = ${JSON.stringify(payload.files)}
-          const hashes = ${JSON.stringify(payload.hashes)}
-          const dataDir = resolveDataDir(process.env, process.platform, os.homedir())
-          ensurePrivateDirectory(dataDir)
-          const root = extractTree(path.join(dataDir, 'resources', 'sqlite'), files, hashes)
-          const require = createRequire(pathToFileURL(process.execPath))
-          export default require(path.join(root, 'lib', 'index.js'))
-        `,
-      }))
-    },
-  }
 }
 
 function webPlugin(payload: { files: Record<string, string>; hashes: Record<string, string> }): esbuild.Plugin {
@@ -208,57 +128,6 @@ function captureNode(binary: string, arch: string, args: string[]): string {
   return execFileSync(command, [...prefix, ...args], { cwd: root, encoding: 'utf8' }).trim()
 }
 
-function assertFileArch(file: string, arch: 'arm64' | 'x64') {
-  const output = execFileSync('file', [file], { encoding: 'utf8' })
-  console.log(output.trim())
-  if (!fileDescribesArch(output, arch)) throw new Error(`${file} is not a ${arch} binary`)
-}
-
-function ensureRosetta(arch: string) {
-  if (process.platform !== 'darwin' || arch === process.arch) return
-  const flag = arch === 'x64' ? '-x86_64' : '-arm64'
-  try {
-    execFileSync('arch', [flag, 'true'], { stdio: 'ignore' })
-  } catch {
-    run('softwareupdate', ['--install-rosetta', '--agree-to-license'])
-  }
-}
-
-/** Compile better-sqlite3-multiple-ciphers with the Node that will run this slice, then keep that `.node`. */
-function rebuildNative(nodeBin: string, arch: string): { name: string; file: string } {
-  ensureRosetta(arch)
-  const pkgRoot = sqlitePackageRoot()
-  const nodeGyp = nodeRequire.resolve('node-gyp/bin/node-gyp.js')
-  const buildDir = path.join(pkgRoot, 'build')
-  fs.rmSync(buildDir, { recursive: true, force: true })
-  const name = prebuildName(process.platform, arch)
-  console.log(`rebuilding better-sqlite3-multiple-ciphers for ${process.platform}-${arch} with ${nodeBin}`)
-  const launch = nodeLaunchArgs(nodeBin, arch, process.arch, process.platform)
-  const [command, ...prefix] = launch
-  if (!command) throw new Error('missing node binary')
-  execFileSync(command, [...prefix, nodeGyp, 'rebuild', '--release', '--force_build=1'], {
-    cwd: pkgRoot,
-    stdio: 'inherit',
-    env: { ...process.env, npm_config_arch: arch },
-  })
-  const built = path.join(buildDir, 'Release', 'better_sqlite3.node')
-  if (!fs.existsSync(built)) throw new Error(`better-sqlite3-multiple-ciphers rebuild did not produce ${built}`)
-  const destDir = path.join(root, 'dist/sidecar/native')
-  fs.mkdirSync(destDir, { recursive: true })
-  const dest = path.join(destDir, name)
-  fs.copyFileSync(built, dest)
-  fs.rmSync(buildDir, { recursive: true, force: true })
-  if (process.platform === 'darwin') assertFileArch(dest, arch === 'x64' ? 'x64' : 'arm64')
-  else {
-    try {
-      console.log(execFileSync('file', [dest], { encoding: 'utf8' }).trim())
-    } catch {
-      console.log(`native ${dest}`)
-    }
-  }
-  return { name, file: dest }
-}
-
 function assertSliceNode(nodeBin: string, arch: string) {
   const version = captureNode(nodeBin, arch, ['-p', 'process.version'])
   const reported = captureNode(nodeBin, arch, ['-p', 'process.arch'])
@@ -281,33 +150,10 @@ function generateBlob(nodeBin: string, arch: string, bundle: string, blob: strin
   runNode(nodeBin, arch, ['--experimental-sea-config', seaConfig])
 }
 
-async function buildBundle(
-  outfile: string,
-  native: { name: string; file: string },
-  web: { files: Record<string, string>; hashes: Record<string, string> },
-) {
+async function buildBundle(outfile: string, native: { name: string; file: string }, arch: string, web: { files: Record<string, string>; hashes: Record<string, string> }) {
   await esbuild.build({
     stdin: {
-      contents: `
-      import os from 'node:os'
-      import path from 'node:path'
-      import { extractTree } from './sidecar-assets.ts'
-      import { startServer } from '../packages/server/src/index.ts'
-      import { resolveDataDir } from '../packages/server/src/config.ts'
-      import { ensurePrivateDirectory } from '../packages/server/src/private-dir.ts'
-      import { files, hashes } from 'virtual:web-assets'
-      if (!process.env.NODE_ENV) process.env.NODE_ENV = 'production'
-      const configured = process.env.ERT_WEB_DIST?.trim()
-      if (!configured) {
-        const dataDir = resolveDataDir(process.env, process.platform, os.homedir())
-        ensurePrivateDirectory(dataDir)
-        process.env.ERT_WEB_DIST = extractTree(path.join(dataDir, 'resources', 'web'), files, hashes)
-      }
-      startServer().catch((error) => {
-        console.error(error instanceof Error ? error.message : error)
-        process.exit(1)
-      })
-    `,
+      contents: sidecarEntry(),
       resolveDir: path.join(root, 'scripts'),
       sourcefile: 'sidecar-entry.ts',
       loader: 'ts',
@@ -318,7 +164,7 @@ async function buildBundle(
     target: 'node22',
     outfile,
     legalComments: 'eof',
-    plugins: [sqlitePlugin(sqlitePayload([native])), webPlugin(web)],
+    plugins: [sqlitePlugin(native), argonPlugin(process.platform, arch), webPlugin(web)],
     logLevel: 'info',
   })
 }
@@ -362,12 +208,12 @@ if (plan.kind === 'universal-darwin') {
   for (const slice of slices) {
     const nodeBin = await nodeBinary('darwin', slice.arch, outDir)
     assertSliceNode(nodeBin, slice.arch)
-    const native = rebuildNative(nodeBin, slice.arch)
+    const native = rebuildSqlite(nodeBin, slice.arch)
     if (native.name !== slice.prebuild) throw new Error(`Expected ${slice.prebuild}, built ${native.name}`)
     const bundle = path.join(outDir, `server-${slice.arch}.cjs`)
     const blob = path.join(outDir, `sea-prep-${slice.arch}.blob`)
     const sea = path.join(binaries, `ert-server-${slice.triple}`)
-    await buildBundle(bundle, native, web)
+    await buildBundle(bundle, native, slice.arch, web)
     generateBlob(nodeBin, slice.arch, bundle, blob)
     injectSea(nodeBin, blob, sea)
     assertFileArch(sea, slice.arch)
@@ -386,10 +232,10 @@ if (plan.kind === 'universal-darwin') {
   console.log(described.trim())
 } else {
   const arch = process.arch
-  const native = rebuildNative(process.execPath, arch)
+  const native = rebuildSqlite(process.execPath, arch)
   const bundle = path.join(outDir, 'server.cjs')
   const blob = path.join(outDir, 'sea-prep.blob')
-  await buildBundle(bundle, native, web)
+  await buildBundle(bundle, native, arch, web)
   generateBlob(process.execPath, arch, bundle, blob)
   injectSea(process.execPath, blob, sidecar)
   try {

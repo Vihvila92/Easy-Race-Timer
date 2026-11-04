@@ -17,6 +17,11 @@ const SECRET_KEYS = [
   'authorization',
   'cookie',
   'token',
+  'secret',
+  'recoverySecret',
+  'newKey',
+  'incoming',
+  'envelope',
 ] as const
 
 const SECRET = new Set<string>(SECRET_KEYS)
@@ -32,7 +37,7 @@ function redactValue(value: unknown, seen: WeakSet<object>): unknown {
   if (!value || typeof value !== 'object') return value
   if (seen.has(value)) return null
   seen.add(value)
-  if (Buffer.isBuffer(value)) return value.toString('utf8')
+  if (Buffer.isBuffer(value) || value instanceof Uint8Array) return '[Buffer]'
   if (Array.isArray(value)) return value.map((item) => redactValue(item, seen))
   const out: Record<string, unknown> = {}
   for (const [key, item] of Object.entries(value as Record<string, unknown>)) {

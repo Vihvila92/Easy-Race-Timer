@@ -28,11 +28,11 @@ export interface ArgonParams {
 
 let commonPasswords: Set<string> | null = null
 
-export function resetPasswordListCache(): void {
+function resetPasswordListCache(): void {
   commonPasswords = null
 }
 
-export function passwordListFile(): string {
+function passwordListFile(): string {
   const override = process.env.ERT_PASSWORD_LIST?.trim()
   if (override) return override
   return fileURLToPath(new URL('../passwords/common.txt', import.meta.url))
@@ -129,7 +129,7 @@ export function deriveRecoveryKek(secret: Buffer, salt: Buffer, slotIndex: numbe
   }
 }
 
-export function encodeCrockford(data: Buffer): string {
+function encodeCrockford(data: Buffer): string {
   let value = 0
   let bits = 0
   let out = ''
@@ -145,7 +145,7 @@ export function encodeCrockford(data: Buffer): string {
   return out
 }
 
-export function decodeCrockford(text: string): Buffer | null {
+function decodeCrockford(text: string): Buffer | null {
   let value = 0
   let bits = 0
   const out: number[] = []

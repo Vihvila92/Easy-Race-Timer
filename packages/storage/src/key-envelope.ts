@@ -1,11 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { createCipheriv, createDecipheriv, timingSafeEqual } from 'node:crypto'
+import { createCipheriv, createDecipheriv } from 'node:crypto'
 import { KeyError } from './errors.js'
 
-export const ENVELOPE_BYTES = 320
-export const PREFIX_BYTES = 32
-export const SLOT_BYTES = 96
-export const SLOT_COUNT = 3
+const ENVELOPE_BYTES = 320
+const PREFIX_BYTES = 32
+const SLOT_COUNT = 3
 export const SLOT_OFFSETS = [32, 128, 224] as const
 
 const MAGIC = Buffer.from('ERTK')
@@ -125,43 +124,47 @@ export function openSlot(bytes: Buffer, slotIndex: number, kek: Buffer): Buffer 
   }
 }
 
+function adminSlotRejected(slot: ParsedSlot): boolean {
+  if (slot.type !== 1 || slot.kdfId !== 1 || slot.argonVersion !== 0x13) return true
+  if (slot.memoryKib < 65536 || slot.memoryKib > 262144) return true
+  if (slot.iterations < 3 || slot.iterations > 16) return true
+  return slot.parallelism < 1 || slot.parallelism > 4
+}
+
+function recoverySlotRejected(slot: ParsedSlot): boolean {
+  if (slot.type !== 2 || slot.kdfId !== 2 || slot.argonVersion !== 0) return true
+  return slot.memoryKib !== 0 || slot.iterations !== 0 || slot.parallelism !== 0
+}
+
+/** Slot 0 and 1 are admin wraps. Slot 2 is the recovery wrap. The type is not free. */
 function slotParamsRejected(slot: ParsedSlot): boolean {
   if (slot.salt.length !== 16 || slot.tag.length !== 16) return true
-  if (slot.index === 2 || slot.type === 2) {
-    return slot.type !== 2
-      || slot.kdfId !== 2
-      || slot.argonVersion !== 0
-      || slot.memoryKib !== 0
-      || slot.iterations !== 0
-      || slot.parallelism !== 0
+  if (slot.index < 2) return adminSlotRejected(slot)
+  return recoverySlotRejected(slot)
+}
+
+function headerInvalid(bytes: Buffer): boolean {
+  if (bytes.length !== ENVELOPE_BYTES || !bytes.subarray(0, 4).equals(MAGIC)) return true
+  if (bytes.readUInt16BE(4) !== 1 || bytes.readUInt16BE(6) !== ENVELOPE_BYTES) return true
+  if (bytes.readUInt8(24) !== SLOT_COUNT || bytes.readUInt8(25) !== 0 || bytes.readUInt16BE(30) !== 0) return true
+  return bytes.readUInt32BE(26) < 1
+}
+
+function noncesRepeat(slots: ParsedSlot[]): boolean {
+  const seen: Buffer[] = []
+  for (const slot of slots) {
+    if (seen.some((nonce) => nonce.equals(slot.nonce))) return true
+    seen.push(slot.nonce)
   }
-  return slot.type !== 1
-    || slot.kdfId !== 1
-    || slot.argonVersion !== 0x13
-    || slot.memoryKib < 65536
-    || slot.memoryKib > 262144
-    || slot.iterations < 3
-    || slot.iterations > 16
-    || slot.parallelism < 1
-    || slot.parallelism > 4
+  return false
 }
 
 export function parseEnvelope(bytes: Buffer): ParsedEnvelope {
-  if (bytes.length !== ENVELOPE_BYTES || !bytes.subarray(0, 4).equals(MAGIC)) throw new KeyError('FILE_HEADER_INVALID')
-  if (bytes.readUInt16BE(4) !== 1 || bytes.readUInt16BE(6) !== ENVELOPE_BYTES) throw new KeyError('FILE_HEADER_INVALID')
-  if (bytes.readUInt8(24) !== SLOT_COUNT || bytes.readUInt8(25) !== 0 || bytes.readUInt16BE(30) !== 0) throw new KeyError('FILE_HEADER_INVALID')
+  if (headerInvalid(bytes)) throw new KeyError('FILE_HEADER_INVALID')
   const keyGeneration = bytes.readUInt32BE(26)
-  if (keyGeneration < 1) throw new KeyError('FILE_HEADER_INVALID')
   const slots = SLOT_OFFSETS.map((offset, position) => readSlot(bytes, offset, position))
-  if (slots.length !== 3) throw new KeyError('FILE_HEADER_INVALID')
-  const nonces = slots.map((slot) => slot.nonce)
-  for (let i = 0; i < nonces.length; i++) {
-    for (let j = i + 1; j < nonces.length; j++) {
-      if (nonces[i]!.equals(nonces[j]!)) throw new KeyError('FILE_HEADER_INVALID')
-    }
-  }
   const parsed = slots as [ParsedSlot, ParsedSlot, ParsedSlot]
-  if (parsed.some((slot) => slot.nonce.length !== 12)) throw new KeyError('FILE_HEADER_INVALID')
+  if (noncesRepeat(parsed) || parsed.some((slot) => slot.nonce.length !== 12)) throw new KeyError('FILE_HEADER_INVALID')
   if (parsed.some(slotParamsRejected)) throw new KeyError('KEY_PARAMS_REJECTED')
   return { fileId: copy(bytes, 8, 16), keyGeneration, prefix: copy(bytes, 0, PREFIX_BYTES), slots: parsed }
 }
@@ -188,6 +191,3 @@ function readSlot(bytes: Buffer, offset: number, position: number): ParsedSlot {
   }
 }
 
-export function sameBytes(left: Buffer, right: Buffer): boolean {
-  return left.length === right.length && timingSafeEqual(left, right)
-}

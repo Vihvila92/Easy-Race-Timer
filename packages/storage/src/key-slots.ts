@@ -6,7 +6,7 @@ import { fsyncDirectory, secureRemove } from './atomic.js'
 import { type AppDb, initializeEncryptedFile, openDatabase } from './db.js'
 import { KeyError, RaceFileError } from './errors.js'
 import { beginAttempt, resetAttempts } from './key-backoff.js'
-import { allocateEnvelope, type ParsedSlot, parseEnvelope, type SlotMaterial, sealSlot, SLOT_OFFSETS, openSlot } from './key-envelope.js'
+import { allocateEnvelope, type ParsedSlot, parseEnvelope, type SlotMaterial, sealSlot, openSlot } from './key-envelope.js'
 import { BASELINE_ARGON, buffersEqual, deriveAdminKek, deriveRecoveryKek, drawDistinct, formatRecoveryKey, parseRecoveryKey, passwordBytes, utf8Password } from './key-kdf.js'
 import { keyFilePath, rekeyTempPaths, writePrivateBytes } from './key-file.js'
 import { logUnlock } from './key-log.js'
@@ -33,7 +33,7 @@ interface HeldDek {
   dek: Buffer
 }
 
-function readKeyBytes(keyPath: string): Buffer {
+export function readKeyBytes(keyPath: string): Buffer {
   try {
     const bytes = fs.readFileSync(keyPath)
     if (bytes.length !== 320) throw new KeyError('FILE_HEADER_INVALID')
@@ -44,15 +44,15 @@ function readKeyBytes(keyPath: string): Buffer {
   }
 }
 
-function adminMaterial(index: 0 | 1, params: ArgonChoice, salt: Buffer, nonce: Buffer): SlotMaterial {
+export function adminMaterial(index: 0 | 1, params: ArgonChoice, salt: Buffer, nonce: Buffer): SlotMaterial {
   return { index, type: 1, kdfId: 1, argonVersion: 0x13, memoryKib: params.memoryKib, iterations: params.iterations, parallelism: params.parallelism, salt, nonce }
 }
 
-function recoveryMaterial(salt: Buffer, nonce: Buffer): SlotMaterial {
+export function recoveryMaterial(salt: Buffer, nonce: Buffer): SlotMaterial {
   return { index: 2, type: 2, kdfId: 2, argonVersion: 0, memoryKib: 0, iterations: 0, parallelism: 0, salt, nonce }
 }
 
-function freshMaterial(existingSalts: Buffer[], existingNonces: Buffer[]): { salt: Buffer; nonce: Buffer } {
+export function freshMaterial(existingSalts: Buffer[], existingNonces: Buffer[]): { salt: Buffer; nonce: Buffer } {
   return { salt: drawDistinct(16, existingSalts), nonce: drawDistinct(12, existingNonces) }
 }
 
@@ -105,50 +105,63 @@ function removeRaceFiles(filePath: string): void {
   secureRemove(keyFilePath(filePath))
 }
 
+function zeroBuffers(buffers: Array<Buffer | undefined>): void {
+  for (const buffer of buffers) {
+    if (buffer) buffer.fill(0)
+  }
+}
+
+function closeQuiet(db: AppDb | undefined): void {
+  try {
+    if (db) db.raw.close()
+  } catch {
+    // The handle may already be closed.
+  }
+}
+
+function passwordsDiffer(first: ConfirmedPassword, second: ConfirmedPassword): [Buffer, Buffer] {
+  const firstBytes = passwordBytes(first.password, first.confirm)
+  const secondBytes = passwordBytes(second.password, second.confirm)
+  if (!buffersEqual(firstBytes, secondBytes)) return [firstBytes, secondBytes]
+  firstBytes.fill(0)
+  secondBytes.fill(0)
+  throw new KeyError('PASSWORD_MISMATCH')
+}
+
 export async function createProtectedRaceFile(filePath: string, first: ConfirmedPassword, second: ConfirmedPassword): Promise<{ db: AppDb; recoveryKey: Buffer }> {
   const resolved = path.resolve(filePath)
   if (fs.existsSync(resolved)) throw new Error('Race file already exists')
-  let firstBytes: Buffer | undefined
-  let secondBytes: Buffer | undefined
-  let dek: Buffer | undefined
-  let fileId: Buffer | undefined
-  let recoverySecret: Buffer | undefined
+  const held: Array<Buffer | undefined> = []
   let recoveryKey: Buffer | undefined
   let db: AppDb | undefined
   try {
-    firstBytes = passwordBytes(first.password, first.confirm)
-    secondBytes = passwordBytes(second.password, second.confirm)
-    if (buffersEqual(firstBytes, secondBytes)) throw new KeyError('PASSWORD_MISMATCH')
-    dek = keyRandom.bytes(32)
-    fileId = keyRandom.bytes(16)
-    recoverySecret = keyRandom.bytes(20)
+    const pair = passwordsDiffer(first, second)
+    held.push(pair[0], pair[1])
+    const dek = keyRandom.bytes(32)
+    const fileId = keyRandom.bytes(16)
+    const recoverySecret = keyRandom.bytes(20)
+    held.push(dek, fileId, recoverySecret)
     recoveryKey = Buffer.from(formatRecoveryKey(recoverySecret), 'ascii')
     const envelope = await sealEnvelope({
       dek,
       fileId,
       keyGeneration: 1,
-      passwords: [firstBytes, secondBytes],
+      passwords: [pair[0], pair[1]],
       recoverySecret,
     })
     db = initializeEncryptedFile(resolved, dek, fileId.toString('hex'), 1)
     writePrivateBytes(keyFilePath(resolved), envelope)
     db.keySession = { kind: 'admin', slotIndex: 0 }
-    return { db, recoveryKey }
+    const shown = recoveryKey
+    recoveryKey = undefined
+    return { db, recoveryKey: shown }
   } catch (error) {
-    recoveryKey?.fill(0)
-    try {
-      db?.raw.close()
-    } catch {
-      // The handle may already be closed.
-    }
+    if (recoveryKey) recoveryKey.fill(0)
+    closeQuiet(db)
     removeRaceFiles(resolved)
     throw error
   } finally {
-    firstBytes?.fill(0)
-    secondBytes?.fill(0)
-    dek?.fill(0)
-    fileId?.fill(0)
-    recoverySecret?.fill(0)
+    zeroBuffers(held)
   }
 }
 
@@ -171,46 +184,48 @@ export async function unwrapAdminSlot(bytes: Buffer, slot: ParsedSlot, password:
   }
 }
 
-async function finishOpen(filePath: string, envelope: Buffer, dek: Buffer, kind: 'password' | 'recovery', slotIndex: 0 | 1 | 2): Promise<AppDb> {
+function fileIdsMatch(storedHex: string, expected: Buffer): boolean {
+  const fileId = Buffer.from(storedHex, 'hex')
+  try {
+    if (fileId.length !== expected.length) return false
+    return timingSafeEqual(fileId, expected)
+  } finally {
+    fileId.fill(0)
+  }
+}
+
+function sessionFor(temporarySlot: number | null, kind: 'password' | 'recovery', slotIndex: 0 | 1 | 2): { kind: 'admin' | 'recovery-gate' | 'temporary-password'; slotIndex: 0 | 1 | 2 } {
+  if (kind === 'recovery') return { kind: 'recovery-gate', slotIndex: 2 }
+  if (temporarySlot === slotIndex) return { kind: 'temporary-password', slotIndex }
+  return { kind: 'admin', slotIndex: slotIndex as 0 | 1 }
+}
+
+function rethrowOpen(error: unknown): never {
+  if (error instanceof KeyError) throw error
+  if (error instanceof RaceFileError && error.kind === 'newer') throw error
+  throw new KeyError('UNLOCK_FAILED')
+}
+
+async function finishOpen(input: { filePath: string; envelope: Buffer; dek: Buffer; kind: 'password' | 'recovery'; slotIndex: 0 | 1 | 2 }): Promise<AppDb> {
   let db: AppDb | undefined
   try {
-    db = await openDatabase(filePath, { dataKey: dek })
-    const parsed = parseEnvelope(envelope)
+    db = await openDatabase(input.filePath, { dataKey: input.dek })
+    const parsed = parseEnvelope(input.envelope)
     const stored = db.get<{ file_id: string | null }>('SELECT file_id FROM schema_meta WHERE id = 1')?.file_id ?? ''
-    const fileId = Buffer.from(stored, 'hex')
-    try {
-      if (fileId.length !== parsed.fileId.length || !timingSafeEqual(fileId, parsed.fileId)) throw new KeyError('UNLOCK_FAILED')
-    } finally {
-      fileId.fill(0)
-    }
+    if (!fileIdsMatch(stored, parsed.fileId)) throw new KeyError('UNLOCK_FAILED')
     const columns = ensureKeyColumns(db.raw)
-    const left = Buffer.alloc(4)
-    const right = Buffer.alloc(4)
-    left.writeUInt32BE(columns.keyGeneration)
-    right.writeUInt32BE(parsed.keyGeneration)
-    const generationOk = timingSafeEqual(left, right)
-    left.fill(0)
-    right.fill(0)
-    if (!generationOk) throw new KeyError('UNLOCK_FAILED')
+    if (columns.keyGeneration !== parsed.keyGeneration) throw new KeyError('UNLOCK_FAILED')
     if (db.raw.pragma('integrity_check', { simple: true }) !== 'ok') throw new KeyError('UNLOCK_FAILED')
-    resetAttempts(filePath)
-    if (kind === 'recovery') db.keySession = { kind: 'recovery-gate', slotIndex: 2 }
-    else if (columns.temporarySlot === slotIndex) db.keySession = { kind: 'temporary-password', slotIndex }
-    else db.keySession = { kind: 'admin', slotIndex: slotIndex as 0 | 1 }
+    resetAttempts(input.filePath)
+    db.keySession = sessionFor(columns.temporarySlot, input.kind, input.slotIndex)
     logUnlock('unlock ok', 0)
     keyHooks.beforeAttach?.()
     const opened = db
     db = undefined
     return opened
   } catch (error) {
-    try {
-      db?.raw.close()
-    } catch {
-      // The handle may already be closed.
-    }
-    if (error instanceof KeyError) throw error
-    if (error instanceof RaceFileError && error.kind === 'newer') throw error
-    throw new KeyError('UNLOCK_FAILED')
+    closeQuiet(db)
+    rethrowOpen(error)
   }
 }
 
@@ -267,7 +282,7 @@ async function unlockPasswordAt(filePath: string, keyPath: string, password: str
       logUnlock('unlock failed')
       throw new KeyError('UNLOCK_FAILED')
     }
-    return await finishOpen(filePath, bytes, match.dek, 'password', match.index)
+    return await finishOpen({ filePath, envelope: bytes, dek: match.dek, kind: 'password', slotIndex: match.index })
   } finally {
     passwordBuf.fill(0)
     for (const item of opened) item.dek.fill(0)
@@ -298,7 +313,7 @@ async function unlockRecoveryAt(filePath: string, keyPath: string, recoveryKey: 
     } finally {
       kek.fill(0)
     }
-    return await finishOpen(filePath, bytes, dek, 'recovery', 2)
+    return await finishOpen({ filePath, envelope: bytes, dek, kind: 'recovery', slotIndex: 2 })
   } catch (error) {
     if (error instanceof KeyError && error.code === 'UNLOCK_FAILED') logUnlock('unlock failed')
     if (error instanceof KeyError) throw error
@@ -312,116 +327,4 @@ async function unlockRecoveryAt(filePath: string, keyPath: string, recoveryKey: 
 
 export function normalUseAllowed(db: AppDb): boolean {
   return db.keySession?.kind === 'admin'
-}
-
-function requireDek(db: AppDb): Buffer {
-  if (!db.dataKey || db.dataKey.length !== 32) throw new KeyError('UNLOCK_FAILED')
-  return db.dataKey
-}
-
-async function assertDistinctFromOther(bytes: Buffer, parsed: ReturnType<typeof parseEnvelope>, slot: 0 | 1, password: Buffer, dek: Buffer): Promise<void> {
-  const other = slot === 0 ? 1 : 0
-  const opened = await unwrapAdminSlot(bytes, parsed.slots[other], password)
-  if (!opened) return
-  try {
-    if (buffersEqual(opened, dek)) throw new KeyError('PASSWORD_MISMATCH')
-  } finally {
-    opened.fill(0)
-  }
-}
-
-function rewriteSlot(bytes: Buffer, slot: 0 | 1 | 2, material: SlotMaterial, kek: Buffer, dek: Buffer): Buffer {
-  const parsed = parseEnvelope(bytes)
-  const materials: SlotMaterial[] = parsed.slots.map((item) => ({
-    index: item.index,
-    type: item.type,
-    kdfId: item.kdfId,
-    argonVersion: item.argonVersion,
-    memoryKib: item.memoryKib,
-    iterations: item.iterations,
-    parallelism: item.parallelism,
-    salt: item.salt,
-    nonce: item.nonce,
-  }))
-  materials[slot] = material
-  const next = allocateEnvelope(parsed.fileId, parsed.keyGeneration, materials)
-  for (const index of [0, 1, 2] as const) {
-    if (index === slot) continue
-    parsed.slots[index].ciphertext.copy(next, SLOT_OFFSETS[index] + 48)
-    parsed.slots[index].tag.copy(next, SLOT_OFFSETS[index] + 80)
-  }
-  sealSlot(next, slot, kek, dek)
-  return next
-}
-
-export async function rewrapAdminSlot(db: AppDb, slot: 0 | 1, next: ConfirmedPassword, currentPassword?: string): Promise<void> {
-  const session = db.keySession
-  if (!session || (session.kind !== 'admin' && session.kind !== 'recovery-gate' && session.kind !== 'temporary-password')) {
-    throw new KeyError('UNLOCK_FAILED')
-  }
-  if (session.kind === 'temporary-password' && session.slotIndex !== slot) throw new KeyError('UNLOCK_FAILED')
-  const dek = requireDek(db)
-  const bytes = readKeyBytes(keyFilePath(db.filePath))
-  const parsed = parseEnvelope(bytes)
-  if (session.kind !== 'recovery-gate' && session.slotIndex === slot) {
-    if (currentPassword === undefined) throw new KeyError('UNLOCK_FAILED')
-    const current = utf8Password(currentPassword)
-    try {
-      const opened = await unwrapAdminSlot(bytes, parsed.slots[slot], current)
-      try {
-        if (!opened || !buffersEqual(opened, dek)) throw new KeyError('UNLOCK_FAILED')
-      } finally {
-        opened?.fill(0)
-      }
-    } finally {
-      current.fill(0)
-    }
-  }
-  const password = passwordBytes(next.password, next.confirm)
-  try {
-    await assertDistinctFromOther(bytes, parsed, slot, password, dek)
-    const drawn = freshMaterial(parsed.slots.map((item) => item.salt), parsed.slots.map((item) => item.nonce))
-    const kek = await deriveAdminKek(password, {
-      ...BASELINE_ARGON,
-      slotIndex: slot,
-      slotType: 1,
-      salt: drawn.salt,
-    })
-    try {
-      const envelope = rewriteSlot(bytes, slot, adminMaterial(slot, BASELINE_ARGON, drawn.salt, drawn.nonce), kek, dek)
-      writePrivateBytes(keyFilePath(db.filePath), envelope)
-    } finally {
-      kek.fill(0)
-    }
-    if (ensureKeyColumns(db.raw).temporarySlot === slot) setTemporaryClear(db)
-    if (session.kind === 'recovery-gate' || session.slotIndex === slot) db.keySession = { kind: 'admin', slotIndex: slot }
-  } finally {
-    password.fill(0)
-  }
-}
-
-function setTemporaryClear(db: AppDb): void {
-  db.run('UPDATE schema_meta SET temporary_slot = NULL WHERE id = 1')
-}
-
-export async function regenerateRecoveryKey(db: AppDb): Promise<Buffer> {
-  if (db.keySession?.kind !== 'admin') throw new KeyError('UNLOCK_FAILED')
-  const dek = requireDek(db)
-  const bytes = readKeyBytes(keyFilePath(db.filePath))
-  const parsed = parseEnvelope(bytes)
-  const secret = keyRandom.bytes(20)
-  const shown = Buffer.from(formatRecoveryKey(secret), 'ascii')
-  const drawn = freshMaterial(parsed.slots.map((item) => item.salt), parsed.slots.map((item) => item.nonce))
-  const kek = deriveRecoveryKek(secret, drawn.salt, 2, 2)
-  try {
-    const envelope = rewriteSlot(bytes, 2, recoveryMaterial(drawn.salt, drawn.nonce), kek, dek)
-    writePrivateBytes(keyFilePath(db.filePath), envelope)
-    return shown
-  } catch (error) {
-    shown.fill(0)
-    throw error
-  } finally {
-    secret.fill(0)
-    kek.fill(0)
-  }
 }
