@@ -38,7 +38,6 @@ export const allowedClones: AllowedClone[] = [
   { hash: '4bc4b269b7af914b6804ece8b12465c43250dbb9d50c5d8ba6bf4400f3b79bc4', files: 'e2e/a11y.ts | e2e/unreachable.spec.ts' },
 
   // Repeated test setup. These files are already over the ESLint size limits, so a shared fixture waits for the complexity follow-up instead of turning those warnings into errors.
-  { hash: 'fb5775dc0cfb3ac5889bdbbe8a7a52aeccea3181910f0d210a4314402fcfa072', files: 'e2e/kuulan-holkka.spec.ts | e2e/kuulan-holkka.spec.ts' },
   { hash: '962d4c71ce442035432381e663a71e06887651abe75164d52007f3b24d0ac0fa', files: 'e2e/preview.spec.ts | e2e/server.ts' },
   { hash: 'f0cb8a03b980fd03adef141d8d780c78ed332bcd1c40b8d9600db604acaddcd6', files: 'packages/server/src/auth.test.ts | packages/server/src/auth.test.ts' },
   { hash: '09fcc37d341c904d701445a76a6b873468ec1bb8c03d20fc1d4a80bf96034d50', files: 'packages/server/src/auth.test.ts | packages/server/src/setup-session.test.ts' },
