@@ -227,5 +227,10 @@
   "file.hint.newer": "Tiedosto ei ole rikki. Tämä ohjelma on vanhempi kuin tiedosto, joten se ei avaa eikä muuta sitä.",
   "file.openFailed": "Kisatiedostoa {name} ei voitu avata.",
   "file.hint.openFailed": "Tiedosto jätettiin ennalleen. Säilytä se, kunnes kisatiedosto aukeaa.",
-  "file.missingKey": "Tietokanta-avainta ei ole asetettu. Kisatiedostoa ei avattu."
+  "file.missingKey": "Tietokanta-avainta ei ole asetettu. Kisatiedostoa ei avattu.",
+  "keys.oldCopies": "Data-avaimen vaihto suojaa vain uudet kopiot. Kopio, joka on jo jollakulla toisella, pysyy luettavana vanhalla salasanalla tai paperilla. Hävitä kopiot, jotka sinulla on, ja vaihda avain, jotta uudet kopiot tarvitsevat uudet salasanat.",
+  "keys.rotateLeftover": "Kopio, joka ei ole enää sinulla, pysyy luettavana. Ohjelma ei voi hävittää toisen henkilön tikkua.",
+  "keys.singleAdmin": "Molemmat salasanat ovat nyt yhdellä henkilöllä. Pyydä toista ylläpitäjää asettamaan oma salasanansa heti kun se on mahdollista.",
+  "keys.temporaryPassword": "Toisen ylläpitäjän salasana on väliaikainen. Hänen on asetettava oma salasanansa, kun tiedosto avataan seuraavan kerran.",
+  "keys.pairFiles": "Varmuuskopiossa on oltava sekä kisatietokanta että sen vieressä oleva avaintiedosto. Paperinen palautusavain ei korvaa avaintiedostoa."
 }
