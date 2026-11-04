@@ -82,7 +82,7 @@ Build each view from the shared components and design tokens of the [design foun
 
 Finish taps are append-only. Corrections carry a reason. Do not update a stored `device_time_ms`.
 
-Close the race database before restoring a backup over it. `restoreBackup` renames the database and its key file into place. An open handle keeps the previous inode, so the process that still has the file open is not looking at the restored pair. A prepared copy is marked ready only after anonymisation returns and that database is closed. The next open commits it only when that marker is present, and otherwise discards the prepared files without opening them. The UI that calls restore arrives with #214.
+Close the race database before restoring a backup over it. `restoreBackup` renames the database and its key file into place. An open handle keeps the previous inode, so the process that still has the file open is not looking at the restored pair. A prepared copy is marked ready only after anonymisation returns and that database is closed. The marker names that copy and is removed when the restore finishes. The next open commits it only when the marker matches that copy, and otherwise discards the prepared files without opening them. The UI that calls restore arrives with #214.
 
 The Kuulan hölkkä oracle lives in `testdata/kuulan-holkka/generate.py`. Change the scenario there and regenerate; do not hand-edit expected CSV files.
 

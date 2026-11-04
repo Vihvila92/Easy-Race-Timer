@@ -111,6 +111,7 @@ it('creates the destination when nothing is there yet', async () => {
   expect(fs.readFileSync(dest).equals(backupBytes)).toBe(true)
   expect(fs.readFileSync(keyFilePath(dest)).equals(backupKey)).toBe(true)
   expect(fs.existsSync(`${dest}.prev`)).toBe(false)
+  expect(fs.existsSync(path.join(dir, `.${path.basename(dest)}.restore.ready`))).toBe(false)
 })
 
 function stampBackup(dir: string, name: string, iso: string, complete: boolean): string {
@@ -263,6 +264,30 @@ it('leaves the destination when anonymisation throws', async () => {
     throw new Error('stopped')
   })).rejects.toThrow('stopped')
   await expectPair(dest, 'Original')
+})
+
+it('rejects a ready marker that does not match the prepared copy', async () => {
+  const { restored } = await crashAt('prepared')
+  const marker = path.join(path.dirname(restored), `.${path.basename(restored)}.restore.ready`)
+  fs.writeFileSync(marker, 'stale')
+  const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+  try {
+    recoverRestore(restored)
+    expect(warn).toHaveBeenCalledWith('Discarded an incomplete restore')
+  } finally {
+    warn.mockRestore()
+  }
+  expect(fs.readFileSync(restored, 'utf8')).toBe('old-db')
+  expect(fs.existsSync(marker)).toBe(false)
+  expect(fs.readdirSync(path.dirname(restored)).some((name) => name.includes('.restore'))).toBe(false)
+})
+
+it('removes a ready marker that has no prepared copy', async () => {
+  const dir = tempDir()
+  const dest = path.join(dir, 'ert.sqlite')
+  fs.writeFileSync(path.join(dir, '.ert.sqlite.restore.ready'), 'stale')
+  recoverRestore(dest)
+  expect(fs.readdirSync(dir)).toEqual([])
 })
 
 it('drops a copy that died during anonymisation before the next open', async () => {

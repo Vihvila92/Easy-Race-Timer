@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+import { createHash } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { atomicCopyFile, fsyncDirectory, fsyncFile, secureRemove } from './atomic.js'
@@ -115,7 +116,28 @@ function prevFiles(set: RestoreSet): string[] {
 }
 
 function preparedFiles(set: RestoreSet): string[] {
-  return [set.restore, set.restoreKey]
+  return [set.restore, set.restoreKey, readyMarker(set)]
+}
+
+function fileDigest(file: string): string {
+  return createHash('sha256').update(fs.readFileSync(file)).digest('hex')
+}
+
+function clearReadyMarker(set: RestoreSet): void {
+  secureRemove(readyMarker(set))
+  fsyncParent(set.dest)
+}
+
+/** The marker names one prepared database. A different file does not count. */
+function markerMatches(set: RestoreSet): boolean {
+  try {
+    if (!exists(readyMarker(set))) return false
+    const recorded = fs.readFileSync(readyMarker(set), 'utf8').trim()
+    const current = exists(set.restore) ? set.restore : set.dest
+    return exists(current) && recorded === fileDigest(current)
+  } catch {
+    return false
+  }
 }
 
 function keyReady(keyPath: string): boolean {
@@ -153,12 +175,8 @@ function rollBackPrev(set: RestoreSet): void {
   fsyncParent(set.dest)
 }
 
-function markedReady(set: RestoreSet): boolean {
-  return exists(readyMarker(set))
-}
-
 function canFinish(set: RestoreSet): boolean {
-  if (!markedReady(set)) return false
+  if (!markerMatches(set)) return false
   if (exists(set.restore) && keyReady(set.restoreKey)) return true
   return exists(set.dest) && keyReady(set.restoreKey)
 }
@@ -265,10 +283,12 @@ export async function backupDatabase(db: AppDb, dest: string): Promise<void> {
  * Restore a complete pair onto dest.
  * Preparation writes `.restore` files and runs `beforeOpen` there. That callback must close
  * the prepared database before it returns. A ready marker is written and fsynced only after
- * that return. The commit then moves the current database, `-wal`, `-shm` and key file to
- * `.prev`, renames the prepared pair into place, and deletes `.prev` last. The old journal
- * is not removed before the new files land. Startup commits a prepared pair only when the
- * marker is present. Otherwise those prepared files are discarded without being opened.
+ * that return. The marker names that prepared database and is removed when a restore starts
+ * and when the commit finishes. The commit then moves the current database, `-wal`, `-shm`
+ * and key file to `.prev`, renames the prepared pair into place, and deletes `.prev` last.
+ * The old journal is not removed before the new files land. Startup commits a prepared pair
+ * only when the marker matches that database. Otherwise those prepared files are discarded
+ * without being opened.
  * The caller must close any handle on `destDatabase` before this runs. An open handle keeps
  * the previous inode. A throw before the commit leaves that file untouched. A rename error
  * after the commit has started finishes the swap or puts the previous pair back.
@@ -281,6 +301,7 @@ export async function restoreBackupPair(
   if (!backupPairComplete(databaseBackup)) return false
   const set = restoreSet(destDatabase)
   try {
+    clearReadyMarker(set)
     writeBackupPair(databaseBackup, set.restore)
     await beforeOpen(set.restore)
     secureEach([`${set.restore}-wal`, `${set.restore}-shm`])
@@ -295,6 +316,7 @@ export async function restoreBackupPair(
     fsyncParent(set.dest)
     crash('keys')
     deletePrev(set)
+    clearReadyMarker(set)
   } catch (error) {
     if (restoreHooks.crashAt) throw error
     if (!prevFiles(set).some(exists)) {
@@ -311,7 +333,7 @@ export async function restoreBackupPair(
 /** Written only after anonymisation has returned and that database is closed. */
 function markRestoreReady(set: RestoreSet): void {
   const marker = readyMarker(set)
-  fs.writeFileSync(marker, '1', { mode: 0o600 })
+  fs.writeFileSync(marker, fileDigest(set.restore), { mode: 0o600 })
   fsyncFile(marker)
   fsyncParent(set.dest)
 }
