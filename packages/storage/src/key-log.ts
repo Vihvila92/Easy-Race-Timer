@@ -37,7 +37,7 @@ function redactValue(value: unknown, seen: WeakSet<object>): unknown {
   if (!value || typeof value !== 'object') return value
   if (seen.has(value)) return null
   seen.add(value)
-  if (Buffer.isBuffer(value) || value instanceof Uint8Array) return '[Buffer]'
+  if (ArrayBuffer.isView(value) || value instanceof ArrayBuffer) return '[Binary]'
   if (Array.isArray(value)) return value.map((item) => redactValue(item, seen))
   const out: Record<string, unknown> = {}
   for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
@@ -51,16 +51,15 @@ export function redactCrash(value: unknown): string {
   return JSON.stringify(redactValue(value, new WeakSet()))
 }
 
-let keyLogger: (event: KeyLogEvent, fields: { failureCount?: number }) => void = (event, fields) => {
+function defaultKeyLogger(event: KeyLogEvent, fields: { failureCount?: number }): void {
   if (fields.failureCount === undefined) console.info(event)
   else console.info(event, fields.failureCount)
 }
 
+let keyLogger: (event: KeyLogEvent, fields: { failureCount?: number }) => void = defaultKeyLogger
+
 export function setKeyLogger(logger: ((event: KeyLogEvent, fields: { failureCount?: number }) => void) | null): void {
-  keyLogger = logger ?? ((event, fields) => {
-    if (fields.failureCount === undefined) console.info(event)
-    else console.info(event, fields.failureCount)
-  })
+  keyLogger = logger ?? defaultKeyLogger
 }
 
 export function logUnlock(event: KeyLogEvent, failureCount?: number): void {

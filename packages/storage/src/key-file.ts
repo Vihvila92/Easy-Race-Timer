@@ -105,7 +105,7 @@ export function writeKeyStub(keyPath: string, fileIdHex: string): void {
 
 const keyWrites = new Map<string, Promise<void>>()
 
-/** One writer at a time for a key file, including across awaits. */
+/** In-process only. One writer at a time for a key file in this process, including across awaits. Other processes are not locked. */
 export function withKeyFileLock<T>(keyPath: string, fn: () => Promise<T>): Promise<T> {
   const previous = keyWrites.get(keyPath) ?? Promise.resolve()
   const run = previous.then(fn, fn)
