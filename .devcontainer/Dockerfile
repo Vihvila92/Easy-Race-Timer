@@ -1,6 +1,6 @@
 # Node 22.23.3 (.nvmrc), pnpm 10.33.4 (packageManager), Rust 1.90.0 (rust-toolchain.toml).
 # Tauri library names match the Linux install in .github/workflows/ci.yml, plus libgtk-3-dev from the README.
-FROM ubuntu:24.04@sha256:fe81560990fae86dc4743202b2cb4d3df98d0bcf949173cecef15ce1127ef852
+FROM ubuntu:26.04@sha256:6a06111c3b0a8600feadb270aec771dc239bf407b25625f93f44ab00e11f4d3c
 
 ENV DEBIAN_FRONTEND=noninteractive \
     COREPACK_HOME=/home/dev/.corepack \
