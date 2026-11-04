@@ -9,10 +9,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
     CARGO_HOME=/home/dev/.cargo \
     PATH=/home/dev/.cargo/bin:/usr/local/bin:${PATH}
 
-RUN . /etc/os-release \
-    && printf 'deb http://archive.ubuntu.com/ubuntu %s universe\ndeb http://archive.ubuntu.com/ubuntu %s-updates universe\ndeb http://security.ubuntu.com/ubuntu %s-security universe\n' \
-        "$VERSION_CODENAME" "$VERSION_CODENAME" "$VERSION_CODENAME" \
-        > /etc/apt/sources.list.d/universe.list \
+RUN if [ -f /etc/apt/sources.list.d/ubuntu.sources ]; then \
+      sed -i -E 's/^(Components:.*)( universe)?$/\1 universe/' /etc/apt/sources.list.d/ubuntu.sources \
+      && sed -i 's/ universe universe/ universe/g' /etc/apt/sources.list.d/ubuntu.sources; \
+    fi \
     && apt-get update \
     && apt-get install -y --no-install-recommends \
         ca-certificates \
