@@ -7,9 +7,10 @@ Release-työnkulku (`.github/workflows/release.yml`) rakentaa työpöytäohjelma
 | Käynnistys | Tulos |
 |---|---|
 | Actions → Release → Run workflow | Kuivaharjoitus. Asentimet ovat työnkulun artefakteja. GitHub-julkaisua ei tehdä. |
+| Pull request, joka muuttaa sidecaria, natiivipakettia, lukitustiedostoa, `src-tauri/`-hakemistoa tai tätä työnkulkua | Asenninmatriisi (Linux, macOS universal, Windows) ja sidecarin savutesti. Ei `release`-ympäristöä, ei allekirjoitusta eikä GitHub-julkaisua. |
 | Työnnetty `v*`-tagi, esimerkiksi `v0.1.0` | GitHub-julkaisu, jossa ovat asentimet, päivitystiedostot, tarkistussummat ja SBOM:t. |
 
-Kuivaharjoituksen tiedostot ovat ajon sivulla artefakteissa `installers-linux`, `installers-macos`, `installers-windows` ja yhdistetyssä `release-assets`-artefaktissa. `release-assets` sisältää myös `checksums.txt`-tiedoston ja molemmat SBOM:t.
+Kuivaharjoituksen tiedostot ovat ajon sivulla artefakteissa `installers-linux`, `installers-macos`, `installers-windows` ja yhdistetyssä `release-assets`-artefaktissa. `release-assets` sisältää myös `checksums.txt`-tiedoston ja molemmat SBOM:t. Pull requestin artefaktit ovat vain `installers-linux`, `installers-macos` ja `installers-windows`. Se ei aja SBOM-, bundle-, sign-, publish- eikä verify-työtä.
 
 ## Paketit
 
