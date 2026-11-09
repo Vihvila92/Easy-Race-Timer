@@ -203,6 +203,7 @@ function sessionFor(temporarySlot: number | null, kind: 'password' | 'recovery',
 function rethrowOpen(error: unknown): never {
   if (error instanceof KeyError) throw error
   if (error instanceof RaceFileError && error.kind === 'newer') throw error
+  if (error instanceof RaceFileError && error.kind === 'key-file') throw new KeyError('KEY_FILE_MISMATCH')
   throw new KeyError('UNLOCK_FAILED')
 }
 

@@ -17,7 +17,7 @@ const KEY_MESSAGES: Record<KeyErrorCode, string> = {
   RECOVERY_KEY_CHECKSUM: 'This recovery key has a typing error.',
   KEY_PARAMS_REJECTED: "This file's key settings are not allowed, so it was not opened.",
   FILE_HEADER_INVALID: 'This file cannot be opened.',
-  KEY_FILE_MISMATCH: 'The key file does not match this race file.',
+  KEY_FILE_MISMATCH: 'This key file does not belong to this race file. Use the key file that was saved together with the race file.',
   PASSWORD_TOO_SHORT: 'Password is too short.',
   PASSWORD_TOO_LONG: 'Password is too long.',
   PASSWORD_COMMON: 'Password is too common.',

@@ -229,7 +229,7 @@
   "file.openFailed": "The race file {name} could not be opened.",
   "file.hint.openFailed": "The file was left unchanged. Keep it until the race opens again.",
   "file.missingKey": "No data key is configured. The race file was not opened.",
-  "file.keyMismatch": "The key file does not match this race file.",
+  "file.keyMismatch": "This key file does not belong to this race file. Use the key file that was saved together with the race file.",
   "unlock.failed": "That did not open the file. Check the password, or use the printed recovery key.",
   "unlock.wait": "Wait {seconds} seconds before trying again.",
   "keys.guide.print": "How to print it. Print it on paper. Do not save it as a PDF. When the program shows the recovery key, print that page or copy the groups onto paper by hand. Check the last group (the checksum) twice. The program shows the key only this once. After you leave the page, it deletes the key from memory and cannot show it again.",

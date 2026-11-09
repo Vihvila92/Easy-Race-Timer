@@ -229,7 +229,7 @@
   "file.openFailed": "Kisatiedostoa {name} ei voitu avata.",
   "file.hint.openFailed": "Tiedosto jätettiin ennalleen. Säilytä se, kunnes kisatiedosto aukeaa.",
   "file.missingKey": "Tietokanta-avainta ei ole asetettu. Kisatiedostoa ei avattu.",
-  "file.keyMismatch": "Avaintiedosto ei vastaa tätä kisatiedostoa.",
+  "file.keyMismatch": "Avaintiedosto ei kuulu tähän kisatiedostoon. Käytä kisatiedoston kanssa samaan aikaan tallennettua avaintiedostoa.",
   "unlock.failed": "Tiedosto ei auennut. Tarkista salasana tai käytä paperista palautusavainta.",
   "unlock.wait": "Odota {seconds} sekuntia ennen uutta yritystä.",
   "keys.guide.print": "Miten tulostaa. Tulosta se paperille. Älä tallenna sitä PDF-tiedostoksi. Kun ohjelma näyttää palautusavaimen, tulosta sivu tai kirjoita ryhmät paperille käsin. Tarkista viimeinen ryhmä (tarkistussumma) kahdesti. Ohjelma näyttää avaimen vain tämän kerran. Kun poistut sivulta, ohjelma hävittää avaimen muistista eikä voi näyttää sitä uudelleen.",

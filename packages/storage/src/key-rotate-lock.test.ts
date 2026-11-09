@@ -4,6 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { KeyError } from './errors.js'
+import { setKeyLogger } from './key-log.js'
 import { keyFilePath } from './key-file.js'
 import { acknowledgeRecoveryKeyShown, regenerateRecoveryKey, rewrapAdminSlot } from './key-rewrap.js'
 import { rotateDataKey } from './key-rotate.js'
@@ -22,6 +23,7 @@ function tempFile(): string {
 }
 
 afterEach(() => {
+  setKeyLogger(null)
   for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true })
 })
 
@@ -34,6 +36,38 @@ async function created() {
 function generation(file: string): number {
   return fs.readFileSync(keyFilePath(file)).readUInt32BE(26)
 }
+
+const BELONGS = 'This key file does not belong to this race file. Use the key file that was saved together with the race file.'
+
+describe('key file mismatch', () => {
+  it('follows a correct password, counts the attempt, and names no secret', async () => {
+    const { file, db } = await created()
+    const fileId = db.get<{ file_id: string }>('SELECT file_id FROM schema_meta WHERE id = 1')?.file_id ?? ''
+    db.raw.close()
+    const logs: string[] = []
+    setKeyLogger((event) => logs.push(event))
+    const wrong = await unlockWithPassword(file, 'not-the-admin-password').then(() => null, (error: unknown) => error)
+    expect(wrong).toMatchObject({ code: 'UNLOCK_FAILED' })
+    const matched = await unlockWithPassword(file, ADMIN_A)
+    matched.run('UPDATE schema_meta SET key_generation = 2 WHERE id = 1')
+    matched.raw.close()
+    const mismatch = await unlockWithPassword(file, ADMIN_A).then(() => null, (error: unknown) => error)
+    expect(mismatch).toBeInstanceOf(KeyError)
+    const keyError = mismatch as KeyError
+    expect(keyError.code).toBe('KEY_FILE_MISMATCH')
+    expect(keyError.message).toBe(BELONGS)
+    expect(keyError.message).not.toContain(file)
+    expect(keyError.message).not.toContain(fileId)
+    expect(JSON.stringify(keyError)).not.toContain(fileId)
+    const captured = logs.join('\n')
+    expect(captured).not.toContain(file)
+    expect(captured).not.toContain(ADMIN_A)
+    expect(captured).not.toContain(fileId)
+    const record = JSON.parse(fs.readFileSync(path.join(path.dirname(file), 'unlock-backoff.json'), 'utf8')) as { failureCount: number }
+    expect(record.failureCount).toBe(1)
+    setKeyLogger(null)
+  })
+})
 
 describe('rotation lock', () => {
   it('keeps the key file and the database on the same generation when a password change starts during rotation', async () => {
