@@ -294,7 +294,9 @@ describe('file id mismatch', () => {
     keyHooks.beforeAttach = () => {
       attached = true
     }
-    await expect(unlockWithPassword(file, ADMIN_A)).rejects.toMatchObject({ code: 'UNLOCK_FAILED' })
+    const mismatch = await unlockWithPassword(file, ADMIN_A).then(() => null, (error: unknown) => error)
+    expect(mismatch).toMatchObject({ code: 'KEY_FILE_MISMATCH' })
+    expect((mismatch as KeyError).message).not.toContain(file)
     expect(attached).toBe(false)
   })
 })
