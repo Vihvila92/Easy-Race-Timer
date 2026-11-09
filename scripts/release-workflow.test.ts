@@ -21,8 +21,10 @@ const pullRequestPaths = [
   'scripts/argon-smoke.mjs',
   'scripts/desktop-smoke.mjs',
   'scripts/release-*.ts',
-  'packages/storage/package.json',
-  'packages/server/package.json',
+  'packages/**',
+  "'!packages/**/*.test.ts'",
+  "'!packages/**/*.test.tsx'",
+  "'!packages/**/*.md'",
   'pnpm-lock.yaml',
   'src-tauri/**',
   '.github/workflows/release.yml',
@@ -185,6 +187,11 @@ describe('release workflow pull requests', () => {
     for (const entry of pullRequestPaths) {
       expect(trigger).toContain(`- ${entry}`)
     }
+    const packages = trigger.indexOf('- packages/**')
+    expect(packages).toBeGreaterThanOrEqual(0)
+    expect(packages).toBeLessThan(trigger.indexOf("- '!packages/**/*.test.ts'"))
+    expect(trigger.indexOf("- '!packages/**/*.test.ts'")).toBeLessThan(trigger.indexOf("- '!packages/**/*.test.tsx'"))
+    expect(trigger.indexOf("- '!packages/**/*.test.tsx'")).toBeLessThan(trigger.indexOf("- '!packages/**/*.md'"))
     expect(release).not.toContain('pull_request_target')
     expect(release).not.toContain('workflow_call:')
     expect(readdirSync('.github/workflows').some((name) => name.includes('smoke'))).toBe(false)

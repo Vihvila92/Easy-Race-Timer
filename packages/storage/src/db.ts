@@ -77,7 +77,7 @@ export function zeroKeyOnClose(raw: SqliteDatabase, dataKey: Buffer): void {
 }
 
 export interface KeySession {
-  kind: 'admin' | 'recovery-gate' | 'temporary-password'
+  kind: 'admin' | 'recovery-gate' | 'temporary-password' | 'recovery-unshown'
   slotIndex: 0 | 1 | 2
 }
 
@@ -86,6 +86,8 @@ export class AppDb {
   readonly quarantinedPlaintext: readonly string[]
   /** Set when a slot unwrap opened this handle. A dev-key open leaves it null. */
   keySession: KeySession | null = null
+  /** This process returned a recovery key that the operator has not confirmed seeing. */
+  recoveryKeyIssued = false
 
   constructor(
     readonly raw: SqliteDatabase,

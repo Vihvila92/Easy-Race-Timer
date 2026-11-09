@@ -35,7 +35,7 @@ describe('key file lock', () => {
     ])
     expect(overlapped).toBe(false)
     created.db.raw.close()
-    shown[1].fill(0)
+    shown[1].recoveryKey.fill(0)
     const opened = await unlockWithPassword(file, 'first-admin-replaced')
     opened.raw.close()
   })

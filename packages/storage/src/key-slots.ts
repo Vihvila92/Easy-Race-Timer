@@ -200,9 +200,16 @@ function sessionFor(temporarySlot: number | null, kind: 'password' | 'recovery',
   return { kind: 'admin', slotIndex: slotIndex as 0 | 1 }
 }
 
+function rejectedKeyFile(error: unknown): boolean {
+  if (!(error instanceof RaceFileError)) return false
+  if (error.kind === 'key-file') return true
+  return error.kind === 'open' && error.causeCode === 'SQLITE_NOTADB'
+}
+
 function rethrowOpen(error: unknown): never {
   if (error instanceof KeyError) throw error
   if (error instanceof RaceFileError && error.kind === 'newer') throw error
+  if (rejectedKeyFile(error)) throw new KeyError('KEY_FILE_MISMATCH')
   throw new KeyError('UNLOCK_FAILED')
 }
 
@@ -212,12 +219,15 @@ async function finishOpen(input: { filePath: string; envelope: Buffer; dek: Buff
     db = await openDatabase(input.filePath, { dataKey: input.dek })
     const parsed = parseEnvelope(input.envelope)
     const stored = db.get<{ file_id: string | null }>('SELECT file_id FROM schema_meta WHERE id = 1')?.file_id ?? ''
-    if (!fileIdsMatch(stored, parsed.fileId)) throw new KeyError('UNLOCK_FAILED')
+    if (!fileIdsMatch(stored, parsed.fileId)) throw new KeyError('KEY_FILE_MISMATCH')
     const columns = ensureKeyColumns(db.raw)
-    if (columns.keyGeneration !== parsed.keyGeneration) throw new KeyError('UNLOCK_FAILED')
+    if (columns.keyGeneration !== parsed.keyGeneration) throw new KeyError('KEY_FILE_MISMATCH')
     if (db.raw.pragma('integrity_check', { simple: true }) !== 'ok') throw new KeyError('UNLOCK_FAILED')
     resetAttempts(input.filePath)
     db.keySession = sessionFor(columns.temporarySlot, input.kind, input.slotIndex)
+    if (columns.recoveryUnshown && db.keySession.kind === 'admin') {
+      db.keySession = { kind: 'recovery-unshown', slotIndex: db.keySession.slotIndex }
+    }
     logUnlock('unlock ok', 0)
     keyHooks.beforeAttach?.()
     const opened = db

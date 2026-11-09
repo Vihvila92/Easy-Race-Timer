@@ -11,7 +11,7 @@ import { keyFilePath } from './key-file.js'
 import { BASELINE_ARGON, deriveAdminKek, formatRecoveryKey, kdfHooks, normalizeRecoveryText, parseRecoveryKey, passwordBytes, utf8Password } from './key-kdf.js'
 import { redactCrash } from './key-log.js'
 import { keyRandom } from './key-random.js'
-import { ADMIN_A, ADMIN_B, bodyHash, clonePair, contains, installSlotHooks, logs, openProtected, originalBytes, secretEncodings, slotBytes, tempDir, writeKey } from './key-slots-fixture.js'
+import { ADMIN_A, ADMIN_B, bodyHash, clonePair, contains, installSlotHooks, logs, openProtected, originalBytes, rejectedUnlock, secretEncodings, slotBytes, tempDir, writeKey } from './key-slots-fixture.js'
 import { regenerateRecoveryKey, rewrapAdminSlot } from './key-rewrap.js'
 import { createProtectedRaceFile, keyHooks, normalUseAllowed, sealEnvelope, unlockWithPassword, unlockWithRecovery } from './key-slots.js'
 
@@ -205,7 +205,7 @@ describe('tampered key file', () => {
       kdfHooks.onDerive = () => {
         derived = true
       }
-      const error = await unlockWithPassword(file, ADMIN_A).then(() => null, (caught: unknown) => caught)
+      const error = await rejectedUnlock(file, ADMIN_A)
       expect(error).toBeInstanceOf(KeyError)
       expect((error as KeyError).code).toBe(item.code)
       expect(derived).toBe(item.derives)
@@ -222,7 +222,7 @@ describe('tampered key file', () => {
     kdfHooks.onDerive = () => {
       derived = true
     }
-    const refused = await unlockWithPassword(file, ADMIN_A).then(() => null, (caught: unknown) => caught)
+    const refused = await rejectedUnlock(file, ADMIN_A)
     expect(refused).toMatchObject({ code: 'KEY_PARAMS_REJECTED' })
     expect(derived).toBe(false)
   })
@@ -294,7 +294,9 @@ describe('file id mismatch', () => {
     keyHooks.beforeAttach = () => {
       attached = true
     }
-    await expect(unlockWithPassword(file, ADMIN_A)).rejects.toMatchObject({ code: 'UNLOCK_FAILED' })
+    const mismatch = await unlockWithPassword(file, ADMIN_A).then(() => null, (error: unknown) => error)
+    expect(mismatch).toMatchObject({ code: 'KEY_FILE_MISMATCH' })
+    expect((mismatch as KeyError).message).not.toContain(file)
     expect(attached).toBe(false)
   })
 })
@@ -340,7 +342,7 @@ describe('secret zeroization', () => {
     const rawRecovery = parseRecoveryKey(printed.toString('ascii'))
     created.db.raw.pragma('wal_checkpoint(TRUNCATE)')
     await rewrapAdminSlot(created.db, 1, { password: 'another-canary-password', confirm: 'another-canary-password' })
-    const shown = await regenerateRecoveryKey(created.db)
+    const shown = (await regenerateRecoveryKey(created.db)).recoveryKey
     created.db.raw.close()
     expect(owned.every((byte) => byte === 0)).toBe(true)
     const keks: Buffer[] = []

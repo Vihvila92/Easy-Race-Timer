@@ -32,8 +32,10 @@ on:
       - scripts/argon-smoke.mjs
       - scripts/desktop-smoke.mjs
       - scripts/release-*.ts
-      - packages/storage/package.json
-      - packages/server/package.json
+      - packages/**
+      - '!packages/**/*.test.ts'
+      - '!packages/**/*.test.tsx'
+      - '!packages/**/*.md'
       - pnpm-lock.yaml
       - src-tauri/**
       - .github/workflows/release.yml

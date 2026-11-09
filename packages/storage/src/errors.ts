@@ -6,6 +6,7 @@ export type KeyErrorCode =
   | 'RECOVERY_KEY_CHECKSUM'
   | 'KEY_PARAMS_REJECTED'
   | 'FILE_HEADER_INVALID'
+  | 'KEY_FILE_MISMATCH'
   | 'PASSWORD_TOO_SHORT'
   | 'PASSWORD_TOO_LONG'
   | 'PASSWORD_COMMON'
@@ -16,6 +17,7 @@ const KEY_MESSAGES: Record<KeyErrorCode, string> = {
   RECOVERY_KEY_CHECKSUM: 'This recovery key has a typing error.',
   KEY_PARAMS_REJECTED: "This file's key settings are not allowed, so it was not opened.",
   FILE_HEADER_INVALID: 'This file cannot be opened.',
+  KEY_FILE_MISMATCH: 'This key file does not belong to this race file, or the race file is damaged. Use the key file that was saved together with the race file, or restore a backup.',
   PASSWORD_TOO_SHORT: 'Password is too short.',
   PASSWORD_TOO_LONG: 'Password is too long.',
   PASSWORD_COMMON: 'Password is too common.',
@@ -29,8 +31,10 @@ const KEY_MESSAGES: Record<KeyErrorCode, string> = {
 export class RaceFileError extends Error {
   readonly fileName: string
   readonly kind: RaceFileKind
+  /** SQLite result when `kind` is `open`. Absent for every other failure. Not a path. */
+  readonly causeCode?: string
 
-  constructor(fileName: string, kind: RaceFileKind) {
+  constructor(fileName: string, kind: RaceFileKind, causeCode?: string) {
     const message = kind === 'newer'
       ? 'This race file was saved by a newer Easy Race Timer.'
       : kind === 'dev-key'
@@ -44,6 +48,7 @@ export class RaceFileError extends Error {
     this.name = 'RaceFileError'
     this.fileName = fileName
     this.kind = kind
+    this.causeCode = causeCode
     this.stack = message
   }
 }
