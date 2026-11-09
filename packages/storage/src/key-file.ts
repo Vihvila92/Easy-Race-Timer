@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import fs from 'node:fs'
 import path from 'node:path'
-import { fsyncDirectory, fsyncFile } from './atomic.js'
+import { fsyncDirectory, fsyncFile, secureRemove } from './atomic.js'
 import { RaceFileError } from './errors.js'
 
 /**
@@ -31,6 +31,40 @@ export function databasePathForKeyFile(keyPath: string): string {
   const base = keyPath.slice(0, -'.keys'.length)
   if (/\.v\d+$/.test(base)) return `${base}.bak`
   return `${base}.sqlite`
+}
+
+/** A crashed temp-file write leaves `<prefix><pid>.<time>.tmp`. */
+function numberedWriteTemp(name: string, prefix: string): boolean {
+  if (!name.startsWith(prefix) || !name.endsWith('.tmp')) return false
+  const parts = name.slice(prefix.length, -'.tmp'.length).split('.')
+  return parts.length === 2 && parts.every((part) => part.length > 0 && [...part].every((char) => char >= '0' && char <= '9'))
+}
+
+/** Delete leftover key-file temps. Holds the in-process key-file lock so an open cannot remove a temp a password change has not renamed yet. */
+export async function removeRekeyWriteTemps(databasePath: string): Promise<void> {
+  await withKeyFileLock(keyFilePath(databasePath), async () => {
+    deleteStaleTemps(databasePath)
+  })
+}
+
+function deleteStaleTemps(databasePath: string): void {
+  const directory = path.dirname(databasePath)
+  if (!fs.existsSync(directory)) return
+  const keyName = path.basename(keyFilePath(databasePath))
+  for (const name of fs.readdirSync(directory)) {
+    const stale = numberedWriteTemp(name, `..${keyName}.rekey.`) || numberedWriteTemp(name, `.${keyName}.`)
+    if (!stale) continue
+    removeStaleTemp(path.join(directory, name))
+  }
+}
+
+/** A temp that cannot be deleted must not stop the race file from opening. */
+function removeStaleTemp(file: string): void {
+  try {
+    secureRemove(file)
+  } catch {
+    console.warn('A leftover temporary file could not be removed.')
+  }
 }
 
 /** Temps for rekey-on-a-copy. `.ert.sqlite.rekey` and `.ert.keys.rekey` beside the live pair. */
@@ -78,17 +112,24 @@ export function backupPairComplete(databasePath: string): boolean {
   return info.kind === 'stub' || info.kind === 'envelope'
 }
 
-export function writeKeyStub(keyPath: string, fileIdHex: string): void {
-  const directory = path.dirname(keyPath)
+/** Test seam. Production never sets this. Runs after the temp file exists and before it is renamed. */
+export const keyWriteHooks: {
+  beforeRename?: () => void
+} = {}
+
+/** Temp file, fsync, rename, directory fsync, mode 0600. Shared by the stub, the envelope and the backoff file. */
+export function writePrivateBytes(filePath: string, bytes: Buffer): void {
+  const directory = path.dirname(filePath)
   fs.mkdirSync(directory, { recursive: true })
-  const tmp = path.join(directory, `.${path.basename(keyPath)}.${process.pid}.${Date.now()}.tmp`)
+  const tmp = path.join(directory, `.${path.basename(filePath)}.${process.pid}.${Date.now()}.tmp`)
   try {
-    fs.writeFileSync(tmp, encodeKeyStub(fileIdHex), { mode: 0o600 })
+    fs.writeFileSync(tmp, bytes, { mode: 0o600 })
     fsyncFile(tmp)
-    fs.renameSync(tmp, keyPath)
+    keyWriteHooks.beforeRename?.()
+    fs.renameSync(tmp, filePath)
     fsyncDirectory(directory)
     try {
-      fs.chmodSync(keyPath, 0o600)
+      fs.chmodSync(filePath, 0o600)
     } catch {
       // Permissions are best-effort on filesystems that ignore them.
     }
@@ -96,6 +137,21 @@ export function writeKeyStub(keyPath: string, fileIdHex: string): void {
     fs.rmSync(tmp, { force: true })
     throw error
   }
+}
+
+export function writeKeyStub(keyPath: string, fileIdHex: string): void {
+  writePrivateBytes(keyPath, encodeKeyStub(fileIdHex))
+}
+
+const keyWrites = new Map<string, Promise<void>>()
+
+/** In-process only. One writer at a time for a key file in this process, including across awaits. Other processes are not locked. */
+export function withKeyFileLock<T>(keyPath: string, fn: () => Promise<T>): Promise<T> {
+  const previous = keyWrites.get(keyPath) ?? Promise.resolve()
+  const run = previous.then(fn, fn)
+  const settled = run.then(() => undefined, () => undefined)
+  keyWrites.set(keyPath, settled)
+  return run
 }
 
 /**

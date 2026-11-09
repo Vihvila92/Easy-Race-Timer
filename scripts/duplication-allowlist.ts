@@ -19,7 +19,6 @@ export const allowedClones: AllowedClone[] = [
   { hash: 'eee20c2b6f0ec8b64ff5817e88c1126d2bacddc9a544599de19e3493e0edf608', files: 'packages/server/src/service.ts | packages/server/src/service.ts' },
 
   // Storage migrations and backup pruning share structure on purpose. Folding them together can change a shipped migration or which files are deleted, and these files are over the line limit.
-  { hash: 'b2013b43c3490f23fa5819059d1fd73a52cfc6429f76f11a05bb01fac580bcb1', files: 'packages/storage/src/db.ts | packages/storage/src/schema.ts' },
   { hash: 'f155838fd8594a8c0e086bb407b69126a828c16081d1fe7ed33c5758e38d9c09', files: 'packages/storage/src/plaintext.ts | packages/storage/src/plaintext.ts' },
   { hash: 'a4f57836694bff353f862e51a5d5cde31a2cc618fca9eb6adfa9afe601e76aba', files: 'packages/storage/src/schema.ts | packages/storage/src/schema.ts' },
 

@@ -2,6 +2,8 @@
 import { randomBytes } from 'node:crypto'
 import { ageOnReference } from '@ert/core'
 import type { SqliteDatabase } from './cipher.js'
+import { ACCOUNT_TABLES, SCHEMA_SQL } from './schema-sql.js'
+export { ACCOUNT_TABLES, SCHEMA_SQL }
 
 export const SCHEMA_VERSION = 4
 
@@ -10,7 +12,7 @@ export interface Migration {
   up: (raw: SqliteDatabase) => void
 }
 
-function columnNames(raw: SqliteDatabase, table: string): Set<string> {
+export function columnNames(raw: SqliteDatabase, table: string): Set<string> {
   const rows = raw.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
   return new Set(rows.map((column) => column.name))
 }
@@ -126,18 +128,6 @@ export const MIGRATIONS: Migration[] = [
  * Accounts stay in the encrypted race file.
  * Key slots do not. #131 stores wraps in the sidecar bound to schema_meta.file_id.
  */
-const ACCOUNT_TABLES = `
-CREATE TABLE IF NOT EXISTS user_account (
-  id TEXT PRIMARY KEY,
-  org_id TEXT NOT NULL DEFAULT 'local',
-  display_name TEXT NOT NULL,
-  email TEXT,
-  role TEXT NOT NULL CHECK (role IN ('admin', 'clerk')),
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL
-);
-`
-
 /** 16 CSPRNG bytes, hex-encoded. Not secret. Stable for the life of the file, including rekey. */
 export function ensureFileId(raw: SqliteDatabase, preferred?: string): string {
   const columns = columnNames(raw, 'schema_meta')
@@ -149,265 +139,49 @@ export function ensureFileId(raw: SqliteDatabase, preferred?: string): string {
   return fileId
 }
 
-export const SCHEMA_SQL = `
-CREATE TABLE IF NOT EXISTS schema_meta (
-  id INTEGER PRIMARY KEY CHECK (id = 1),
-  schema_version INTEGER NOT NULL,
-  app_version TEXT NOT NULL,
-  installation_id TEXT NOT NULL,
-  file_id TEXT
-);
+export interface KeyColumns {
+  keyGeneration: number
+  temporarySlot: 0 | 1 | null
+}
 
-CREATE TABLE IF NOT EXISTS event (
-  id TEXT PRIMARY KEY,
-  org_id TEXT NOT NULL DEFAULT 'local',
-  name TEXT NOT NULL,
-  organizer TEXT,
-  location TEXT,
-  date_start TEXT NOT NULL,
-  date_end TEXT,
-  timezone TEXT NOT NULL,
-  sport TEXT NOT NULL,
-  locale_default TEXT NOT NULL DEFAULT 'fi',
-  pin_hash TEXT,
-  locked_at INTEGER,
-  settings_json TEXT NOT NULL,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  rev INTEGER NOT NULL DEFAULT 1,
-  hlc TEXT NOT NULL
-);
+function asTemporarySlot(value: number | null): 0 | 1 | null {
+  if (value === 0 || value === 1) return value
+  return null
+}
 
-CREATE TABLE IF NOT EXISTS race (
-  id TEXT PRIMARY KEY,
-  org_id TEXT NOT NULL DEFAULT 'local',
-  event_id TEXT NOT NULL,
-  name_fi TEXT NOT NULL,
-  name_en TEXT NOT NULL,
-  distance_m INTEGER NOT NULL,
-  start_mode TEXT NOT NULL,
-  scheduled_start INTEGER,
-  actual_start_ms INTEGER,
-  open_category_id TEXT,
-  stage_no INTEGER NOT NULL DEFAULT 1,
-  laps INTEGER NOT NULL DEFAULT 1,
-  locked_at INTEGER,
-  sort_order INTEGER NOT NULL DEFAULT 0,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  rev INTEGER NOT NULL DEFAULT 1,
-  hlc TEXT NOT NULL
-);
+/** `key_generation` starts at 1. `temporary_slot` is set only for a password that must be replaced. */
+export function ensureKeyColumns(raw: SqliteDatabase): KeyColumns {
+  const columns = columnNames(raw, 'schema_meta')
+  if (!columns.has('key_generation')) raw.exec('ALTER TABLE schema_meta ADD COLUMN key_generation INTEGER')
+  if (!columns.has('temporary_slot')) raw.exec('ALTER TABLE schema_meta ADD COLUMN temporary_slot INTEGER')
+  const row = raw.prepare('SELECT key_generation, temporary_slot FROM schema_meta WHERE id = 1').get() as { key_generation: number | null; temporary_slot: number | null } | undefined
+  const temporarySlot = asTemporarySlot(row?.temporary_slot ?? null)
+  if (row?.key_generation && Number.isInteger(row.key_generation) && row.key_generation >= 1) {
+    return { keyGeneration: row.key_generation, temporarySlot }
+  }
+  raw.prepare('UPDATE schema_meta SET key_generation = 1 WHERE id = 1').run()
+  return { keyGeneration: 1, temporarySlot }
+}
 
-CREATE TABLE IF NOT EXISTS category (
-  id TEXT PRIMARY KEY,
-  race_id TEXT NOT NULL,
-  code TEXT NOT NULL,
-  name_fi TEXT NOT NULL,
-  name_en TEXT NOT NULL,
-  description_fi TEXT,
-  description_en TEXT,
-  gender TEXT,
-  min_age INTEGER,
-  max_age INTEGER,
-  ranked INTEGER NOT NULL DEFAULT 1,
-  auto_assign INTEGER NOT NULL DEFAULT 1,
-  start_offset_ms INTEGER NOT NULL DEFAULT 0,
-  sort_order INTEGER NOT NULL DEFAULT 0
-);
+export function setKeyGeneration(raw: SqliteDatabase, value: number): void {
+  if (!Number.isInteger(value) || value < 1) throw new Error('key generation must be a positive integer')
+  ensureKeyColumns(raw)
+  raw.prepare('UPDATE schema_meta SET key_generation = ? WHERE id = 1').run(value)
+}
 
-CREATE TABLE IF NOT EXISTS person (
-  id TEXT PRIMARY KEY,
-  org_id TEXT NOT NULL DEFAULT 'local',
-  first_name TEXT NOT NULL,
-  last_name TEXT NOT NULL,
-  gender TEXT NOT NULL,
-  birth_year INTEGER,
-  default_club_id TEXT,
-  nationality TEXT,
-  email TEXT,
-  phone TEXT,
-  guardian_name TEXT,
-  guardian_email TEXT,
-  retention_until INTEGER,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  rev INTEGER NOT NULL DEFAULT 1,
-  hlc TEXT NOT NULL,
-  publication TEXT NOT NULL DEFAULT 'full' CHECK (publication IN ('full', 'initials', 'bib_only', 'hidden'))
-);
+export function setTemporarySlot(raw: SqliteDatabase, slot: 0 | 1 | null): void {
+  ensureKeyColumns(raw)
+  raw.prepare('UPDATE schema_meta SET temporary_slot = ? WHERE id = 1').run(slot)
+}
 
-CREATE TABLE IF NOT EXISTS club (
-  id TEXT PRIMARY KEY,
-  org_id TEXT NOT NULL DEFAULT 'local',
-  abbreviation TEXT,
-  name TEXT NOT NULL,
-  municipality TEXT,
-  official_id TEXT,
-  status TEXT NOT NULL DEFAULT 'active',
-  merged_into_id TEXT,
-  source TEXT NOT NULL DEFAULT 'manual',
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  rev INTEGER NOT NULL DEFAULT 1,
-  hlc TEXT NOT NULL
-);
+/** Encrypted audit row. `reason` is `temporary_password` or `other_admin_present`, never a secret. */
+export function recordKeyAudit(raw: SqliteDatabase, action: string, reason: string): void {
+  raw.exec(`CREATE TABLE IF NOT EXISTS key_audit (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    action TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+  )`)
+  raw.prepare('INSERT INTO key_audit (action, reason, created_at) VALUES (?, ?, ?)').run(action, reason, Date.now())
+}
 
-CREATE UNIQUE INDEX IF NOT EXISTS club_abbr_unique
-  ON club(org_id, lower(abbreviation))
-  WHERE abbreviation IS NOT NULL AND status <> 'merged';
-
-CREATE TABLE IF NOT EXISTS club_alias (
-  id TEXT PRIMARY KEY,
-  org_id TEXT NOT NULL DEFAULT 'local',
-  club_id TEXT NOT NULL,
-  alias_normalized TEXT NOT NULL,
-  kind TEXT NOT NULL,
-  created_from TEXT NOT NULL,
-  created_at INTEGER NOT NULL,
-  UNIQUE(org_id, alias_normalized)
-);
-
-CREATE TABLE IF NOT EXISTS consent (
-  id TEXT PRIMARY KEY,
-  person_id TEXT,
-  purpose TEXT NOT NULL,
-  granted INTEGER NOT NULL,
-  given_by TEXT NOT NULL,
-  guardian_name TEXT,
-  text_version TEXT NOT NULL,
-  channel TEXT NOT NULL,
-  recorded_by TEXT,
-  recorded_at INTEGER NOT NULL,
-  evidence_json TEXT
-);
-
-CREATE TABLE IF NOT EXISTS entry (
-  id TEXT PRIMARY KEY,
-  org_id TEXT NOT NULL DEFAULT 'local',
-  race_id TEXT NOT NULL,
-  person_id TEXT,
-  category_id TEXT,
-  category_source TEXT NOT NULL DEFAULT 'auto',
-  bib INTEGER,
-  registered_at INTEGER NOT NULL,
-  late_registration INTEGER NOT NULL DEFAULT 0,
-  club_id TEXT,
-  club_raw TEXT,
-  club_abbr_raw TEXT,
-  display_name TEXT,
-  birth_year_at_entry INTEGER,
-  gender_at_entry TEXT,
-  anonymized_at INTEGER,
-  start_offset_ms INTEGER NOT NULL DEFAULT 0,
-  start_offset_reason TEXT,
-  offset_ranking TEXT NOT NULL DEFAULT 'inherit',
-  status TEXT NOT NULL DEFAULT 'registered',
-  status_reason TEXT,
-  -- Internal. Export and print must not select dsq_reason. See INTERNAL_COLUMNS.
-  dsq_reason TEXT,
-  consent_date TEXT NOT NULL,
-  race_change_note TEXT,
-  warnings_json TEXT,
-  result_order INTEGER,
-  reg_seq INTEGER NOT NULL,
-  created_at INTEGER NOT NULL,
-  updated_at INTEGER NOT NULL,
-  rev INTEGER NOT NULL DEFAULT 1,
-  hlc TEXT NOT NULL,
-  CHECK (bib IS NULL OR bib > 0)
-);
-
-CREATE UNIQUE INDEX IF NOT EXISTS entry_bib_unique ON entry(race_id, bib) WHERE bib IS NOT NULL;
-CREATE UNIQUE INDEX IF NOT EXISTS entry_person_unique ON entry(race_id, person_id) WHERE person_id IS NOT NULL;
-
-CREATE TABLE IF NOT EXISTS timing_point (
-  id TEXT PRIMARY KEY,
-  event_id TEXT,
-  race_id TEXT,
-  kind TEXT NOT NULL,
-  name TEXT NOT NULL,
-  order_no INTEGER NOT NULL DEFAULT 0,
-  distance_m INTEGER
-);
-
-CREATE TABLE IF NOT EXISTS device (
-  id TEXT PRIMARY KEY,
-  org_id TEXT NOT NULL DEFAULT 'local',
-  name TEXT NOT NULL,
-  kind TEXT NOT NULL,
-  role TEXT,
-  is_primary_clock INTEGER NOT NULL DEFAULT 0,
-  operator_name TEXT,
-  next_seq INTEGER NOT NULL DEFAULT 1
-);
-
-CREATE TABLE IF NOT EXISTS timing_event (
-  id TEXT PRIMARY KEY,
-  org_id TEXT NOT NULL DEFAULT 'local',
-  race_id TEXT NOT NULL,
-  timing_point_id TEXT NOT NULL,
-  device_id TEXT NOT NULL,
-  seq_no INTEGER NOT NULL,
-  source TEXT NOT NULL,
-  device_time_ms INTEGER NOT NULL,
-  monotonic_ms INTEGER,
-  time_ms INTEGER NOT NULL,
-  bib INTEGER,
-  entry_id TEXT,
-  mode TEXT,
-  raw_json TEXT,
-  created_at INTEGER NOT NULL,
-  UNIQUE(device_id, seq_no)
-);
-
-CREATE TABLE IF NOT EXISTS correction (
-  id TEXT PRIMARY KEY,
-  org_id TEXT NOT NULL DEFAULT 'local',
-  target_type TEXT NOT NULL,
-  target_id TEXT NOT NULL,
-  action TEXT NOT NULL,
-  old_value_json TEXT,
-  new_value_json TEXT,
-  reason TEXT NOT NULL,
-  by_device_id TEXT,
-  hlc TEXT NOT NULL,
-  created_at INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS tie_resolution (
-  id TEXT PRIMARY KEY,
-  org_id TEXT NOT NULL DEFAULT 'local',
-  race_id TEXT NOT NULL,
-  display_time TEXT NOT NULL,
-  display_time_s INTEGER NOT NULL,
-  member_entry_ids_json TEXT NOT NULL,
-  order_json TEXT,
-  basis TEXT,
-  reason TEXT,
-  confirmed_by_device_id TEXT,
-  reopened INTEGER NOT NULL DEFAULT 0,
-  hlc TEXT NOT NULL,
-  created_at INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS clock_sample (
-  id TEXT PRIMARY KEY,
-  device_id TEXT NOT NULL,
-  reference_device_id TEXT,
-  method TEXT NOT NULL,
-  offset_ms INTEGER NOT NULL,
-  uncertainty_ms INTEGER NOT NULL,
-  rtt_ms INTEGER,
-  measured_at_device_ms INTEGER NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS sync_state (
-  device_id TEXT NOT NULL,
-  from_device_id TEXT NOT NULL,
-  last_seq INTEGER NOT NULL,
-  PRIMARY KEY (device_id, from_device_id)
-);
-
-${ACCOUNT_TABLES}
-`

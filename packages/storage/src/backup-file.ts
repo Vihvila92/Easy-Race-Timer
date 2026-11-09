@@ -4,7 +4,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { atomicCopyFile, fsyncDirectory, fsyncFile, secureRemove } from './atomic.js'
 import { openEncrypted, restrictPermissions, type SqliteDatabase } from './cipher.js'
-import type { AppDb } from './db.js'
+import { backupHooks, type AppDb } from './db.js'
 import { RaceFileError } from './errors.js'
 import { backupPairComplete, ensureKeyFile, inspectKeyFile, keyFilePath } from './key-file.js'
 import { ensureFileId } from './schema.js'
@@ -235,9 +235,12 @@ export function recoverRestore(dest: string): void {
 function writeBackupPair(databaseSource: string, databaseDest: string): void {
   if (!backupPairComplete(databaseSource)) throw new Error('key file missing')
   atomicCopyFile(databaseSource, databaseDest)
+  backupHooks.onStep?.('database')
   try {
     atomicCopyFile(keyFilePath(databaseSource), keyFilePath(databaseDest))
+    backupHooks.onStep?.('key')
     fsyncParent(databaseDest)
+    backupHooks.onStep?.('directory')
   } catch (error) {
     secureRemove(databaseDest)
     secureRemove(keyFilePath(databaseDest))

@@ -12,7 +12,7 @@ const config = {
   ignoreDependencies: ['node-gyp', 'postject', 'jscpd'],
   // Operating-system tools used by the sidecar build, cipher tests, and desktop smoke.
   // icacls restricts the backup directory on Windows. Node has no DACL API.
-  ignoreBinaries: ['sqlite3', 'rustc', 'file', 'arch', 'lipo', 'pgrep', 'tasklist', 'hdiutil', 'xattr', 'icacls'],
+  ignoreBinaries: ['sqlite3', 'rustc', 'file', 'arch', 'lipo', 'pgrep', 'tasklist', 'hdiutil', 'xattr', 'softwareupdate', 'icacls'],
   ignoreIssues: {
     // parseHost is used only in this module. The file is over the complexity limit.
     'packages/server/src/guard.ts': ['exports'],

@@ -1,20 +1,22 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import './sqlite-uri.js'
-import { randomBytes } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import Database from 'better-sqlite3-multiple-ciphers'
 import { createId } from '@ert/core'
-import { atomicCopyFile, fsyncDirectory, fsyncFile, secureRemove } from './atomic.js'
-import { recoverRestore } from './backup-file.js'
+import { fsyncDirectory, secureRemove } from './atomic.js'
 import { isPlaintextSqlite, openEncrypted, peekSchemaVersion, restrictPermissions, unlock, type SqliteDatabase } from './cipher.js'
 import { RaceFileError } from './errors.js'
 import { omitInternal } from './internal.js'
 import { resolveDataKey, type OpenOptions } from './key.js'
-import { backupPairComplete, ensureKeyFile, keyFilePath, writeKeyStub } from './key-file.js'
-import { recoverRekeyTemps } from './rekey.js'
+import { recoverRestore } from './backup-file.js'
+import { ensureKeyFile, inspectKeyFile, keyFilePath, rekeyTempPaths, removeRekeyWriteTemps } from './key-file.js'
 import { migratePlaintextFile, purgeExpiredQuarantine, quarantinePlaintextCopies, recoverPlaintextMigration } from './plaintext.js'
-import { ensureFileId, MIGRATIONS, SCHEMA_SQL, SCHEMA_VERSION } from './schema.js'
+import { readEnvelopeIdentity } from './key-envelope.js'
+import { migrateOnCopy } from './migrate-copy.js'
+import { columnNames, ensureFileId, ensureKeyColumns, SCHEMA_SQL, SCHEMA_VERSION, setKeyGeneration } from './schema.js'
+
+export { columnNames }
 
 export const APP_VERSION = '0.1.0'
 export const ORG_ID = 'local'
@@ -30,12 +32,42 @@ export const migrationHooks: {
   failBackup?: boolean
 } = {}
 
-export { plaintextHooks, QUARANTINE_RETENTION_MS, deleteQuarantinedPlaintext, plaintextQuarantinePending, type PlaintextStep } from './plaintext.js'
-export { rekeyDataFile, rekeyHooks } from './rekey.js'
-export { assertBackupIntegrity, backupDatabase, recoverRestore, restoreBackupPair, restoreHooks } from './backup-file.js'
-export { BACKUP_KEEP_RECENT, pruneBackups, pruneSchemaBackups } from './backup-prune.js'
+export type RekeyPhase =
+  | 'checkpoint-before-copy'
+  | 'journal-delete'
+  | 'before-rekey'
+  | 'rekey'
+  | 'integrity-ok'
+  | 'journal-wal'
+  | 'checkpoint-after-rekey'
 
-function zeroKeyOnClose(raw: SqliteDatabase, dataKey: Buffer): void {
+export interface RekeyPhaseInfo {
+  file: string
+  journal?: string
+}
+
+/** Test seam. Production never sets this. A throw leaves the original pair in place. */
+export const rekeyHooks: {
+  beforeRename?: () => void
+  afterDatabaseRename?: () => void
+  onPhase?: (phase: RekeyPhase, info: RekeyPhaseInfo) => void
+} = {}
+
+export interface RekeyOptions {
+  /** Runs on the copy after journal_mode DELETE and before PRAGMA rekey. */
+  prepareCopy?: (copy: SqliteDatabase) => void
+  /** Writes the key temp. The default copies the current key file. */
+  writeKeyFile?: (tempKeyPath: string) => void
+}
+
+/** Test seam for backup pair order. Production never sets this. */
+export const backupHooks: {
+  onStep?: (step: 'database' | 'key' | 'directory') => void
+} = {}
+
+export { plaintextHooks, QUARANTINE_RETENTION_MS, deleteQuarantinedPlaintext, plaintextQuarantinePending, type PlaintextStep } from './plaintext.js'
+
+export function zeroKeyOnClose(raw: SqliteDatabase, dataKey: Buffer): void {
   const close = raw.close.bind(raw)
   raw.close = () => {
     const result = close()
@@ -44,9 +76,16 @@ function zeroKeyOnClose(raw: SqliteDatabase, dataKey: Buffer): void {
   }
 }
 
+export interface KeySession {
+  kind: 'admin' | 'recovery-gate' | 'temporary-password'
+  slotIndex: 0 | 1 | 2
+}
+
 export class AppDb {
   /** Basenames moved to plaintext-quarantine on this open. Empty for a memory database. */
   readonly quarantinedPlaintext: readonly string[]
+  /** Set when a slot unwrap opened this handle. A dev-key open leaves it null. */
+  keySession: KeySession | null = null
 
   constructor(
     readonly raw: SqliteDatabase,
@@ -112,21 +151,17 @@ function applyFreshSchema(raw: SqliteDatabase): void {
     raw.prepare('INSERT INTO schema_meta (id, schema_version, app_version, installation_id) VALUES (1, ?, ?, ?)').run(SCHEMA_VERSION, APP_VERSION, createId())
   }
   ensureFileId(raw)
+  ensureKeyColumns(raw)
 }
 
-function removeMigrationTemp(tmp: string): void {
+export function removeMigrationTemp(tmp: string): void {
   secureRemove(tmp)
   secureRemove(`${tmp}-wal`)
   secureRemove(`${tmp}-shm`)
 }
 
-function columnNames(raw: SqliteDatabase, table: string): Set<string> {
-  const rows = raw.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
-  return new Set(rows.map((column) => column.name))
-}
-
 /** Drop a stored birth date and vacuum so the value is not left on a free page. */
-function purgeBirthDateColumn(raw: SqliteDatabase): boolean {
+export function purgeBirthDateColumn(raw: SqliteDatabase): boolean {
   if (!columnNames(raw, 'person').has('birth_date')) return false
   raw.pragma('secure_delete = ON')
   raw.exec(`UPDATE person
@@ -141,7 +176,7 @@ function purgeBirthDateColumn(raw: SqliteDatabase): boolean {
  * Copy the encrypted file, migrate the copy, then rename it over the original.
  * A crash before the rename leaves the original file untouched.
  */
-function checkpointIfPending(filePath: string, dataKey: Buffer): void {
+export function checkpointIfPending(filePath: string, dataKey: Buffer): void {
   if (!fs.existsSync(`${filePath}-wal`) && !fs.existsSync(`${filePath}-shm`)) return
   const raw = openEncrypted(filePath, dataKey)
   try {
@@ -151,7 +186,7 @@ function checkpointIfPending(filePath: string, dataKey: Buffer): void {
   }
 }
 
-function peekFileId(filePath: string, dataKey: Buffer): string | undefined {
+export function peekFileId(filePath: string, dataKey: Buffer): string | undefined {
   let raw: SqliteDatabase | undefined
   try {
     raw = new Database(filePath, { readonly: true, fileMustExist: true })
@@ -171,142 +206,63 @@ function peekFileId(filePath: string, dataKey: Buffer): string | undefined {
   }
 }
 
-function assertPremigrationCopy(filePath: string, backup: string, preferred: string): void {
-  if (!fs.readFileSync(filePath).equals(fs.readFileSync(backup))) throw new Error('backup bytes differ')
-  const sourceKey = keyFilePath(filePath)
-  const backupKey = keyFilePath(backup)
-  if (backupPairComplete(filePath)) atomicCopyFile(sourceKey, backupKey)
-  else writeKeyStub(backupKey, preferred)
-  const keyCopy = fs.readFileSync(backupKey)
-  if (fs.existsSync(sourceKey) && backupPairComplete(filePath) && !fs.readFileSync(sourceKey).equals(keyCopy)) {
-    throw new Error('key backup bytes differ')
+
+export function bindKeyFile(filePath: string, raw: SqliteDatabase): void {
+  ensureKeyFile(filePath, ensureFileId(raw))
+}
+
+/**
+ * A database temp means the rename did not happen, so the original pair is kept.
+ * A key temp alone is the crash window after the database rename. It is attached
+ * only when its file id matches. Otherwise both files stay and open fails closed.
+ */
+function discardRekeyDatabaseTemp(filePath: string): boolean {
+  const temps = rekeyTempPaths(filePath)
+  if (!fs.existsSync(temps.database)) return false
+  if (fs.existsSync(filePath)) {
+    secureRemove(temps.database)
+    secureRemove(`${temps.database}-wal`)
+    secureRemove(`${temps.database}-shm`)
+    secureRemove(temps.key)
   }
-  fsyncDirectory(path.dirname(backup))
+  return true
 }
 
-function writePremigrationBackup(filePath: string, fromVersion: number, preferred: string): string {
-  const backup = `${filePath}.v${fromVersion}.bak`
-  let wroteBackup = false
+function keyTempMatches(filePath: string, fileId: string, generation: number): boolean {
+  const info = inspectKeyFile(rekeyTempPaths(filePath).key)
+  if (info.fileId !== fileId) return false
+  if (info.kind === 'stub') return true
+  if (info.kind !== 'envelope') return false
+  const identity = readEnvelopeIdentity(fs.readFileSync(rekeyTempPaths(filePath).key))
+  return Boolean(identity && identity.keyGeneration === generation)
+}
+
+function recoverRekeyTemps(filePath: string, dataKey: Buffer): void {
+  if (discardRekeyDatabaseTemp(filePath)) return
+  const temps = rekeyTempPaths(filePath)
+  if (!fs.existsSync(temps.key) || !fs.existsSync(filePath)) return
+  const raw = openEncrypted(filePath, dataKey)
   try {
-    if (migrationHooks.failBackup) throw new Error('disk full')
-    atomicCopyFile(filePath, backup)
-    wroteBackup = true
-    assertPremigrationCopy(filePath, backup, preferred)
-  } catch {
-    if (wroteBackup) {
-      secureRemove(backup)
-      secureRemove(keyFilePath(backup))
-    }
-    throw new Error('Pre-migration backup failed; migration was not started.')
-  }
-  return backup
-}
-
-function migrateOnCopy(filePath: string, dataKey: Buffer, fromVersion: number): void {
-  checkpointIfPending(filePath, dataKey)
-  const preferred = peekFileId(filePath, dataKey) ?? randomBytes(16).toString('hex')
-  const backup = writePremigrationBackup(filePath, fromVersion, preferred)
-  applyMigration(filePath, dataKey, fromVersion, { preferred, backup })
-}
-
-function applyMigration(filePath: string, dataKey: Buffer, fromVersion: number, copy: { preferred: string; backup: string }): void {
-  const preferred = copy.preferred
-  const backup = copy.backup
-  const tmp = path.join(path.dirname(filePath), `.${path.basename(filePath)}.migrating`)
-  let migrated = false
-  let raw: SqliteDatabase | undefined
-  try {
-    atomicCopyFile(filePath, tmp)
-    raw = openEncrypted(tmp, dataKey)
-    const apply = raw.transaction(() => {
-      raw!.exec(SCHEMA_SQL)
-      for (const migration of MIGRATIONS) {
-        if (migration.version > fromVersion && migration.version <= SCHEMA_VERSION) migration.up(raw!)
-      }
-      raw!.prepare('UPDATE schema_meta SET schema_version = ?, app_version = ? WHERE id = 1').run(SCHEMA_VERSION, APP_VERSION)
-      ensureFileId(raw!, preferred)
-      migrationHooks.beforeCommit?.()
-    })
-    apply()
-    raw.pragma('secure_delete = ON')
-    raw.exec('VACUUM')
-    raw.pragma('wal_checkpoint(TRUNCATE)')
+    const fileId = ensureFileId(raw)
+    const generation = ensureKeyColumns(raw).keyGeneration
     raw.close()
-    raw = undefined
-    fsyncFile(tmp)
-    fs.renameSync(tmp, filePath)
+    if (!keyTempMatches(filePath, fileId, generation)) throw new Error(`Key file recovery failed for ${path.basename(filePath)}.`)
+    fs.renameSync(temps.key, keyFilePath(filePath))
     fsyncDirectory(path.dirname(filePath))
-    migrated = true
-    restrictPermissions(filePath)
-    secureRemove(`${tmp}-wal`)
-    secureRemove(`${tmp}-shm`)
-    purgeBirthDateBackup(backup, dataKey)
+    restrictPermissions(keyFilePath(filePath))
   } catch (error) {
-    try {
-      raw?.close()
-    } catch {
-      // The handle may already be closed.
-    }
-    if (!migrated) {
-      removeMigrationTemp(tmp)
-      throw new Error('Migration failed; the original file was left unchanged.')
-    }
-    throw error
+    try { raw.close() } catch { /* The handle may already be closed. */ }
+    if (error instanceof RaceFileError) throw error
+    throw new Error(`Key file recovery failed for ${path.basename(filePath)}.`)
   }
 }
 
 /**
- * After a successful migration, a backup that still has birth_date is rewritten without that column.
- * A backup that never had the column is left byte-identical. A purge failure deletes the backup.
+ * Open the race database.
+ * A file is SQLCipher AES-256. `:memory:` stays unencrypted for unit tests.
+ * An older schema is backed up as `<file>.v<version>.bak` plus `<file>.v<version>.keys` before migration.
+ * The dev key is used only with an explicit opt-in, and never when the key is missing.
  */
-function backupHasBirthDate(backup: string, dataKey: Buffer): boolean {
-  let raw: SqliteDatabase | undefined
-  try {
-    raw = new Database(backup, { readonly: true, fileMustExist: true })
-    unlock(raw, dataKey)
-    return columnNames(raw, 'person').has('birth_date')
-  } catch {
-    return false
-  } finally {
-    try {
-      raw?.close()
-    } catch {
-      // The handle may already be closed.
-    }
-    fs.rmSync(`${backup}-wal`, { force: true })
-    fs.rmSync(`${backup}-shm`, { force: true })
-  }
-}
-
-function purgeBirthDateBackup(backup: string, dataKey: Buffer): void {
-  if (!fs.existsSync(backup) || !backupHasBirthDate(backup, dataKey)) return
-  let raw: SqliteDatabase | undefined
-  try {
-    raw = openEncrypted(backup, dataKey)
-    purgeBirthDateColumn(raw)
-    raw.pragma('wal_checkpoint(TRUNCATE)')
-    raw.close()
-    raw = undefined
-    restrictPermissions(backup)
-    secureRemove(`${backup}-wal`)
-    secureRemove(`${backup}-shm`)
-  } catch {
-    try {
-      raw?.close()
-    } catch {
-      // The handle may already be closed.
-    }
-    secureRemove(backup)
-    secureRemove(`${backup}-wal`)
-    secureRemove(`${backup}-shm`)
-    secureRemove(keyFilePath(backup))
-  }
-}
-
-function bindKeyFile(filePath: string, raw: SqliteDatabase): void {
-  ensureKeyFile(filePath, ensureFileId(raw))
-}
-
 function openMemoryDatabase(): AppDb {
   const raw = new Database(':memory:')
   raw.pragma('journal_mode = WAL')
@@ -318,60 +274,80 @@ function openMemoryDatabase(): AppDb {
   return new AppDb(raw, ':memory:', null)
 }
 
-function finishOpen(raw: SqliteDatabase, resolved: string, dataKey: Buffer, open: { quarantined: readonly string[]; purgeBirthDate: boolean }): AppDb {
+function openPrepared(filePath: string, dataKey: Buffer, quarantined: readonly string[], fresh: boolean): AppDb {
+  const raw = openEncrypted(filePath, dataKey)
   try {
     applyFreshSchema(raw)
-    if (open.purgeBirthDate) purgeBirthDateColumn(raw)
-    bindKeyFile(resolved, raw)
-    restrictPermissions(resolved)
-    return new AppDb(raw, resolved, dataKey, open.quarantined)
+    if (!fresh) purgeBirthDateColumn(raw)
+    bindKeyFile(filePath, raw)
+    restrictPermissions(filePath)
+    return new AppDb(raw, filePath, dataKey, quarantined)
   } catch (error) {
-    try {
-      raw.close()
-    } catch {
-      // The handle may already be closed.
-    }
+    try { raw.close() } catch { /* The handle may already be closed. */ }
     throw error
   }
 }
 
-function openExistingFile(resolved: string, dataKey: Buffer, quarantined: readonly string[]): AppDb {
-  const hadWal = fs.existsSync(`${resolved}-wal`) || fs.existsSync(`${resolved}-shm`)
-  const current = peekSchemaVersion(resolved, dataKey)
+function migrateIfOlder(filePath: string, dataKey: Buffer): void {
+  const hadWal = fs.existsSync(`${filePath}-wal`) || fs.existsSync(`${filePath}-shm`)
+  const current = peekSchemaVersion(filePath, dataKey)
   if (!hadWal) {
-    fs.rmSync(`${resolved}-wal`, { force: true })
-    fs.rmSync(`${resolved}-shm`, { force: true })
+    fs.rmSync(`${filePath}-wal`, { force: true })
+    fs.rmSync(`${filePath}-shm`, { force: true })
   }
-  if (current != null && current > SCHEMA_VERSION) throw new RaceFileError(path.basename(resolved), 'newer')
-  if (current != null && current < SCHEMA_VERSION) migrateOnCopy(resolved, dataKey, current)
-  return finishOpen(openEncrypted(resolved, dataKey), resolved, dataKey, { quarantined, purgeBirthDate: true })
+  if (current != null && current > SCHEMA_VERSION) throw new RaceFileError(path.basename(filePath), 'newer')
+  if (current != null && current < SCHEMA_VERSION) migrateOnCopy(filePath, dataKey, current)
 }
 
-/**
- * Open the race database.
- * A file is SQLCipher AES-256. `:memory:` stays unencrypted for unit tests.
- * An older schema is backed up as `<file>.v<version>.bak` plus `<file>.v<version>.keys` before migration.
- * The dev key is used only with an explicit opt-in, and never when the key is missing.
- * A leftover restore is completed or rolled back before the file is used.
- * Close this database before restoring a backup over the same path.
- */
 export async function openDatabase(filePath: string, options: OpenOptions = {}): Promise<AppDb> {
   if (filePath === ':memory:') return openMemoryDatabase()
   const dataKey = resolveDataKey(options)
   const resolved = path.resolve(filePath)
   fs.mkdirSync(path.dirname(resolved), { recursive: true })
   recoverRestore(resolved)
+  await removeRekeyWriteTemps(resolved)
   if (fs.existsSync(resolved)) recoverRekeyTemps(resolved, dataKey)
   recoverPlaintextMigration(resolved, dataKey)
   if (fs.existsSync(resolved) && isPlaintextSqlite(resolved)) migratePlaintextFile(resolved, dataKey)
-  const quarantinedPlaintext = quarantinePlaintextCopies(path.dirname(resolved), resolved)
+  const quarantined = quarantinePlaintextCopies(path.dirname(resolved), resolved)
   purgeExpiredQuarantine(path.dirname(resolved))
-  const open = { quarantined: quarantinedPlaintext, purgeBirthDate: false }
-  if (!fs.existsSync(resolved)) return finishOpen(openEncrypted(resolved, dataKey), resolved, dataKey, open)
-  return openExistingFile(resolved, dataKey, quarantinedPlaintext)
+  if (!fs.existsSync(resolved)) return openPrepared(resolved, dataKey, quarantined, true)
+  migrateIfOlder(resolved, dataKey)
+  return openPrepared(resolved, dataKey, quarantined, false)
 }
 
 /** Open with an explicit 256-bit data key. Same migration rules as openDatabase. */
 export function openDataFile(filePath: string, dataKey: Buffer): Promise<AppDb> {
   return openDatabase(filePath, { dataKey })
 }
+
+/** Create a new race file and bind `file_id` and `key_generation`. Does not write the key file. */
+export function initializeEncryptedFile(filePath: string, dataKey: Buffer, fileIdHex: string, keyGeneration: number): AppDb {
+  if (filePath === ':memory:') throw new Error('A memory database has no key file')
+  if (!/^[0-9a-f]{32}$/.test(fileIdHex)) throw new Error('file id must be 32 hex characters')
+  const resolved = path.resolve(filePath)
+  if (fs.existsSync(resolved)) throw new Error('Race file already exists')
+  fs.mkdirSync(path.dirname(resolved), { recursive: true })
+  const raw = openEncrypted(resolved, dataKey)
+  try {
+    applyFreshSchema(raw)
+    raw.prepare('UPDATE schema_meta SET file_id = ? WHERE id = 1').run(fileIdHex)
+    setKeyGeneration(raw, keyGeneration)
+    restrictPermissions(resolved)
+    return new AppDb(raw, resolved, Buffer.from(dataKey))
+  } catch (error) {
+    try {
+      raw.close()
+    } catch {
+      // The handle may already be closed.
+    }
+    secureRemove(resolved)
+    secureRemove(`${resolved}-wal`)
+    secureRemove(`${resolved}-shm`)
+    throw error
+  }
+}
+
+export { assertBackupIntegrity, backupDatabase, recoverRestore, restoreBackupPair, restoreHooks } from './backup-file.js'
+export { BACKUP_KEEP_RECENT, pruneBackups, pruneSchemaBackups } from './backup-prune.js'
+export { rekeyDataFile } from './rekey.js'

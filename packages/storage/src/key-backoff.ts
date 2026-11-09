@@ -1,0 +1,158 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+import fs from 'node:fs'
+import path from 'node:path'
+import { KeyError } from './errors.js'
+import { writePrivateBytes } from './key-file.js'
+
+export const backoffClock = {
+  now(): number {
+    return Date.now()
+  },
+}
+
+interface BackoffRecord {
+  failureCount: number
+  lastAttemptMs: number
+}
+
+export interface AttemptDecision {
+  proceed: boolean
+  failureCount: number
+  retryAfterMs?: number
+}
+
+/** `n` is the number of failures already recorded. The attempt after the fifth waits 1s, then doubles, capped at 900s. */
+export function delaySeconds(priorFailures: number): number {
+  if (!Number.isFinite(priorFailures) || priorFailures < 5) return 0
+  const shift = priorFailures - 5
+  if (shift >= 10) return 900
+  return Math.min(900, 2 ** shift)
+}
+
+function recordPath(databasePath: string): string {
+  return path.join(path.dirname(databasePath), 'unlock-backoff.json')
+}
+
+type LoadedRecord = BackoffRecord | 'missing' | 'corrupt'
+
+function validCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+}
+
+function readRecord(file: string): LoadedRecord {
+  if (!fs.existsSync(file)) return 'missing'
+  try {
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as { version?: unknown; failureCount?: unknown; lastAttemptMs?: unknown }
+    if (parsed?.version === 1 && validCount(parsed.failureCount) && validCount(parsed.lastAttemptMs)) {
+      return { failureCount: parsed.failureCount, lastAttemptMs: parsed.lastAttemptMs }
+    }
+  } catch {
+    return 'corrupt'
+  }
+  return 'corrupt'
+}
+
+/** Repair a broken record, or clamp a future timestamp, before the wait is measured. */
+function prepareRecord(file: string, loaded: LoadedRecord, now: number): BackoffRecord {
+  if (loaded === 'missing') {
+    const fresh = { failureCount: 0, lastAttemptMs: 0 }
+    writeRecord(file, fresh)
+    return fresh
+  }
+  if (loaded === 'corrupt') {
+    const repaired = { failureCount: 15, lastAttemptMs: now }
+    writeRecord(file, repaired)
+    return repaired
+  }
+  if (loaded.lastAttemptMs > now) {
+    const clamped = { failureCount: loaded.failureCount, lastAttemptMs: now }
+    writeRecord(file, clamped)
+    return clamped
+  }
+  return loaded
+}
+
+function waitMs(record: BackoffRecord, now: number): number {
+  if (record.failureCount === 0) return 0
+  const delayMs = delaySeconds(record.failureCount) * 1000
+  if (record.lastAttemptMs === 0) return delayMs
+  return Math.max(0, record.lastAttemptMs + delayMs - now)
+}
+
+function writeRecord(file: string, record: BackoffRecord): void {
+  const body = Buffer.from(JSON.stringify({ version: 1, failureCount: record.failureCount, lastAttemptMs: record.lastAttemptMs }))
+  writePrivateBytes(file, body)
+}
+
+function tryAcquire(lock: string): boolean {
+  try {
+    fs.mkdirSync(lock)
+    return true
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+    return false
+  }
+}
+
+function lockIsStale(lock: string): boolean {
+  try {
+    return Date.now() - fs.statSync(lock).mtimeMs > 30_000
+  } catch {
+    return true
+  }
+}
+
+function acquire(directory: string): void {
+  const lock = path.join(directory, 'unlock-backoff.lock')
+  const deadline = Date.now() + 10_000
+  for (;;) {
+    if (tryAcquire(lock)) return
+    if (lockIsStale(lock)) {
+      try { fs.rmdirSync(lock) } catch { /* Another attempt removed the lock. */ }
+      continue
+    }
+    if (Date.now() > deadline) throw new KeyError('UNLOCK_FAILED')
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 15)
+  }
+}
+
+function release(directory: string): void {
+  try {
+    fs.rmdirSync(path.join(directory, 'unlock-backoff.lock'))
+  } catch {
+    // The lock directory is already gone.
+  }
+}
+
+function withLock<T>(databasePath: string, fn: () => T): T {
+  const directory = path.dirname(databasePath)
+  fs.mkdirSync(directory, { recursive: true })
+  acquire(directory)
+  try {
+    return fn()
+  } finally {
+    release(directory)
+  }
+}
+
+/**
+ * Increment and fsync the directory counter before the caller runs a KDF.
+ * A wait returns without incrementing again and without running a KDF.
+ */
+export function beginAttempt(databasePath: string, now = backoffClock.now()): AttemptDecision {
+  return withLock(databasePath, () => {
+    const file = recordPath(databasePath)
+    const record = prepareRecord(file, readRecord(file), now)
+    const wait = waitMs(record, now)
+    if (wait > 0) return { proceed: false, failureCount: record.failureCount, retryAfterMs: wait }
+    const next = { failureCount: record.failureCount + 1, lastAttemptMs: now }
+    writeRecord(file, next)
+    return { proceed: true, failureCount: next.failureCount }
+  })
+}
+
+export function resetAttempts(databasePath: string): void {
+  withLock(databasePath, () => {
+    writeRecord(recordPath(databasePath), { failureCount: 0, lastAttemptMs: 0 })
+  })
+}

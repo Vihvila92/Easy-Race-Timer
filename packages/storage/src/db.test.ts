@@ -2,9 +2,9 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { openEncrypted, peekSchemaVersion } from './cipher.js'
-import { assertBackupIntegrity, BACKUP_KEEP_RECENT, backupDatabase, migrationHooks, openDatabase, pruneBackups, pruneSchemaBackups, restoreBackupPair } from './db.js'
+import { assertBackupIntegrity, BACKUP_KEEP_RECENT, backupDatabase, backupHooks, migrationHooks, openDatabase, pruneBackups, pruneSchemaBackups, restoreBackupPair } from './db.js'
 import { keyFilePath, writeKeyStub } from './key-file.js'
 import { devDataKey } from './key.js'
 import { SCHEMA_VERSION } from './schema.js'
@@ -20,10 +20,11 @@ function tempDir(): string {
 afterEach(() => {
   migrationHooks.beforeCommit = undefined
   migrationHooks.failBackup = false
+  backupHooks.onStep = undefined
   for (const file of files.splice(0)) fs.rmSync(file, { recursive: true, force: true })
 })
 
-describe('backupDatabase', () => {
+describe('backup copy', () => {
   it('writes an encrypted backup that opens with the same key and passes integrity_check', async () => {
     const dir = tempDir()
     const file = path.join(dir, 'ert.sqlite')
@@ -43,6 +44,20 @@ describe('backupDatabase', () => {
     expect(fs.statSync(dest).mode & 0o777).toBe(0o600)
     expect(fs.readFileSync(keyFilePath(dest)).equals(fs.readFileSync(keyFilePath(file)))).toBe(true)
     expect(fs.statSync(keyFilePath(dest)).mode & 0o777).toBe(0o600)
+  })
+
+  it('writes the database, then the key file, then fsyncs the directory', async () => {
+    const dir = tempDir()
+    const file = path.join(dir, 'ert.sqlite')
+    const db = await openDatabase(file)
+    const steps: string[] = []
+    backupHooks.onStep = (step) => steps.push(step)
+    const dest = path.join(dir, 'backups', 'copy.sqlite')
+    await backupDatabase(db, dest)
+    db.raw.close()
+    expect(steps).toEqual(['database', 'key', 'directory'])
+    expect(fs.existsSync(dest)).toBe(true)
+    expect(fs.existsSync(keyFilePath(dest))).toBe(true)
   })
 
   it('copies the key file with the database and with the pre-migration backup', async () => {
@@ -108,7 +123,7 @@ describe('backup restore pair', () => {
   })
 })
 
-describe('openDatabase', () => {
+describe('migration backup', () => {
   it('does not migrate when the pre-migration backup fails', async () => {
     const dir = tempDir()
     const file = path.join(dir, 'ert.sqlite')
@@ -245,6 +260,13 @@ describe('pruneBackups', () => {
     expect(fs.existsSync(oldBakKey)).toBe(false)
     expect(fs.existsSync(newFile)).toBe(true)
     expect(fs.existsSync(newKey)).toBe(true)
+  })
+})
+
+describe('schema backup retention', () => {
+  it('removes an aged schema backup and keeps the live pair', () => {
+    const dir = tempDir()
+    const now = Date.parse('2028-06-13T00:00:00Z')
     const live = path.join(dir, 'ert.sqlite')
     const liveKey = path.join(dir, 'ert.keys')
     const aged = path.join(dir, 'ert.sqlite.v2.bak')
@@ -260,6 +282,68 @@ describe('pruneBackups', () => {
     expect(fs.existsSync(liveKey)).toBe(true)
     expect(fs.existsSync(aged)).toBe(false)
     expect(fs.existsSync(agedKey)).toBe(false)
+  })
+
+  it('leaves a half pair in place', async () => {
+    const dir = tempDir()
+    const now = Date.parse('2028-06-13T00:00:00Z')
+    const databaseOnly = path.join(dir, 'ert-half.sqlite')
+    const keyOnly = path.join(dir, 'ert-orphan.keys')
+    fs.writeFileSync(databaseOnly, 'half')
+    fs.writeFileSync(keyOnly, 'orphan')
+    fs.utimesSync(databaseOnly, now / 1000, Date.parse('2028-01-01T00:00:00Z') / 1000)
+    fs.utimesSync(keyOnly, now / 1000, Date.parse('2028-01-01T00:00:00Z') / 1000)
+    expect(pruneBackups(dir, 12, now)).toEqual([])
+    expect(fs.existsSync(databaseOnly)).toBe(true)
+    expect(fs.existsSync(keyOnly)).toBe(true)
+    expect(await restoreBackupPair(databaseOnly, path.join(dir, 'restored.sqlite'), () => {})).toBe(false)
+  })
+})
+
+describe('rekey write temps', () => {
+  it('removes a leftover key-file temp when the database opens', async () => {
+    const dir = tempDir()
+    const file = path.join(dir, 'ert.sqlite')
+    const db = await openDatabase(file)
+    db.raw.close()
+    const leftover = path.join(dir, '..ert.keys.rekey.1.2.tmp')
+    const writeTemp = path.join(dir, '.ert.keys.4242.1700000000000.tmp')
+    const keep = path.join(dir, 'ert.keys')
+    const other = path.join(dir, '.unlock-backoff.json.1.2.tmp')
+    fs.writeFileSync(leftover, 'temp')
+    fs.writeFileSync(writeTemp, 'temp')
+    fs.writeFileSync(other, 'backoff')
+    const opened = await openDatabase(file)
+    opened.raw.close()
+    expect(fs.existsSync(leftover)).toBe(false)
+    expect(fs.existsSync(writeTemp)).toBe(false)
+    expect(fs.existsSync(keep)).toBe(true)
+    expect(fs.existsSync(other)).toBe(true)
+  })
+
+  it('opens when a leftover temp file cannot be removed', async () => {
+    const dir = tempDir()
+    const file = path.join(dir, 'ert.sqlite')
+    const db = await openDatabase(file)
+    db.raw.close()
+    const stuck = path.join(dir, '.ert.keys.4242.1700000000000.tmp')
+    fs.mkdirSync(stuck)
+    const locked = path.join(dir, '.ert.keys.7.8.tmp')
+    fs.writeFileSync(locked, 'temp')
+    fs.chmodSync(locked, 0o000)
+    const warnings: string[] = []
+    const spy = vi.spyOn(console, 'warn').mockImplementation((message: unknown) => {
+      warnings.push(String(message))
+    })
+    const opened = await openDatabase(file)
+    spy.mockRestore()
+    opened.raw.close()
+    expect(fs.existsSync(stuck)).toBe(true)
+    if (fs.existsSync(locked)) fs.chmodSync(locked, 0o600)
+    const text = warnings.join('\n')
+    expect(text).not.toContain(dir)
+    expect(text).not.toContain(os.userInfo().username)
+    if (fs.existsSync(locked)) expect(text).toBe('A leftover temporary file could not be removed.')
   })
 })
 
