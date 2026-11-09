@@ -33,16 +33,25 @@ function recordPath(databasePath: string): string {
   return path.join(path.dirname(databasePath), 'unlock-backoff.json')
 }
 
+/** A broken record waits the full 15 minutes. A missing file is still a fresh counter. */
+function maximumWaitRecord(): BackoffRecord {
+  return { failureCount: 15, lastAttemptMs: 0 }
+}
+
+function validCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
+}
+
 function readRecord(file: string): BackoffRecord {
   if (!fs.existsSync(file)) return { failureCount: 0, lastAttemptMs: 0 }
   try {
     const parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as { version?: unknown; failureCount?: unknown; lastAttemptMs?: unknown }
-    if (parsed.version !== 1) return { failureCount: 0, lastAttemptMs: 0 }
-    if (typeof parsed.failureCount !== 'number' || !Number.isSafeInteger(parsed.failureCount) || parsed.failureCount < 0) return { failureCount: 0, lastAttemptMs: 0 }
-    if (typeof parsed.lastAttemptMs !== 'number' || !Number.isSafeInteger(parsed.lastAttemptMs) || parsed.lastAttemptMs < 0) return { failureCount: 0, lastAttemptMs: 0 }
-    return { failureCount: parsed.failureCount, lastAttemptMs: parsed.lastAttemptMs }
+    if (parsed?.version === 1 && validCount(parsed.failureCount) && validCount(parsed.lastAttemptMs)) {
+      return { failureCount: parsed.failureCount, lastAttemptMs: parsed.lastAttemptMs }
+    }
+    return maximumWaitRecord()
   } catch {
-    return { failureCount: 0, lastAttemptMs: 0 }
+    return maximumWaitRecord()
   }
 }
 

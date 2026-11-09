@@ -13,6 +13,11 @@ function requireDek(db: AppDb): Buffer {
   return db.dataKey
 }
 
+/** Copy inside the key-file lock so a rotation cannot swap the key underneath a writer. */
+function copyDek(db: AppDb): Buffer {
+  return Buffer.from(requireDek(db))
+}
+
 function requireRewrapSession(db: AppDb, slot: 0 | 1): KeySession {
   const session = db.keySession
   if (session?.kind === 'admin' || session?.kind === 'recovery-gate') return session
@@ -132,11 +137,17 @@ async function rewrapLocked(input: {
   }
 }
 
-/** Replace one admin wrap. The read and the write share one key-file lock. */
+/** Replace one admin wrap. The read and the write share one in-process key-file lock. */
 export async function rewrapAdminSlot(db: AppDb, slot: 0 | 1, next: ConfirmedPassword, currentPassword?: string): Promise<void> {
   const session = requireRewrapSession(db, slot)
-  const dek = requireDek(db)
-  await withKeyFileLock(keyFilePath(db.filePath), () => rewrapLocked({ db, session, slot, next, currentPassword, dek }))
+  await withKeyFileLock(keyFilePath(db.filePath), async () => {
+    const dek = copyDek(db)
+    try {
+      await rewrapLocked({ db, session, slot, next, currentPassword, dek })
+    } finally {
+      dek.fill(0)
+    }
+  })
 }
 
 async function regenerateLocked(db: AppDb, dek: Buffer): Promise<Buffer> {
@@ -159,9 +170,15 @@ async function regenerateLocked(db: AppDb, dek: Buffer): Promise<Buffer> {
   }
 }
 
-/** Replace the recovery wrap. The read and the write share one key-file lock. */
-export function regenerateRecoveryKey(db: AppDb): Promise<Buffer> {
+/** Replace the recovery wrap. The read and the write share one in-process key-file lock. */
+export async function regenerateRecoveryKey(db: AppDb): Promise<Buffer> {
   if (db.keySession?.kind !== 'admin') throw new KeyError('UNLOCK_FAILED')
-  const dek = requireDek(db)
-  return withKeyFileLock(keyFilePath(db.filePath), () => regenerateLocked(db, dek))
+  return withKeyFileLock(keyFilePath(db.filePath), async () => {
+    const dek = copyDek(db)
+    try {
+      return await regenerateLocked(db, dek)
+    } finally {
+      dek.fill(0)
+    }
+  })
 }

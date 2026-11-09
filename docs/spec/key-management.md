@@ -298,7 +298,7 @@ Procedure for one attempt:
 
 Replacing the race file does not reset the counter. The counter belongs to the directory that holds the database, not to `file_id`. `ERT_DB=/media/usb/ert.sqlite` reads and writes `/media/usb/unlock-backoff.json`, so every race file in that USB directory shares one counter. A different data directory has its own file. A restart of the process or of the operating system reads the same file and continues the wait.
 
-This backoff does not bind an attacker who copies the database and the key file onto another computer, or who deletes `unlock-backoff.json`. Those limits are in the [ADR threat model](../adr/0013-key-management.md#threat-model). The recovery key is protected offline by its entropy, not by this delay. Admin passwords are protected offline by Argon2id.
+This backoff is a user-interface throttle. It does not bind an attacker who copies the database and the key file onto another computer, or who deletes `unlock-backoff.json`. Those limits are in the [ADR threat model](../adr/0013-key-management.md#threat-model). Argon2id is what protects an admin password offline. The recovery key is protected offline by its entropy, not by this delay. A missing record starts at zero. A corrupt or overwritten record is the maximum wait, so a broken file does not become a free retry.
 
 ## Zeroization and the on-disk DEK scan
 

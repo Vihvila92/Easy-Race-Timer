@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import fs from 'node:fs'
 import path from 'node:path'
-import { fsyncDirectory, fsyncFile } from './atomic.js'
+import { fsyncDirectory, fsyncFile, secureRemove } from './atomic.js'
 import { RaceFileError } from './errors.js'
 
 /**
@@ -31,6 +31,17 @@ export function databasePathForKeyFile(keyPath: string): string {
   const base = keyPath.slice(0, -'.keys'.length)
   if (/\.v\d+$/.test(base)) return `${base}.bak`
   return `${base}.sqlite`
+}
+
+/** Delete `..ert.keys.rekey.*.tmp` leftovers from a crash during the key rename. */
+export function removeRekeyWriteTemps(databasePath: string): void {
+  const directory = path.dirname(databasePath)
+  if (!fs.existsSync(directory)) return
+  const marker = `..${path.basename(keyFilePath(databasePath))}.rekey.`
+  for (const name of fs.readdirSync(directory)) {
+    if (!name.startsWith(marker) || !name.endsWith('.tmp')) continue
+    secureRemove(path.join(directory, name))
+  }
 }
 
 /** Temps for rekey-on-a-copy. `.ert.sqlite.rekey` and `.ert.keys.rekey` beside the live pair. */

@@ -9,7 +9,7 @@ import { isPlaintextSqlite, openEncrypted, peekSchemaVersion, restrictPermission
 import { RaceFileError } from './errors.js'
 import { omitInternal } from './internal.js'
 import { resolveDataKey, type OpenOptions } from './key.js'
-import { ensureKeyFile, inspectKeyFile, keyFilePath, rekeyTempPaths } from './key-file.js'
+import { ensureKeyFile, inspectKeyFile, keyFilePath, rekeyTempPaths, removeRekeyWriteTemps } from './key-file.js'
 import { migratePlaintextFile, purgeExpiredQuarantine, quarantinePlaintextCopies, recoverPlaintextMigration } from './plaintext.js'
 import { readEnvelopeIdentity } from './key-envelope.js'
 import { migrateOnCopy } from './migrate-copy.js'
@@ -303,6 +303,7 @@ export async function openDatabase(filePath: string, options: OpenOptions = {}):
   const dataKey = resolveDataKey(options)
   const resolved = path.resolve(filePath)
   fs.mkdirSync(path.dirname(resolved), { recursive: true })
+  removeRekeyWriteTemps(resolved)
   if (fs.existsSync(resolved)) recoverRekeyTemps(resolved, dataKey)
   recoverPlaintextMigration(resolved, dataKey)
   if (fs.existsSync(resolved) && isPlaintextSqlite(resolved)) migratePlaintextFile(resolved, dataKey)

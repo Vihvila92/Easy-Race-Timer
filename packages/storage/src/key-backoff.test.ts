@@ -78,3 +78,18 @@ describe('unlock backoff file', () => {
     expect(again.failureCount).toBe(5)
   })
 })
+
+describe('corrupt backoff record', () => {
+  it('waits the maximum when the record is corrupt or overwritten', () => {
+    const file = databasePath()
+    const record = path.join(path.dirname(file), 'unlock-backoff.json')
+    fs.writeFileSync(record, 'not-json')
+    const garbage = beginAttempt(file, 10_000)
+    expect(garbage.proceed).toBe(false)
+    expect(garbage.retryAfterMs).toBe(900_000)
+    fs.writeFileSync(record, JSON.stringify({ version: 1, failureCount: -1, lastAttemptMs: 0 }))
+    const overwritten = beginAttempt(file, 10_000)
+    expect(overwritten.proceed).toBe(false)
+    expect(overwritten.retryAfterMs).toBe(900_000)
+  })
+})

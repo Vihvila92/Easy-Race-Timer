@@ -261,3 +261,19 @@ describe('schema backup retention', () => {
     expect(restoreBackupPair(databaseOnly, path.join(dir, 'restored.sqlite'))).toBe(false)
   })
 })
+
+describe('rekey write temps', () => {
+  it('removes a leftover key-file temp when the database opens', async () => {
+    const dir = tempDir()
+    const file = path.join(dir, 'ert.sqlite')
+    const db = await openDatabase(file)
+    db.raw.close()
+    const leftover = path.join(dir, '..ert.keys.rekey.1.2.tmp')
+    const keep = path.join(dir, 'ert.keys')
+    fs.writeFileSync(leftover, 'temp')
+    const opened = await openDatabase(file)
+    opened.raw.close()
+    expect(fs.existsSync(leftover)).toBe(false)
+    expect(fs.existsSync(keep)).toBe(true)
+  })
+})
