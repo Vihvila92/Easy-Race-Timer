@@ -33,6 +33,8 @@ on:
       - scripts/desktop-smoke.mjs
       - scripts/release-*.ts
       - packages/storage/package.json
+      # The sidecar embeds this package, so a storage change runs the installer matrix.
+      - packages/storage/**
       - packages/server/package.json
       - pnpm-lock.yaml
       - src-tauri/**

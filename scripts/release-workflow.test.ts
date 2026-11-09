@@ -22,6 +22,7 @@ const pullRequestPaths = [
   'scripts/desktop-smoke.mjs',
   'scripts/release-*.ts',
   'packages/storage/package.json',
+  'packages/storage/**',
   'packages/server/package.json',
   'pnpm-lock.yaml',
   'src-tauri/**',
