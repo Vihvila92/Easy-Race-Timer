@@ -9,7 +9,8 @@ import { RaceFileError } from '@ert/storage'
 export function formatRaceFileError(error: unknown, locale: Locale = 'fi'): string {
   if (error instanceof RaceFileError) {
     if (error.kind === 'newer') return `${translate(locale, 'file.newer')} ${translate(locale, 'file.hint.newer')}`
-    if (error.kind === 'dev-key' || error.kind === 'key-file') return error.message
+    if (error.kind === 'dev-key') return error.message
+    if (error.kind === 'key-file') return translate(locale, 'file.keyMismatch')
     if (error.kind === 'missing-key') return translate(locale, 'file.missingKey')
     if (error.kind === 'open') {
       const name = error.fileName || 'race file'

@@ -5,7 +5,7 @@ import { allocateEnvelope, type ParsedEnvelope, type ParsedSlot, parseEnvelope, 
 import { keyFilePath, withKeyFileLock, writePrivateBytes } from './key-file.js'
 import { BASELINE_ARGON, buffersEqual, deriveAdminKek, deriveRecoveryKek, formatRecoveryKey, passwordBytes, utf8Password } from './key-kdf.js'
 import { keyRandom } from './key-random.js'
-import { ensureKeyColumns } from './schema.js'
+import { ensureKeyColumns, setRecoveryUnshown } from './schema.js'
 import { adminMaterial, freshMaterial, readKeyBytes, recoveryMaterial, unwrapAdminSlot, type ConfirmedPassword } from './key-slots.js'
 
 function requireDek(db: AppDb): Buffer {
@@ -129,7 +129,9 @@ async function rewrapLocked(input: {
   try {
     await assertDistinctFromOther({ bytes, parsed, slot: input.slot, password, dek: input.dek })
     await writeAdminEnvelope({ db: input.db, bytes, parsed, slot: input.slot, password, dek: input.dek })
-    if (input.session.kind === 'recovery-gate' || input.session.slotIndex === input.slot) {
+    if (ensureKeyColumns(input.db.raw).recoveryUnshown) {
+      input.db.keySession = { kind: 'recovery-unshown', slotIndex: input.slot }
+    } else if (input.session.kind === 'recovery-gate' || input.session.slotIndex === input.slot) {
       input.db.keySession = { kind: 'admin', slotIndex: input.slot }
     }
   } finally {
@@ -170,15 +172,34 @@ async function regenerateLocked(db: AppDb, dek: Buffer): Promise<Buffer> {
   }
 }
 
+function mayRegenerate(db: AppDb): boolean {
+  const kind = db.keySession?.kind
+  return kind === 'admin' || kind === 'recovery-unshown'
+}
+
 /** Replace the recovery wrap. The read and the write share one in-process key-file lock. */
 export async function regenerateRecoveryKey(db: AppDb): Promise<Buffer> {
-  if (db.keySession?.kind !== 'admin') throw new KeyError('UNLOCK_FAILED')
+  if (!mayRegenerate(db)) throw new KeyError('UNLOCK_FAILED')
   return withKeyFileLock(keyFilePath(db.filePath), async () => {
     const dek = copyDek(db)
     try {
-      return await regenerateLocked(db, dek)
+      const shown = await regenerateLocked(db, dek)
+      setRecoveryUnshown(db.raw, true)
+      db.recoveryKeyIssued = true
+      return shown
     } finally {
       dek.fill(0)
     }
   })
+}
+
+/** Clear the unshown flag after the operator has seen the recovery key. */
+export function acknowledgeRecoveryKeyShown(db: AppDb): void {
+  if (!db.recoveryKeyIssued) throw new KeyError('UNLOCK_FAILED')
+  setRecoveryUnshown(db.raw, false)
+  db.recoveryKeyIssued = false
+  const session = db.keySession
+  if (session?.kind === 'recovery-unshown' && session.slotIndex !== 2) {
+    db.keySession = { kind: 'admin', slotIndex: session.slotIndex }
+  }
 }

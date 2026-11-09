@@ -3,11 +3,11 @@ import fs from 'node:fs'
 import { type AppDb, rekeyDataFile } from './db.js'
 import { KeyError } from './errors.js'
 import { type ParsedSlot, parseEnvelope } from './key-envelope.js'
-import { keyFilePath, writePrivateBytes } from './key-file.js'
+import { keyFilePath, withKeyFileLock, writePrivateBytes } from './key-file.js'
 import { buffersEqual, formatRecoveryKey, passwordBytes, utf8Password } from './key-kdf.js'
 import { keyRandom } from './key-random.js'
 import { type ConfirmedPassword, sealEnvelope, unwrapAdminSlot } from './key-slots.js'
-import { ensureKeyColumns, recordKeyAudit, setKeyGeneration, setTemporarySlot } from './schema.js'
+import { ensureKeyColumns, recordKeyAudit, setKeyGeneration, setRecoveryUnshown, setTemporarySlot } from './schema.js'
 
 function requireActingAdmin(db: AppDb): 0 | 1 {
   const session = db.keySession
@@ -59,6 +59,7 @@ async function sealRotation(input: {
     prepareCopy(copy) {
       setKeyGeneration(copy, generation)
       setTemporarySlot(copy, input.otherKind === 'temporary' ? otherSlot : null)
+      setRecoveryUnshown(copy, true)
       recordKeyAudit(copy, 'dek_rotation', reason)
     },
     writeKeyFile(tempKey) {
@@ -80,7 +81,8 @@ export async function rotateDataKey(db: AppDb, options: {
   const recoveryKey = Buffer.from(formatRecoveryKey(secret), 'ascii')
   try {
     if (buffersEqual(acting, other)) throw new KeyError('PASSWORD_MISMATCH')
-    await sealRotation({ db, actingSlot, acting, other, otherKind: options.other.kind, nextDek, secret })
+    await withKeyFileLock(keyFilePath(db.filePath), () => sealRotation({ db, actingSlot, acting, other, otherKind: options.other.kind, nextDek, secret }))
+    db.recoveryKeyIssued = true
     return { recoveryKey }
   } catch (error) {
     recoveryKey.fill(0)

@@ -142,6 +142,8 @@ export function ensureFileId(raw: SqliteDatabase, preferred?: string): string {
 export interface KeyColumns {
   keyGeneration: number
   temporarySlot: 0 | 1 | null
+  /** True when a new recovery key was saved and has not been shown. No key material. */
+  recoveryUnshown: boolean
 }
 
 function asTemporarySlot(value: number | null): 0 | 1 | null {
@@ -149,18 +151,30 @@ function asTemporarySlot(value: number | null): 0 | 1 | null {
   return null
 }
 
+function addKeyColumn(columns: Set<string>, raw: SqliteDatabase, name: string, sql: string): void {
+  if (!columns.has(name)) raw.exec(sql)
+}
+
 /** `key_generation` starts at 1. `temporary_slot` is set only for a password that must be replaced. */
 export function ensureKeyColumns(raw: SqliteDatabase): KeyColumns {
   const columns = columnNames(raw, 'schema_meta')
-  if (!columns.has('key_generation')) raw.exec('ALTER TABLE schema_meta ADD COLUMN key_generation INTEGER')
-  if (!columns.has('temporary_slot')) raw.exec('ALTER TABLE schema_meta ADD COLUMN temporary_slot INTEGER')
-  const row = raw.prepare('SELECT key_generation, temporary_slot FROM schema_meta WHERE id = 1').get() as { key_generation: number | null; temporary_slot: number | null } | undefined
+  addKeyColumn(columns, raw, 'key_generation', 'ALTER TABLE schema_meta ADD COLUMN key_generation INTEGER')
+  addKeyColumn(columns, raw, 'temporary_slot', 'ALTER TABLE schema_meta ADD COLUMN temporary_slot INTEGER')
+  addKeyColumn(columns, raw, 'recovery_unshown', 'ALTER TABLE schema_meta ADD COLUMN recovery_unshown INTEGER')
+  const row = raw.prepare('SELECT key_generation, temporary_slot, recovery_unshown FROM schema_meta WHERE id = 1').get() as { key_generation: number | null; temporary_slot: number | null; recovery_unshown: number | null } | undefined
   const temporarySlot = asTemporarySlot(row?.temporary_slot ?? null)
+  const recoveryUnshown = row?.recovery_unshown === 1
   if (row?.key_generation && Number.isInteger(row.key_generation) && row.key_generation >= 1) {
-    return { keyGeneration: row.key_generation, temporarySlot }
+    return { keyGeneration: row.key_generation, temporarySlot, recoveryUnshown }
   }
   raw.prepare('UPDATE schema_meta SET key_generation = 1 WHERE id = 1').run()
-  return { keyGeneration: 1, temporarySlot }
+  return { keyGeneration: 1, temporarySlot, recoveryUnshown }
+}
+
+/** Persist that the latest recovery key has not been shown. The column holds no secret. */
+export function setRecoveryUnshown(raw: SqliteDatabase, unshown: boolean): void {
+  ensureKeyColumns(raw)
+  raw.prepare('UPDATE schema_meta SET recovery_unshown = ? WHERE id = 1').run(unshown ? 1 : 0)
 }
 
 export function setKeyGeneration(raw: SqliteDatabase, value: number): void {

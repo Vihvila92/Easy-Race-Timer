@@ -28,6 +28,7 @@ Jokainen virhevastaus on JSON:
 | `RECOVERY_KEY_CHECKSUM` | 400 | Palautusavaimen tarkistussumma tai aakkosto ei täsmää. KDF:ää ei ajeta. |
 | `KEY_PARAMS_REJECTED` | 400 | Avainlokeron KDF-parametrit ovat alle minimin, yli katon, tai lokeron tyyppi kieltää ne. |
 | `FILE_HEADER_INVALID` | 400 | Avaintiedoston taika, versio, pituus, varatut tavut tai nonce-pituus on väärin. |
+| `KEY_FILE_MISMATCH` | 400 | Avaintiedosto ei vastaa tätä kisatiedostoa. Salasana ei ole syy. |
 | `PASSWORD_TOO_SHORT` | 422 | Salasanassa on alle 10 merkkiä NFKC-muodon jälkeen. |
 | `PASSWORD_TOO_LONG` | 422 | Salasanassa on yli 128 merkkiä tai yli 512 UTF-8-tavua. |
 | `PASSWORD_COMMON` | 422 | Salasana on mukana toimitetulla yleisten salasanojen listalla. |

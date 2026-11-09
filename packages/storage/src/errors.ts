@@ -6,6 +6,7 @@ export type KeyErrorCode =
   | 'RECOVERY_KEY_CHECKSUM'
   | 'KEY_PARAMS_REJECTED'
   | 'FILE_HEADER_INVALID'
+  | 'KEY_FILE_MISMATCH'
   | 'PASSWORD_TOO_SHORT'
   | 'PASSWORD_TOO_LONG'
   | 'PASSWORD_COMMON'
@@ -16,6 +17,7 @@ const KEY_MESSAGES: Record<KeyErrorCode, string> = {
   RECOVERY_KEY_CHECKSUM: 'This recovery key has a typing error.',
   KEY_PARAMS_REJECTED: "This file's key settings are not allowed, so it was not opened.",
   FILE_HEADER_INVALID: 'This file cannot be opened.',
+  KEY_FILE_MISMATCH: 'The key file does not match this race file.',
   PASSWORD_TOO_SHORT: 'Password is too short.',
   PASSWORD_TOO_LONG: 'Password is too long.',
   PASSWORD_COMMON: 'Password is too common.',

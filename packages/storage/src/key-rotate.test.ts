@@ -10,6 +10,7 @@ import { KeyError } from './errors.js'
 import { keyFilePath, rekeyTempPaths } from './key-file.js'
 import { rewrapAdminSlot } from './key-rewrap.js'
 import { createProtectedRaceFile, keyHooks, normalUseAllowed, unlockWithPassword, unlockWithRecovery } from './key-slots.js'
+import { acknowledgeRecoveryKeyShown } from './key-rewrap.js'
 import { rotateDataKey } from './key-rotate.js'
 import { devDataKey } from './key.js'
 
@@ -88,6 +89,7 @@ describe('data key rotation', () => {
     const hex = dek.toString('hex')
     const files = fs.readdirSync(directory).map((name) => fs.readFileSync(path.join(directory, name)))
     expect(files.some((bytes) => bytes.includes(dek) || bytes.includes(Buffer.from(hex)) || bytes.includes(shown))).toBe(false)
+    acknowledgeRecoveryKeyShown(db)
     db.raw.close()
     const acting = await unlockWithPassword(file, ADMIN_A)
     expect(acting.get('SELECT birth_year FROM person WHERE id = ?', 'p1')).toEqual({ birth_year: 2014 })
@@ -114,6 +116,7 @@ describe('other admin during rotation', () => {
   it('records the other admin when they set a password during rotation', async () => {
     const { file, db } = await createdFile()
     await rotateDataKey(db, { actingPassword: ADMIN_A, other: { kind: 'password', password: { password: 'other-admin-present-now', confirm: 'other-admin-present-now' } } })
+    acknowledgeRecoveryKeyShown(db)
     expect(db.get<{ reason: string }>("SELECT reason FROM key_audit WHERE action = 'dek_rotation'")?.reason).toBe('other_admin_present')
     db.raw.close()
     const other = await unlockWithPassword(file, 'other-admin-present-now')
