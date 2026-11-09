@@ -100,9 +100,21 @@ function RaceChange() {
   )
 }
 
+type LateForm = {
+  first: string
+  last: string
+  gender: string
+  birth: string
+  email: string
+  club: string
+  race: string
+  bib: string
+  consent: boolean
+}
+
 function LateEntry() {
   const { t, run } = useApp()
-  const [late, setLate] = useState({ first: '', last: '', gender: 'M', birth: '', email: '', club: '', race: 'R4', bib: '', consent: false })
+  const [late, setLate] = useState<LateForm>({ first: '', last: '', gender: 'M', birth: '', email: '', club: '', race: 'R4', bib: '', consent: false })
   const [clubHit, setClubHit] = useState('')
   return (
     <div className="card">
@@ -127,7 +139,7 @@ function LateEntry() {
   )
 }
 
-async function lookupClub(club: string, setLate: (value: { first: string; last: string; gender: string; birth: string; email: string; club: string; race: string; bib: string; consent: boolean }) => void, late: { first: string; last: string; gender: string; birth: string; email: string; club: string; race: string; bib: string; consent: boolean }, setClubHit: (id: string) => void) {
+async function lookupClub(club: string, setLate: (value: LateForm) => void, late: LateForm, setClubHit: (id: string) => void) {
   setLate({ ...late, club })
   const hits = await api<{ id: string }[]>(`/api/v1/clubs?q=${encodeURIComponent(club)}`)
   setClubHit(hits[0]?.id ?? '')

@@ -53,24 +53,36 @@ async function saveTap(input: {
   setQueued: (value: number) => void
   setToast: (value: string) => void
 }): Promise<void> {
+  const timeMs = clientNow()
+  const deviceTimeMs = deviceNow()
   const id = createTapId()
   const label = nextTapLabel()
   const numeric = input.bib.trim() ? Number(input.bib) : null
   input.setLastId(id)
   input.setLastLabel(label)
-  const outcome = await recordTap({ id, deviceId: localDeviceId(), timeMs: clientNow(), deviceTimeMs: deviceNow(), bib: numeric, mode: input.mode, label })
+  const outcome = await recordTap({ id, deviceId: localDeviceId(), timeMs, deviceTimeMs, bib: numeric, mode: input.mode, label })
   input.setQueued(await pendingCount())
   if (!outcome.synced) {
     input.setToast(input.t('common.offline'))
     input.setBib('')
     return
   }
-  input.setToast(finishNotice(outcome.flags, numeric, input.t))
+  input.setToast(toastNotice(outcome.flags, numeric, input.t))
   input.setBib('')
   await input.reload()
 }
 
-function finishNotice(flags: string[], numeric: number | null, t: Text): string {
+const CHECKLIST_NOTICES = ['before_start', 'unknown_bib', 'duplicate'] as const
+
+function checklistNotice(flags: string[], bib: number | null, t: Text): string {
+  const notice = CHECKLIST_NOTICES.find((flag) => flags.includes(flag))
+  if (notice === 'before_start') return t('finish.beforeStart', { bib: bib ?? '' })
+  if (notice === 'unknown_bib') return t('finish.unknown', { bib: bib ?? '' })
+  if (notice === 'duplicate') return t('finish.duplicate', { bib: bib ?? '' })
+  return t('finish.recorded')
+}
+
+function toastNotice(flags: string[], numeric: number | null, t: Text): string {
   if (flags.includes('before_start')) return t('finish.beforeStart', { bib: numeric ?? '' })
   if (numeric != null && flags.includes('duplicate')) return t('finish.duplicate', { bib: numeric })
   if (numeric != null && flags.includes('unknown_bib')) return t('finish.unknown', { bib: numeric })
@@ -87,7 +99,7 @@ function FinishLists() {
       <h2>{t('finish.review')}</h2>
       <ul data-testid="finish-review">
         {review.map((event) => (
-          <li key={event.id} data-testid={`finish-review-${event.id}`}>{finishNotice(event.flags, event.bib, t)}</li>
+          <li key={event.id} data-testid={`finish-review-${event.id}`}>{checklistNotice(event.flags, event.bib, t)}</li>
         ))}
       </ul>
       <ul data-testid="finish-log">

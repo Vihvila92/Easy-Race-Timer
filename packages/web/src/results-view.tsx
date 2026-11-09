@@ -11,8 +11,7 @@ function LockControls({ races, blockers, onLock }: {
   blockers: Record<string, string[]>
   onLock: (id: string) => Promise<void>
 }) {
-  const { t, locale, data } = useApp()
-  if (!data) return null
+  const { t, locale } = useApp()
   return (
     <>
       {races.map((item) => (

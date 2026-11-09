@@ -58,9 +58,6 @@ export function Office() {
   )
 }
 
-
-
-
 export function Start() {
   const { t, data, run, locale } = useApp()
   const [confirmId, setConfirmId] = useState('')
@@ -93,7 +90,6 @@ export function Start() {
     </section>
   )
 }
-
 
 export function Corrections() {
   const { t, data, run } = useApp()
@@ -189,7 +185,6 @@ export function Clubs() {
     </section>
   )
 }
-
 
 export function PrintView() {
   const { t, locale, data } = useApp()
