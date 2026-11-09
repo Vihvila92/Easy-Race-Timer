@@ -40,7 +40,7 @@ function generation(file: string): number {
   return fs.readFileSync(keyFilePath(file)).readUInt32BE(26)
 }
 
-const BELONGS = 'This key file does not belong to this race file. Use the key file that was saved together with the race file.'
+const BELONGS = 'This key file does not belong to this race file, or the race file is damaged. Use the key file that was saved together with the race file, or restore a backup.'
 
 function watchLogs(): string[] {
   const logs: string[] = []
