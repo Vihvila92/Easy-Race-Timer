@@ -33,13 +33,21 @@ export function databasePathForKeyFile(keyPath: string): string {
   return `${base}.sqlite`
 }
 
-/** Delete `..ert.keys.rekey.*.tmp` leftovers from a crash during the key rename. */
+/** A crashed temp-file write leaves `<prefix><pid>.<time>.tmp`. */
+function numberedWriteTemp(name: string, prefix: string): boolean {
+  if (!name.startsWith(prefix) || !name.endsWith('.tmp')) return false
+  const parts = name.slice(prefix.length, -'.tmp'.length).split('.')
+  return parts.length === 2 && parts.every((part) => part.length > 0 && [...part].every((char) => char >= '0' && char <= '9'))
+}
+
+/** Delete leftover key-file temps: `..ert.keys.rekey.*.tmp` and `.ert.keys.<pid>.<time>.tmp`. */
 export function removeRekeyWriteTemps(databasePath: string): void {
   const directory = path.dirname(databasePath)
   if (!fs.existsSync(directory)) return
-  const marker = `..${path.basename(keyFilePath(databasePath))}.rekey.`
+  const keyName = path.basename(keyFilePath(databasePath))
   for (const name of fs.readdirSync(directory)) {
-    if (!name.startsWith(marker) || !name.endsWith('.tmp')) continue
+    const stale = numberedWriteTemp(name, `..${keyName}.rekey.`) || numberedWriteTemp(name, `.${keyName}.`)
+    if (!stale) continue
     secureRemove(path.join(directory, name))
   }
 }
