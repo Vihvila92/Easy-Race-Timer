@@ -184,6 +184,7 @@
   "common.loading": "Ladataan",
   "common.offline": "Offline-jono",
   "common.source": "Lähdekoodi",
+  "connection.reconnecting": "Yhteys katkesi – yhdistetään uudelleen…",
   "unreachable.title": "Ei yhteyttä",
   "unreachable.message": "Ajanotto-ohjelmaan ei saada yhteyttä. Paina Yritä uudelleen. Jos se ei auta, sulje ohjelma ja avaa se uudelleen. Jos ongelma jatkuu, ota yhteys seuran tekniseen tukeen.",
   "unreachable.retry": "Yritä uudelleen",
