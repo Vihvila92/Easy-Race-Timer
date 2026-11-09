@@ -20,7 +20,6 @@ export const allowedClones: AllowedClone[] = [
 
   // Storage migrations and backup pruning share structure on purpose. Folding them together can change a shipped migration or which files are deleted, and these files are over the line limit.
   { hash: 'b2013b43c3490f23fa5819059d1fd73a52cfc6429f76f11a05bb01fac580bcb1', files: 'packages/storage/src/db.ts | packages/storage/src/schema.ts' },
-  { hash: '7b4a1f04117411e1f0dcd14fbcf278d0d64aede4ecbbbd519fbc959402c00e49', files: 'packages/storage/src/db.ts | packages/storage/src/db.ts' },
   { hash: 'f155838fd8594a8c0e086bb407b69126a828c16081d1fe7ed33c5758e38d9c09', files: 'packages/storage/src/plaintext.ts | packages/storage/src/plaintext.ts' },
   { hash: 'a4f57836694bff353f862e51a5d5cde31a2cc618fca9eb6adfa9afe601e76aba', files: 'packages/storage/src/schema.ts | packages/storage/src/schema.ts' },
 
@@ -50,11 +49,8 @@ export const allowedClones: AllowedClone[] = [
   { hash: 'ba40b8dd6ea6a92732930110cee6339315a0f78b93bc01f5cf9437f455d7f32b', files: 'packages/server/src/finish-flags.test.ts | packages/server/src/finish-flags.test.ts' },
   { hash: '88aa7e18b340f8278c3bf7874445dd2125907b35639974f4d28c4431999fda6a', files: 'packages/server/src/finish-flags.test.ts | packages/server/src/finish-flags.test.ts' },
   { hash: '160c1df36db9ef92a8bce4fea280c72f18ca870218450d2410c62d8a4f0c81bc', files: 'packages/server/src/finish-flags.test.ts | packages/server/src/rate-limit.test.ts' },
-  { hash: '20f476bca920cf27fff11c2b1c33d32e4bdf06b037e298fea63633c6829abbc7', files: 'packages/server/src/finish-flags.test.ts | packages/server/src/retention.test.ts' },
   { hash: 'a8fc7754828e741dee8ff038689a7b778456eab760ee40f53f95b6393ac55d41', files: 'packages/server/src/privacy.test.ts | packages/server/src/privacy.test.ts' },
   { hash: '90002e66744d9cb67a3987d03d936a1a79a9e94987535b8d6fcfa589c59532ee', files: 'packages/server/src/race-file.test.ts | packages/storage/src/cipher.test.ts' },
-  { hash: '60330f17cb1f0c3e2e63bae0110a65559011de2c250cbb5fb65fffd0d6ee3483', files: 'packages/server/src/retention.test.ts | packages/server/src/retention.test.ts' },
-  { hash: '728d88b7037d04f6c828fb60a586c415699ed44a6c294d4924d8d8dd25c5ea87', files: 'packages/server/src/retention.test.ts | packages/server/src/retention.test.ts' },
   { hash: '05bc1c19980a0d95919ab6536c792770bce99b169c9f34632b74cf1673550f8d', files: 'packages/server/src/scenario.test.ts | packages/server/src/scenario.test.ts' },
   { hash: '0cc6f4b8c8228d7e3c42acb03d1a4776351bd6406f3d5b4f6a8a0a99ff22a662', files: 'packages/server/src/ws.test.ts | packages/server/src/ws.test.ts' },
   { hash: '6f169dc3944a8c19de82a153f0f7f3720ed026c2bcc8b0dc740a798713163365', files: 'packages/server/src/ws.test.ts | packages/server/src/ws.test.ts' },
