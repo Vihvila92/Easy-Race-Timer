@@ -24,9 +24,14 @@ on:
   workflow_dispatch:
   pull_request:
     paths:
+      - package.json
+      - .nvmrc
+      - rust-toolchain.toml
       - scripts/build-sidecar.ts
       - scripts/sidecar-*.ts
       - scripts/argon-smoke.mjs
+      - scripts/desktop-smoke.mjs
+      - scripts/release-*.ts
       - packages/storage/package.json
       - packages/server/package.json
       - pnpm-lock.yaml

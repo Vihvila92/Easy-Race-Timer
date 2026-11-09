@@ -7,7 +7,7 @@ The Release workflow (`.github/workflows/release.yml`) builds the desktop app fo
 | How it starts | What you get |
 |---|---|
 | Actions → Release → Run workflow | A dry run. Installers are workflow artifacts. No GitHub Release is created. |
-| A pull request that changes the sidecar, a native package, the lockfile, `src-tauri/`, or this workflow | The installer matrix (Linux, macOS universal, Windows) and the sidecar smoke test. No `release` environment, no signing, and no GitHub Release. |
+| A pull request that changes the sidecar, the smoke test, the release scripts, a package manifest, the lockfile, the Node or Rust toolchain, `src-tauri/`, or this workflow | The installer matrix (Linux, macOS universal, Windows) and the sidecar smoke test. No `release` environment, no signing, and no GitHub Release. |
 | A pushed `v*` tag, for example `v0.1.0` | A GitHub Release with the installers, updater files, checksums and SBOMs. |
 
 Artifacts from a dry run are on the workflow run page, in `installers-linux`, `installers-macos`, `installers-windows` and the combined `release-assets` artifact. `release-assets` also contains `checksums.txt` and the two SBOMs. A pull request uploads the three `installers-*` artifacts only. It does not run the SBOM, bundle, sign, publish, or verify jobs.

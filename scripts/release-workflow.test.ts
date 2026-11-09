@@ -12,6 +12,29 @@ function job(name: string): string {
 
 const tagRelease = "github.event_name == 'push' && github.ref_type == 'tag'"
 
+const pullRequestPaths = [
+  'package.json',
+  '.nvmrc',
+  'rust-toolchain.toml',
+  'scripts/build-sidecar.ts',
+  'scripts/sidecar-*.ts',
+  'scripts/argon-smoke.mjs',
+  'scripts/desktop-smoke.mjs',
+  'scripts/release-*.ts',
+  'packages/storage/package.json',
+  'packages/server/package.json',
+  'pnpm-lock.yaml',
+  'src-tauri/**',
+  '.github/workflows/release.yml',
+]
+
+function expectPullRequestJob(body: string): void {
+  expect(body).not.toContain('github.event_name')
+  expect(body).not.toContain('secrets.')
+  expect(body).not.toContain('environment:')
+  expect(body).not.toContain('github.token')
+}
+
 function between(source: string, start: string, end: string): string {
   const from = source.indexOf(start)
   const to = source.indexOf(end, from + start.length)
@@ -155,16 +178,7 @@ describe('release workflow pull requests', () => {
   it('runs the installer matrix and sidecar smoke test on sidecar paths', () => {
     const trigger = between(release, 'pull_request:', 'concurrency:')
     expect(trigger).toContain('paths:')
-    for (const entry of [
-      'scripts/build-sidecar.ts',
-      'scripts/sidecar-*.ts',
-      'scripts/argon-smoke.mjs',
-      'packages/storage/package.json',
-      'packages/server/package.json',
-      'pnpm-lock.yaml',
-      'src-tauri/**',
-      '.github/workflows/release.yml',
-    ]) {
+    for (const entry of pullRequestPaths) {
       expect(trigger).toContain(`- ${entry}`)
     }
     expect(release).not.toContain('pull_request_target')
@@ -175,16 +189,10 @@ describe('release workflow pull requests', () => {
     expect(installers).toContain('platform: macos')
     expect(installers).toContain('universal-apple-darwin')
     expect(installers).toContain('platform: windows')
-    expect(installers).not.toContain('github.event_name')
-    expect(installers).not.toContain('secrets.')
-    expect(installers).not.toContain('environment:')
-    expect(installers).not.toContain('github.token')
+    expectPullRequestJob(installers)
     const smoke = job('smoke')
     expect(smoke).toContain('desktop-smoke.mjs')
-    expect(smoke).not.toContain('github.event_name')
-    expect(smoke).not.toContain('secrets.')
-    expect(smoke).not.toContain('environment:')
-    expect(smoke).not.toContain('github.token')
+    expectPullRequestJob(smoke)
   })
 
   it('gates sign, publish, and release jobs to a tag push or a dry run', () => {
