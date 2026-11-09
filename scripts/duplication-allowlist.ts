@@ -22,9 +22,6 @@ export const allowedClones: AllowedClone[] = [
   { hash: 'f155838fd8594a8c0e086bb407b69126a828c16081d1fe7ed33c5758e38d9c09', files: 'packages/storage/src/plaintext.ts | packages/storage/src/plaintext.ts' },
   { hash: 'a4f57836694bff353f862e51a5d5cde31a2cc618fca9eb6adfa9afe601e76aba', files: 'packages/storage/src/schema.ts | packages/storage/src/schema.ts' },
 
-  // Repeated view markup. Shared UI belongs in the design system (cleanup issue #211), and this file is over the size limit.
-  { hash: '91212ad50621ba0d9646214025076a0d1224b005b4038734c1402078d821c593', files: 'packages/web/src/views.tsx | packages/web/src/views.tsx' },
-
   // Repeated release-asset classification in a file that is already over the size limit.
   { hash: 'aacefb9d0b14ed81ba6655626ba358e3a4b3dfb334cfc8de3e65913082777464', files: 'scripts/release-assets.ts | scripts/release-assets.ts' },
 
