@@ -4,13 +4,15 @@ import { randomBytes } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import Database from 'better-sqlite3-multiple-ciphers'
-import { addMonths, createId } from '@ert/core'
+import { createId } from '@ert/core'
 import { atomicCopyFile, fsyncDirectory, fsyncFile, secureRemove } from './atomic.js'
-import { isPlaintextSqlite, openEncrypted, peekSchemaVersion, rawKeyPragma, restrictPermissions, unlock, type SqliteDatabase } from './cipher.js'
+import { recoverRestore } from './backup-file.js'
+import { isPlaintextSqlite, openEncrypted, peekSchemaVersion, restrictPermissions, unlock, type SqliteDatabase } from './cipher.js'
 import { RaceFileError } from './errors.js'
 import { omitInternal } from './internal.js'
-import { devKeyOptIn, isDevDataKey, resolveDataKey, type OpenOptions } from './key.js'
-import { backupPairComplete, databasePathForKeyFile, ensureKeyFile, inspectKeyFile, keyFilePath, rekeyTempPaths, writeKeyStub } from './key-file.js'
+import { resolveDataKey, type OpenOptions } from './key.js'
+import { backupPairComplete, ensureKeyFile, keyFilePath, writeKeyStub } from './key-file.js'
+import { recoverRekeyTemps } from './rekey.js'
 import { migratePlaintextFile, purgeExpiredQuarantine, quarantinePlaintextCopies, recoverPlaintextMigration } from './plaintext.js'
 import { ensureFileId, MIGRATIONS, SCHEMA_SQL, SCHEMA_VERSION } from './schema.js'
 
@@ -28,12 +30,10 @@ export const migrationHooks: {
   failBackup?: boolean
 } = {}
 
-/** Test seam. Production never sets this. A throw leaves the original pair in place. */
-export const rekeyHooks: {
-  beforeRename?: () => void
-} = {}
-
 export { plaintextHooks, QUARANTINE_RETENTION_MS, deleteQuarantinedPlaintext, plaintextQuarantinePending, type PlaintextStep } from './plaintext.js'
+export { rekeyDataFile, rekeyHooks } from './rekey.js'
+export { assertBackupIntegrity, backupDatabase, recoverRestore, restoreBackupPair, restoreHooks } from './backup-file.js'
+export { BACKUP_KEEP_RECENT, pruneBackups, pruneSchemaBackups } from './backup-prune.js'
 
 function zeroKeyOnClose(raw: SqliteDatabase, dataKey: Buffer): void {
   const close = raw.close.bind(raw)
@@ -171,27 +171,27 @@ function peekFileId(filePath: string, dataKey: Buffer): string | undefined {
   }
 }
 
-function migrateOnCopy(filePath: string, dataKey: Buffer, fromVersion: number): void {
-  checkpointIfPending(filePath, dataKey)
+function assertPremigrationCopy(filePath: string, backup: string, preferred: string): void {
+  if (!fs.readFileSync(filePath).equals(fs.readFileSync(backup))) throw new Error('backup bytes differ')
+  const sourceKey = keyFilePath(filePath)
+  const backupKey = keyFilePath(backup)
+  if (backupPairComplete(filePath)) atomicCopyFile(sourceKey, backupKey)
+  else writeKeyStub(backupKey, preferred)
+  const keyCopy = fs.readFileSync(backupKey)
+  if (fs.existsSync(sourceKey) && backupPairComplete(filePath) && !fs.readFileSync(sourceKey).equals(keyCopy)) {
+    throw new Error('key backup bytes differ')
+  }
+  fsyncDirectory(path.dirname(backup))
+}
+
+function writePremigrationBackup(filePath: string, fromVersion: number, preferred: string): string {
   const backup = `${filePath}.v${fromVersion}.bak`
-  const preferred = peekFileId(filePath, dataKey) ?? randomBytes(16).toString('hex')
   let wroteBackup = false
   try {
     if (migrationHooks.failBackup) throw new Error('disk full')
     atomicCopyFile(filePath, backup)
     wroteBackup = true
-    const source = fs.readFileSync(filePath)
-    const copied = fs.readFileSync(backup)
-    if (!source.equals(copied)) throw new Error('backup bytes differ')
-    const sourceKey = keyFilePath(filePath)
-    const backupKey = keyFilePath(backup)
-    if (backupPairComplete(filePath)) atomicCopyFile(sourceKey, backupKey)
-    else writeKeyStub(backupKey, preferred)
-    const keyCopy = fs.readFileSync(backupKey)
-    if (fs.existsSync(sourceKey) && backupPairComplete(filePath) && !fs.readFileSync(sourceKey).equals(keyCopy)) {
-      throw new Error('key backup bytes differ')
-    }
-    fsyncDirectory(path.dirname(backup))
+    assertPremigrationCopy(filePath, backup, preferred)
   } catch {
     if (wroteBackup) {
       secureRemove(backup)
@@ -199,7 +199,19 @@ function migrateOnCopy(filePath: string, dataKey: Buffer, fromVersion: number): 
     }
     throw new Error('Pre-migration backup failed; migration was not started.')
   }
+  return backup
+}
 
+function migrateOnCopy(filePath: string, dataKey: Buffer, fromVersion: number): void {
+  checkpointIfPending(filePath, dataKey)
+  const preferred = peekFileId(filePath, dataKey) ?? randomBytes(16).toString('hex')
+  const backup = writePremigrationBackup(filePath, fromVersion, preferred)
+  applyMigration(filePath, dataKey, fromVersion, { preferred, backup })
+}
+
+function applyMigration(filePath: string, dataKey: Buffer, fromVersion: number, copy: { preferred: string; backup: string }): void {
+  const preferred = copy.preferred
+  const backup = copy.backup
   const tmp = path.join(path.dirname(filePath), `.${path.basename(filePath)}.migrating`)
   let migrated = false
   let raw: SqliteDatabase | undefined
@@ -295,111 +307,24 @@ function bindKeyFile(filePath: string, raw: SqliteDatabase): void {
   ensureKeyFile(filePath, ensureFileId(raw))
 }
 
-/**
- * A database temp means the rename did not happen, so the original pair is kept.
- * A key temp alone is the crash window after the database rename. It is attached
- * only when its file id matches. Otherwise both files stay and open fails closed.
- */
-function recoverRekeyTemps(filePath: string, dataKey: Buffer): void {
-  const temps = rekeyTempPaths(filePath)
-  if (fs.existsSync(temps.database)) {
-    if (fs.existsSync(filePath)) {
-      secureRemove(temps.database)
-      secureRemove(`${temps.database}-wal`)
-      secureRemove(`${temps.database}-shm`)
-      secureRemove(temps.key)
-    }
-    return
-  }
-  if (!fs.existsSync(temps.key) || !fs.existsSync(filePath)) return
-  let raw: SqliteDatabase | undefined
-  try {
-    raw = openEncrypted(filePath, dataKey)
-    const fileId = ensureFileId(raw)
-    const info = inspectKeyFile(temps.key)
-    raw.close()
-    raw = undefined
-    if ((info.kind === 'stub' || info.kind === 'envelope') && info.fileId === fileId) {
-      fs.renameSync(temps.key, keyFilePath(filePath))
-      fsyncDirectory(path.dirname(filePath))
-      restrictPermissions(keyFilePath(filePath))
-      return
-    }
-  } catch (error) {
-    try {
-      raw?.close()
-    } catch {
-      // The handle may already be closed.
-    }
-    if (error instanceof RaceFileError) throw error
-    throw new Error(`Key file recovery failed for ${path.basename(filePath)}.`)
-  }
-  throw new Error(`Key file recovery failed for ${path.basename(filePath)}.`)
+function openMemoryDatabase(): AppDb {
+  const raw = new Database(':memory:')
+  raw.pragma('journal_mode = WAL')
+  raw.pragma('synchronous = FULL')
+  raw.pragma('foreign_keys = ON')
+  raw.pragma('temp_store = MEMORY')
+  raw.pragma('secure_delete = ON')
+  applyFreshSchema(raw)
+  return new AppDb(raw, ':memory:', null)
 }
 
-/**
- * Open the race database.
- * A file is SQLCipher AES-256. `:memory:` stays unencrypted for unit tests.
- * An older schema is backed up as `<file>.v<version>.bak` plus `<file>.v<version>.keys` before migration.
- * The dev key is used only with an explicit opt-in, and never when the key is missing.
- */
-export async function openDatabase(filePath: string, options: OpenOptions = {}): Promise<AppDb> {
-  if (filePath === ':memory:') {
-    const raw = new Database(':memory:')
-    raw.pragma('journal_mode = WAL')
-    raw.pragma('synchronous = FULL')
-    raw.pragma('foreign_keys = ON')
-    raw.pragma('temp_store = MEMORY')
-    raw.pragma('secure_delete = ON')
-    applyFreshSchema(raw)
-    return new AppDb(raw, filePath, null)
-  }
-
-  const dataKey = resolveDataKey(options)
-  const resolved = path.resolve(filePath)
-  fs.mkdirSync(path.dirname(resolved), { recursive: true })
-  if (fs.existsSync(resolved)) recoverRekeyTemps(resolved, dataKey)
-  recoverPlaintextMigration(resolved, dataKey)
-  if (fs.existsSync(resolved) && isPlaintextSqlite(resolved)) migratePlaintextFile(resolved, dataKey)
-  const quarantinedPlaintext = quarantinePlaintextCopies(path.dirname(resolved), resolved)
-  purgeExpiredQuarantine(path.dirname(resolved))
-
-  if (!fs.existsSync(resolved)) {
-    const raw = openEncrypted(resolved, dataKey)
-    try {
-      applyFreshSchema(raw)
-      bindKeyFile(resolved, raw)
-      restrictPermissions(resolved)
-      return new AppDb(raw, resolved, dataKey, quarantinedPlaintext)
-    } catch (error) {
-      try {
-        raw.close()
-      } catch {
-        // The handle may already be closed.
-      }
-      throw error
-    }
-  }
-
-  const hadWal = fs.existsSync(`${resolved}-wal`) || fs.existsSync(`${resolved}-shm`)
-  const current = peekSchemaVersion(resolved, dataKey)
-  if (!hadWal) {
-    fs.rmSync(`${resolved}-wal`, { force: true })
-    fs.rmSync(`${resolved}-shm`, { force: true })
-  }
-  if (current != null && current > SCHEMA_VERSION) {
-    throw new RaceFileError(path.basename(resolved), 'newer')
-  }
-  if (current != null && current < SCHEMA_VERSION) {
-    migrateOnCopy(resolved, dataKey, current)
-  }
-  const raw = openEncrypted(resolved, dataKey)
+function finishOpen(raw: SqliteDatabase, resolved: string, dataKey: Buffer, open: { quarantined: readonly string[]; purgeBirthDate: boolean }): AppDb {
   try {
     applyFreshSchema(raw)
-    purgeBirthDateColumn(raw)
+    if (open.purgeBirthDate) purgeBirthDateColumn(raw)
     bindKeyFile(resolved, raw)
     restrictPermissions(resolved)
-    return new AppDb(raw, resolved, dataKey, quarantinedPlaintext)
+    return new AppDb(raw, resolved, dataKey, open.quarantined)
   } catch (error) {
     try {
       raw.close()
@@ -410,244 +335,43 @@ export async function openDatabase(filePath: string, options: OpenOptions = {}):
   }
 }
 
+function openExistingFile(resolved: string, dataKey: Buffer, quarantined: readonly string[]): AppDb {
+  const hadWal = fs.existsSync(`${resolved}-wal`) || fs.existsSync(`${resolved}-shm`)
+  const current = peekSchemaVersion(resolved, dataKey)
+  if (!hadWal) {
+    fs.rmSync(`${resolved}-wal`, { force: true })
+    fs.rmSync(`${resolved}-shm`, { force: true })
+  }
+  if (current != null && current > SCHEMA_VERSION) throw new RaceFileError(path.basename(resolved), 'newer')
+  if (current != null && current < SCHEMA_VERSION) migrateOnCopy(resolved, dataKey, current)
+  return finishOpen(openEncrypted(resolved, dataKey), resolved, dataKey, { quarantined, purgeBirthDate: true })
+}
+
+/**
+ * Open the race database.
+ * A file is SQLCipher AES-256. `:memory:` stays unencrypted for unit tests.
+ * An older schema is backed up as `<file>.v<version>.bak` plus `<file>.v<version>.keys` before migration.
+ * The dev key is used only with an explicit opt-in, and never when the key is missing.
+ * A leftover restore is completed or rolled back before the file is used.
+ * Close this database before restoring a backup over the same path.
+ */
+export async function openDatabase(filePath: string, options: OpenOptions = {}): Promise<AppDb> {
+  if (filePath === ':memory:') return openMemoryDatabase()
+  const dataKey = resolveDataKey(options)
+  const resolved = path.resolve(filePath)
+  fs.mkdirSync(path.dirname(resolved), { recursive: true })
+  recoverRestore(resolved)
+  if (fs.existsSync(resolved)) recoverRekeyTemps(resolved, dataKey)
+  recoverPlaintextMigration(resolved, dataKey)
+  if (fs.existsSync(resolved) && isPlaintextSqlite(resolved)) migratePlaintextFile(resolved, dataKey)
+  const quarantinedPlaintext = quarantinePlaintextCopies(path.dirname(resolved), resolved)
+  purgeExpiredQuarantine(path.dirname(resolved))
+  const open = { quarantined: quarantinedPlaintext, purgeBirthDate: false }
+  if (!fs.existsSync(resolved)) return finishOpen(openEncrypted(resolved, dataKey), resolved, dataKey, open)
+  return openExistingFile(resolved, dataKey, quarantinedPlaintext)
+}
+
 /** Open with an explicit 256-bit data key. Same migration rules as openDatabase. */
 export function openDataFile(filePath: string, dataKey: Buffer): Promise<AppDb> {
   return openDatabase(filePath, { dataKey })
-}
-
-function adoptConnection(db: AppDb, raw: SqliteDatabase): void {
-  ;(db as { raw: SqliteDatabase }).raw = raw
-}
-
-/**
- * Rotate the data key on a copy. The live connection is not rekeyed in place.
- * SQLite3 Multiple Ciphers cannot rekey a database that is in WAL mode, so the
- * copy is switched to DELETE for the rekey and back to WAL after integrity_check.
- * The key stub is copied unchanged. #131 writes the new envelope at that step.
- */
-export function rekeyDataFile(db: AppDb, newKey: Buffer): void {
-  if (db.filePath === ':memory:' || !db.dataKey) throw new Error('A memory database has no data key to rotate')
-  if (newKey.length !== 32) throw new Error('Data key must be 32 bytes')
-  if (isDevDataKey(newKey) && !devKeyOptIn()) throw new RaceFileError('', process.env.NODE_ENV === 'production' ? 'dev-key' : 'missing-key')
-  const previous = Buffer.from(db.dataKey)
-  const incoming = Buffer.from(newKey)
-  const temps = rekeyTempPaths(db.filePath)
-  const directory = path.dirname(db.filePath)
-  let copy: SqliteDatabase | undefined
-  let closed = false
-  let renamedDatabase = false
-  try {
-    db.raw.pragma('wal_checkpoint(TRUNCATE)')
-    atomicCopyFile(db.filePath, temps.database)
-    copy = openEncrypted(temps.database, previous)
-    copy.pragma('journal_mode = DELETE')
-    copy.pragma(rawKeyPragma('rekey', incoming))
-    const result = copy.pragma('integrity_check', { simple: true })
-    if (result !== 'ok') throw new Error('Rekey integrity check failed')
-    copy.pragma('journal_mode = WAL')
-    copy.close()
-    copy = undefined
-    const settled = openEncrypted(temps.database, incoming)
-    try {
-      settled.pragma('wal_checkpoint(TRUNCATE)')
-    } finally {
-      settled.close()
-    }
-    fsyncFile(temps.database)
-    secureRemove(`${temps.database}-wal`)
-    secureRemove(`${temps.database}-shm`)
-    const sourceKey = keyFilePath(db.filePath)
-    if (!backupPairComplete(db.filePath)) throw new Error('Rekey failed')
-    atomicCopyFile(sourceKey, temps.key)
-    fsyncFile(temps.key)
-    rekeyHooks.beforeRename?.()
-    db.raw.close()
-    closed = true
-    fs.renameSync(temps.database, db.filePath)
-    renamedDatabase = true
-    fsyncDirectory(directory)
-    fs.renameSync(temps.key, sourceKey)
-    fsyncDirectory(directory)
-    restrictPermissions(db.filePath)
-    incoming.copy(db.dataKey)
-    const next = openEncrypted(db.filePath, db.dataKey)
-    zeroKeyOnClose(next, db.dataKey)
-    adoptConnection(db, next)
-  } catch (error) {
-    try {
-      copy?.close()
-    } catch {
-      // The handle may already be closed.
-    }
-    if (!renamedDatabase) {
-      secureRemove(temps.database)
-      secureRemove(`${temps.database}-wal`)
-      secureRemove(`${temps.database}-shm`)
-      secureRemove(temps.key)
-      if (closed && !db.raw.open) {
-        previous.copy(db.dataKey!)
-        const restored = openEncrypted(db.filePath, db.dataKey!)
-        zeroKeyOnClose(restored, db.dataKey!)
-        adoptConnection(db, restored)
-      }
-    } else if (!db.raw.open) {
-      incoming.copy(db.dataKey!)
-      const restored = openEncrypted(db.filePath, db.dataKey!)
-      zeroKeyOnClose(restored, db.dataKey!)
-      adoptConnection(db, restored)
-    }
-    if (error instanceof RaceFileError) throw error
-    if (error instanceof Error && error.message === 'Rekey integrity check failed') throw error
-    throw new Error('Rekey failed')
-  } finally {
-    incoming.fill(0)
-    previous.fill(0)
-  }
-}
-
-/**
- * Backup pair order:
- * 1. wal_checkpoint(TRUNCATE) on the open database
- * 2. atomic copy of the database
- * 3. atomic copy of the key file
- * 4. fsync of the destination directory
- * A crash before step 3 leaves a database without its key file. Restore skips that pair.
- */
-function writeBackupPair(databaseSource: string, databaseDest: string): void {
-  if (!backupPairComplete(databaseSource)) throw new Error('key file missing')
-  atomicCopyFile(databaseSource, databaseDest)
-  try {
-    atomicCopyFile(keyFilePath(databaseSource), keyFilePath(databaseDest))
-    fsyncDirectory(path.dirname(databaseDest))
-  } catch (error) {
-    secureRemove(databaseDest)
-    secureRemove(keyFilePath(databaseDest))
-    throw error
-  }
-}
-
-/** Consistent encrypted snapshot of the database and its key file. */
-export async function backupDatabase(db: AppDb, dest: string): Promise<void> {
-  if (db.filePath === ':memory:' || !db.dataKey) {
-    throw new Error('Backup failed: a memory database has no file to copy')
-  }
-  const destKey = keyFilePath(dest)
-  let copied = false
-  try {
-    bindKeyFile(db.filePath, db.raw)
-    db.raw.pragma('wal_checkpoint(TRUNCATE)')
-    writeBackupPair(db.filePath, dest)
-    copied = true
-    restrictPermissions(dest)
-  } catch (error) {
-    if (copied) {
-      fs.rmSync(dest, { force: true })
-      secureRemove(destKey)
-    }
-    if (error instanceof RaceFileError) throw error
-    throw new Error('Backup failed')
-  }
-  try {
-    assertBackupIntegrity(dest, db.dataKey)
-    if (!backupPairComplete(dest)) throw new Error('Backup integrity check failed')
-  } catch (error) {
-    fs.rmSync(dest, { force: true })
-    secureRemove(destKey)
-    if (error instanceof Error && error.message.startsWith('Backup integrity check failed')) throw error
-    throw new Error('Backup integrity check failed')
-  }
-}
-
-/**
- * Copy a complete backup pair over dest.
- * A database without its key file, or a key file that is not a whole stub or envelope, is skipped.
- */
-export function restoreBackupPair(databaseBackup: string, destDatabase: string): boolean {
-  if (!backupPairComplete(databaseBackup)) return false
-  writeBackupPair(databaseBackup, destDatabase)
-  return true
-}
-
-export function assertBackupIntegrity(file: string, dataKey: Buffer): void {
-  if (!dataKey || dataKey.length !== 32) throw new Error('Backup integrity check failed')
-  const key = dataKey
-  let raw: SqliteDatabase | undefined
-  try {
-    raw = openEncrypted(file, key)
-    const result = raw.pragma('integrity_check', { simple: true })
-    if (result !== 'ok') throw new Error(`Backup integrity check failed: ${String(result)}`)
-  } catch (error) {
-    if (error instanceof Error && error.message.startsWith('Backup integrity check failed')) throw error
-    throw new Error('Backup integrity check failed')
-  } finally {
-    try {
-      raw?.close()
-    } catch {
-      // The handle may already be closed.
-    }
-  }
-}
-
-const SCHEMA_BACKUP = /\.sqlite\.v\d+\.bak$/
-const KEY_SCHEMA_BACKUP = /\.v\d+\.keys$/
-
-function olderThanRetention(file: string, retentionMonths: number, today: string): boolean {
-  const stat = fs.statSync(file)
-  const mtime = new Date(stat.mtimeMs).toISOString().slice(0, 10)
-  return addMonths(mtime, retentionMonths) < today
-}
-
-/** Delete a database backup and the key sidecar copied with it. */
-function removeBackupPair(databaseBackup: string, removed: string[]): void {
-  secureRemove(databaseBackup)
-  removed.push(databaseBackup)
-  const key = keyFilePath(databaseBackup)
-  if (key !== databaseBackup && fs.existsSync(key)) {
-    secureRemove(key)
-    removed.push(key)
-  }
-}
-
-/** An aged sidecar whose database copy is already gone. A sidecar still paired with a database stays. */
-function removeOrphanKeyBackup(keyBackup: string, retentionMonths: number, today: string, removed: string[]): void {
-  if (!fs.existsSync(keyBackup)) return
-  if (fs.existsSync(databasePathForKeyFile(keyBackup))) return
-  if (!olderThanRetention(keyBackup, retentionMonths, today)) return
-  secureRemove(keyBackup)
-  removed.push(keyBackup)
-}
-
-/** Delete backup files older than the retention period, including `<file>.v<version>.bak` and the paired key file. */
-export function pruneBackups(directory: string, retentionMonths: number, now = Date.now()): string[] {
-  if (!fs.existsSync(directory)) return []
-  const today = new Date(now).toISOString().slice(0, 10)
-  const removed: string[] = []
-  for (const name of fs.readdirSync(directory)) {
-    const databaseBackup = name.endsWith('.sqlite') || SCHEMA_BACKUP.test(name)
-    if (!databaseBackup) continue
-    const full = path.join(directory, name)
-    if (olderThanRetention(full, retentionMonths, today)) removeBackupPair(full, removed)
-  }
-  for (const name of fs.readdirSync(directory)) {
-    if (!name.endsWith('.keys') && !KEY_SCHEMA_BACKUP.test(name)) continue
-    removeOrphanKeyBackup(path.join(directory, name), retentionMonths, today, removed)
-  }
-  return removed
-}
-
-/** Delete aged pre-migration backups beside the live race file. Does not touch the live file or its key sidecar. */
-export function pruneSchemaBackups(directory: string, retentionMonths: number, now = Date.now()): string[] {
-  if (!fs.existsSync(directory)) return []
-  const today = new Date(now).toISOString().slice(0, 10)
-  const removed: string[] = []
-  for (const name of fs.readdirSync(directory)) {
-    if (!SCHEMA_BACKUP.test(name)) continue
-    const full = path.join(directory, name)
-    if (olderThanRetention(full, retentionMonths, today)) removeBackupPair(full, removed)
-  }
-  for (const name of fs.readdirSync(directory)) {
-    if (!KEY_SCHEMA_BACKUP.test(name)) continue
-    removeOrphanKeyBackup(path.join(directory, name), retentionMonths, today, removed)
-  }
-  return removed
 }

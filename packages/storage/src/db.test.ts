@@ -3,9 +3,9 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { peekSchemaVersion } from './cipher.js'
-import { assertBackupIntegrity, backupDatabase, migrationHooks, openDatabase, pruneBackups, pruneSchemaBackups, restoreBackupPair } from './db.js'
-import { keyFilePath } from './key-file.js'
+import { openEncrypted, peekSchemaVersion } from './cipher.js'
+import { assertBackupIntegrity, BACKUP_KEEP_RECENT, backupDatabase, migrationHooks, openDatabase, pruneBackups, pruneSchemaBackups, restoreBackupPair } from './db.js'
+import { keyFilePath, writeKeyStub } from './key-file.js'
 import { devDataKey } from './key.js'
 import { SCHEMA_VERSION } from './schema.js'
 
@@ -64,7 +64,9 @@ describe('backupDatabase', () => {
     expect(fs.readFileSync(path.join(dir, 'ert.sqlite.v3.bak')).equals(before)).toBe(true)
     expect(fs.readFileSync(keyFilePath(file)).equals(sidecar)).toBe(true)
   })
+})
 
+describe('backup restore pair', () => {
   it('skips a backup pair that is missing its key file', async () => {
     const dir = tempDir()
     const file = path.join(dir, 'ert.sqlite')
@@ -75,11 +77,13 @@ describe('backupDatabase', () => {
     fs.rmSync(keyFilePath(dest))
     const restored = path.join(dir, 'restored.sqlite')
     fs.writeFileSync(restored, 'keep')
-    expect(restoreBackupPair(dest, restored)).toBe(false)
+    expect(await restoreBackupPair(dest, restored, () => {
+      throw new Error('should not run')
+    })).toBe(false)
     expect(fs.readFileSync(restored, 'utf8')).toBe('keep')
     expect(fs.existsSync(keyFilePath(restored))).toBe(false)
     fs.writeFileSync(keyFilePath(dest), fs.readFileSync(keyFilePath(file)))
-    expect(restoreBackupPair(dest, restored)).toBe(true)
+    expect(await restoreBackupPair(dest, restored, () => {})).toBe(true)
     expect(fs.readFileSync(keyFilePath(restored)).equals(fs.readFileSync(keyFilePath(file)))).toBe(true)
     const opened = await openDatabase(restored)
     opened.raw.close()
@@ -152,7 +156,9 @@ describe('openDatabase', () => {
     expect(fs.readFileSync(path.join(dir, backups[0]!)).equals(before)).toBe(true)
     expect(peekSchemaVersion(file, devDataKey())).toBe(3)
   })
+})
 
+describe('publication migration', () => {
   it('sets initials for a person whose age is unknown when migrating from schema 2', async () => {
     const dir = tempDir()
     const file = path.join(dir, 'ert.sqlite')
@@ -171,6 +177,42 @@ describe('openDatabase', () => {
     reopened.raw.close()
     expect(unknown?.publication).toBe('initials')
     expect(adult?.publication).toBe('full')
+  })
+
+  it('lets the previous schema open the backup after a migration rolls back', async () => {
+    const dir = tempDir()
+    const file = path.join(dir, 'ert.sqlite')
+    const db = await openDatabase(file)
+    db.run(`INSERT INTO person (id, first_name, last_name, gender, birth_year, publication, created_at, updated_at, hlc)
+      VALUES ('p1', 'Aino', 'Testi', 'F', 1990, 'full', 1, 1, '1')`)
+    db.run('UPDATE schema_meta SET schema_version = 3')
+    db.raw.close()
+    migrationHooks.beforeCommit = () => {
+      throw new Error('disk')
+    }
+    await expect(openDatabase(file)).rejects.toThrow(/left unchanged/)
+    const backup = path.join(dir, 'ert.sqlite.v3.bak')
+
+    // openEncrypted does not migrate. That is how the previous app version opens this file.
+    const openPrevious = (candidate: string) => {
+      const raw = openEncrypted(candidate, devDataKey())
+      try {
+        const integrity = raw.pragma('integrity_check', { simple: true })
+        const version = raw.prepare('SELECT schema_version FROM schema_meta WHERE id = 1').get() as { schema_version: number }
+        const person = raw.prepare('SELECT first_name, last_name FROM person WHERE id = ?').get('p1') as { first_name: string; last_name: string }
+        return { integrity, version, person }
+      } finally {
+        raw.close()
+      }
+    }
+
+    const fromBackup = openPrevious(backup)
+    const fromOriginal = openPrevious(file)
+    expect(fromBackup.integrity).toBe('ok')
+    expect(fromBackup.version.schema_version).toBe(3)
+    expect(fromBackup.version.schema_version).toBeLessThan(SCHEMA_VERSION)
+    expect(fromBackup.person).toEqual({ first_name: 'Aino', last_name: 'Testi' })
+    expect(fromOriginal).toEqual(fromBackup)
   })
 })
 
@@ -218,5 +260,47 @@ describe('pruneBackups', () => {
     expect(fs.existsSync(liveKey)).toBe(true)
     expect(fs.existsSync(aged)).toBe(false)
     expect(fs.existsSync(agedKey)).toBe(false)
+  })
+})
+
+describe('backup rotation', () => {
+  it('keeps the newest backups and one daily inside the retention period', () => {
+    const dir = tempDir()
+    const now = Date.parse('2028-06-13T00:00:00Z')
+    const fileId = '0123456789abcdef0123456789abcdef'
+    const stamp = (name: string, iso: string, complete = false) => {
+      const full = path.join(dir, name)
+      fs.writeFileSync(full, name)
+      const seconds = Date.parse(iso) / 1000
+      fs.utimesSync(full, seconds, seconds)
+      if (!complete) return full
+      const key = keyFilePath(full)
+      writeKeyStub(key, fileId)
+      fs.utimesSync(key, seconds, seconds)
+      return full
+    }
+    const recentBase = Date.parse('2028-06-12T12:00:00Z')
+    for (let i = 0; i < BACKUP_KEEP_RECENT; i += 1) {
+      const iso = new Date(recentBase + i * 1000).toISOString()
+      stamp(`ert-recent-${String(i).padStart(2, '0')}.sqlite`, iso, true)
+    }
+    const extra = stamp('ert-extra.sqlite', '2028-06-12T10:00:00Z', true)
+    const mayEarly = stamp('ert-may-early.sqlite', '2028-05-15T08:00:00Z', true)
+    const mayLate = stamp('ert-may-late.sqlite', '2028-05-15T18:00:00Z', true)
+    const aged = stamp('ert-aged.sqlite', '2027-05-01T00:00:00Z', true)
+    const schemaBak = stamp('ert.sqlite.v3.bak', '2028-05-15T12:00:00Z')
+    const removed = pruneBackups(dir, 12, now)
+    expect(removed.sort()).toEqual([extra, keyFilePath(extra), mayEarly, keyFilePath(mayEarly), aged, keyFilePath(aged)].sort())
+    const left = fs.readdirSync(dir).filter((name) => name.endsWith('.sqlite'))
+    expect(left).toHaveLength(BACKUP_KEEP_RECENT + 1)
+    expect(left).toContain('ert-may-late.sqlite')
+    expect(left).toContain(`ert-recent-${String(BACKUP_KEEP_RECENT - 1).padStart(2, '0')}.sqlite`)
+    expect(fs.existsSync(mayLate)).toBe(true)
+    expect(fs.existsSync(keyFilePath(mayLate))).toBe(true)
+    expect(fs.existsSync(keyFilePath(path.join(dir, `ert-recent-${String(BACKUP_KEEP_RECENT - 1).padStart(2, '0')}.sqlite`)))).toBe(true)
+    expect(fs.existsSync(schemaBak)).toBe(true)
+    expect(left).not.toContain('ert-extra.sqlite')
+    expect(left).not.toContain('ert-may-early.sqlite')
+    expect(left).not.toContain('ert-aged.sqlite')
   })
 })

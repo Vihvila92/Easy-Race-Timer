@@ -2,6 +2,7 @@
 import { describe, expect, it } from 'vitest'
 import { openDatabase } from '@ert/storage'
 import { createApp } from './app.js'
+import { seedRetentionRace } from './retention-seed.js'
 import { Clock, RaceService } from './service.js'
 
 const PAST = '2028-06-13T12:00:00+03:00'
@@ -10,18 +11,7 @@ const EARLY = '2027-06-13T12:00:00+03:00'
 async function fixture(testMode: boolean) {
   const db = await openDatabase(':memory:')
   const service = new RaceService(db, new Clock())
-  service.importEvent({
-    id: 'EV',
-    name: 'Retention',
-    date: '2027-06-12',
-    timezone: 'Europe/Helsinki',
-    sport: 'run',
-    races: [{ id: 'R1', name: { fi: '1 km', en: '1 km' }, distance_m: 1000, start_mode: 'mass' }],
-    categories: [{ id: 'M', race_id: 'R1', name: { fi: 'M', en: 'M' }, gender: 'M', min_age: 16 }],
-  })
-  service.registerLate({
-    firstName: 'Aino', lastName: 'Testi', gender: 'M', birthDate: '1990-01-01', raceId: 'R1', bib: 1, consent: false,
-  })
+  seedRetentionRace(service)
   const calls: string[] = []
   const { app } = await createApp({
     db,
@@ -55,7 +45,9 @@ describe('retention run', () => {
     db.raw.close()
     await app.close()
   })
+})
 
+describe('retention run gates', () => {
   it('previews, then requires a lock, a passed deadline and a backup', async () => {
     const { db, service, app, auth, calls } = await fixture(true)
     const preview = await app.inject({
@@ -105,16 +97,13 @@ describe('retention run', () => {
     db.raw.close()
     await app.close()
   })
+})
 
+describe('retention backup failure', () => {
   it('keeps people when the backup fails', async () => {
     const db = await openDatabase(':memory:')
     const service = new RaceService(db, new Clock())
-    service.importEvent({
-      id: 'EV', name: 'Retention', date: '2027-06-12', timezone: 'Europe/Helsinki', sport: 'run',
-      races: [{ id: 'R1', name: { fi: '1 km', en: '1 km' }, distance_m: 1000 }],
-      categories: [{ id: 'M', race_id: 'R1', name: { fi: 'M', en: 'M' }, gender: 'M', min_age: 16 }],
-    })
-    service.registerLate({ firstName: 'Aino', lastName: 'Testi', gender: 'M', birthDate: '1990-01-01', raceId: 'R1', bib: 1, consent: false })
+    seedRetentionRace(service)
     service.setStatus(1, 'dns', 'test')
     service.lockRace('R1')
     const { app } = await createApp({
