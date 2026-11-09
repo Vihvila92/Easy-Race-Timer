@@ -53,7 +53,7 @@ The database path stays the one [#175](https://github.com/Vihvila92/Easy-Race-Ti
 
 Wraps are not stored in the `key_slot` table. That table sits inside the encrypted database, so it cannot be read before unlock. The implementation drops `key_slot` instead of writing slot rows.
 
-`file_id` from the key file is also written to `schema_meta.file_id` inside the encrypted database. That column is distinct from `installation_id`. `key_generation` is a uint32 at offset 26 of `ert.keys` and in `schema_meta.key_generation`. It starts at 1 and increments by 1 on DEK rotation. The last two bytes of the 32-byte prefix stay zero. After GCM unwrap, the app opens SQLCipher with the DEK and compares the file id and the generation with `crypto.timingSafeEqual`. A mismatch closes the database, zeroizes the DEK, and returns `KEY_FILE_MISMATCH` before the handle is attached. That is not the wrong-password message.
+`file_id` from the key file is also written to `schema_meta.file_id` inside the encrypted database. That column is distinct from `installation_id`. `key_generation` is a uint32 at offset 26 of `ert.keys` and in `schema_meta.key_generation`. It starts at 1 and increments by 1 on DEK rotation. The last two bytes of the 32-byte prefix stay zero. After GCM unwrap, the app opens SQLCipher with the DEK and compares the file id and the generation with `crypto.timingSafeEqual`. A mismatch closes the database, zeroizes the DEK, and returns `KEY_FILE_MISMATCH` before the handle is attached. The same code is returned when the unwrapped key does not open the database at all, which is an old key file beside a newer database. A password or recovery key that does not open a slot stays `UNLOCK_FAILED`. Either failure still counts toward backoff. That is not the wrong-password message.
 
 Creation writes the database, `schema_meta.file_id`, and all three slots before the file is opened for normal use. The operator sees the recovery key and sets both admin passwords in that same setup. Cancelling setup deletes the partial database and the partial key file and zeroizes every buffer.
 
@@ -384,8 +384,8 @@ Regenerating the recovery key:
 
 1. Requires an unlocked admin session (password unlock, or a recovery gate that has already finished the new admin password).
 2. Draws a new 20-byte secret, a new salt and a new nonce, and wraps the current DEK.
-3. Overwrites slot 2 in one atomic envelope write. The admin slots and the body stay as they are unless this regeneration is part of a DEK rotation.
-4. Shows the new key once, with the guide warning.
+3. Writes the unshown flag and a new recovery generation to the database, then overwrites slot 2 in one atomic envelope write. The flag is durable before the envelope is replaced. A crash after the flag and before the envelope keeps the previous recovery key and still blocks normal use. A crash after both writes leaves the new envelope and the same block. The admin slots and the body stay as they are unless this regeneration is part of a DEK rotation.
+4. Shows the new key once, with the guide warning. Acknowledging it passes that generation and clears the flag only when the generation is still the newest one. An older generation leaves the flag set.
 5. Leaves the previous recovery wrap only in older copies of the file. The current file rejects the old paper key.
 
 If both admin passwords and the recovery key are lost, the data cannot be recovered. There is no reset, no support backdoor, and no copy of the key held by the authors of the program. The names, results and consents in that file are gone. The operator is told that, in those words, on the setup screen, on the printed page, and in the guide below. The Finnish text is the same statement, not a shorter paraphrase.
@@ -416,7 +416,7 @@ This is the plain-language guide. The implementation shows it from setup, from t
 
 **Käyttö.** Lukitulla näytöllä valitse "Minulla ei ole salasanoja" ja kirjoita ryhmät, myös viimeinen. Kirjaimet O, I ja L kelpaavat: ohjelma lukee ne nollana ja ykkösenä. Jos ryhmässä on kirjoitusvirhe, ohjelma kertoo siitä eikä yritä avata tiedostoa. Jos avain käy, ohjelma pyytää uuden ylläpitäjän salasanan eikä jatka ennen kuin salasana on asetettu.
 
-**Jos avain katoaa tai joku muu näkee sen.** Jos tiedät vielä ylläpitäjän salasanan, avaa tiedosto ja luo uusi palautusavain. Nykyinen paperi ei enää avaa tätä tiedostoa. Vanha kopio, esimerkiksi USB-varmuuskopio ennen vaihtoa, aukeaa yhä vanhalla paperilla. Kopio on sekä tietokanta että sen vieressä oleva avaintiedosto. Paperiavain ei korvaa avaintiedostoa. Hävitä sellaiset kopiot, tai vaihda data-avain, jos entisellä ylläpitäjällä voi olla kopio.
+**Jos avain katoaa tai joku muu näkee sen.** Jos tiedät vielä ylläpitäjän salasanan, avaa tiedosto ja luo uusi palautusavain. Nykyinen paperi ei enää avaa tätä tiedostoa. Vanha kopio, esimerkiksi USB-varmuuskopio ennen vaihtoa, aukeaa yhä vanhalla paperilla. Kopio on sekä tietokanta että sen vieressä oleva avaintiedosto. Paperiavain ei korvaa avaintiedostoa. Hävitä sellaiset kopiot, tai vaihda salausavain, jos entisellä ylläpitäjällä voi olla kopio.
 
 **Jos molemmat salasanat ja paperi katoavat.** Jos molemmat ylläpitäjän salasanat ja tämä palautusavain katoavat, kisatiedostoa ei voi avata. Avainta ei voi nollata, eikä kellään muulla ole siitä kopiota. Tiedoston nimet, tulokset ja suostumukset katoavat.
 
@@ -437,7 +437,7 @@ The KDF input is the NFKC UTF-8 bytes with case preserved.
 
 ## User-facing strings
 
-The implementation PR adds these keys to `packages/i18n/locales/en.json` and `fi.json`. Guided hints use `HintFrame` and render only while guided mode is on. This documentation change does not edit the locale files.
+These are the strings for the screens. `file.keyMismatch` is in `packages/i18n/locales/en.json` and `fi.json`. The other keys below are the copy for screens that are not built yet, so they are not in the locale files. Guided hints use `HintFrame` and render only while guided mode is on.
 
 | Key | English | Finnish |
 |---|---|---|
@@ -445,7 +445,7 @@ The implementation PR adds these keys to `packages/i18n/locales/en.json` and `fi
 | `unlock.wait` | Wait {seconds} seconds before trying again. | Odota {seconds} sekuntia ennen uutta yritystä. |
 | `keys.guide.print` | How to print it. Print it on paper. Do not save it as a PDF. When the program shows the recovery key, print that page or copy the groups onto paper by hand. Check the last group (the checksum) twice. The program shows the key only this once. After you leave the page, it deletes the key from memory and cannot show it again. | Miten tulostaa. Tulosta se paperille. Älä tallenna sitä PDF-tiedostoksi. Kun ohjelma näyttää palautusavaimen, tulosta sivu tai kirjoita ryhmät paperille käsin. Tarkista viimeinen ryhmä (tarkistussumma) kahdesti. Ohjelma näyttää avaimen vain tämän kerran. Kun poistut sivulta, ohjelma hävittää avaimen muistista eikä voi näyttää sitä uudelleen. |
 | `file.keyMismatch` | This key file does not belong to this race file. Use the key file that was saved together with the race file. | Avaintiedosto ei kuulu tähän kisatiedostoon. Käytä kisatiedoston kanssa samaan aikaan tallennettua avaintiedostoa. |
-| `keys.oldCopies` | Rotating the data key protects new copies only. A copy that someone else already has stays readable with the old password or paper. Destroy the copies you hold, and rotate the key so new copies need the new passwords. | Data-avaimen vaihto suojaa vain uudet kopiot. Kopio, joka on jo jollakulla toisella, pysyy luettavana vanhalla salasanalla tai paperilla. Hävitä kopiot, jotka sinulla on, ja vaihda avain, jotta uudet kopiot tarvitsevat uudet salasanat. |
+| `keys.oldCopies` | Rotating the data key protects new copies only. A copy that someone else already has stays readable with the old password or paper. Destroy the copies you hold, and rotate the key so new copies need the new passwords. | Salausavaimen vaihto suojaa vain uudet kopiot. Kopio, joka on jo jollakulla toisella, pysyy luettavana vanhalla salasanalla tai paperilla. Hävitä kopiot, jotka sinulla on, ja vaihda avain, jotta uudet kopiot tarvitsevat uudet salasanat. |
 | `keys.rotateLeftover` | A copy you do not have anymore stays readable. This program cannot erase someone else's stick. | Kopio, joka ei ole enää sinulla, pysyy luettavana. Ohjelma ei voi hävittää toisen henkilön tikkua. |
 | `keys.singleAdmin` | Both passwords are now held by one person. Ask a second admin to set their own password as soon as you can. | Molemmat salasanat ovat nyt yhdellä henkilöllä. Pyydä toista ylläpitäjää asettamaan oma salasanansa heti kun se on mahdollista. |
 | `keys.temporaryPassword` | The other admin's password is temporary. They must set their own password the next time the file is opened. | Toisen ylläpitäjän salasana on väliaikainen. Hänen on asetettava oma salasanansa, kun tiedosto avataan seuraavan kerran. |

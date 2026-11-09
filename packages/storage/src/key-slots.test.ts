@@ -342,7 +342,7 @@ describe('secret zeroization', () => {
     const rawRecovery = parseRecoveryKey(printed.toString('ascii'))
     created.db.raw.pragma('wal_checkpoint(TRUNCATE)')
     await rewrapAdminSlot(created.db, 1, { password: 'another-canary-password', confirm: 'another-canary-password' })
-    const shown = await regenerateRecoveryKey(created.db)
+    const shown = (await regenerateRecoveryKey(created.db)).recoveryKey
     created.db.raw.close()
     expect(owned.every((byte) => byte === 0)).toBe(true)
     const keks: Buffer[] = []

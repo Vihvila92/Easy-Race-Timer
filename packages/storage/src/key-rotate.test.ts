@@ -89,7 +89,7 @@ describe('data key rotation', () => {
     const hex = dek.toString('hex')
     const files = fs.readdirSync(directory).map((name) => fs.readFileSync(path.join(directory, name)))
     expect(files.some((bytes) => bytes.includes(dek) || bytes.includes(Buffer.from(hex)) || bytes.includes(shown))).toBe(false)
-    acknowledgeRecoveryKeyShown(db)
+    await acknowledgeRecoveryKeyShown(db, rotated.generation)
     db.raw.close()
     const acting = await unlockWithPassword(file, ADMIN_A)
     expect(acting.get('SELECT birth_year FROM person WHERE id = ?', 'p1')).toEqual({ birth_year: 2014 })
@@ -115,8 +115,8 @@ describe('data key rotation', () => {
 describe('other admin during rotation', () => {
   it('records the other admin when they set a password during rotation', async () => {
     const { file, db } = await createdFile()
-    await rotateDataKey(db, { actingPassword: ADMIN_A, other: { kind: 'password', password: { password: 'other-admin-present-now', confirm: 'other-admin-present-now' } } })
-    acknowledgeRecoveryKeyShown(db)
+    const rotated = await rotateDataKey(db, { actingPassword: ADMIN_A, other: { kind: 'password', password: { password: 'other-admin-present-now', confirm: 'other-admin-present-now' } } })
+    await acknowledgeRecoveryKeyShown(db, rotated.generation)
     expect(db.get<{ reason: string }>("SELECT reason FROM key_audit WHERE action = 'dek_rotation'")?.reason).toBe('other_admin_present')
     db.raw.close()
     const other = await unlockWithPassword(file, 'other-admin-present-now')
@@ -175,7 +175,8 @@ describe('old key file', () => {
     }
     const error = await rejectedUnlock(file, ADMIN_A)
     expect(error).toBeInstanceOf(KeyError)
-    expect((error as KeyError).code).toBe('UNLOCK_FAILED')
+    expect((error as KeyError).code).toBe('KEY_FILE_MISMATCH')
+    expect((error as KeyError).message).not.toContain(file)
     expect(attached).toBe(false)
   })
 })

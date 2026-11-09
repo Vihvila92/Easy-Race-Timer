@@ -31,8 +31,10 @@ const KEY_MESSAGES: Record<KeyErrorCode, string> = {
 export class RaceFileError extends Error {
   readonly fileName: string
   readonly kind: RaceFileKind
+  /** SQLite result when `kind` is `open`. Absent for every other failure. Not a path. */
+  readonly causeCode?: string
 
-  constructor(fileName: string, kind: RaceFileKind) {
+  constructor(fileName: string, kind: RaceFileKind, causeCode?: string) {
     const message = kind === 'newer'
       ? 'This race file was saved by a newer Easy Race Timer.'
       : kind === 'dev-key'
@@ -46,6 +48,7 @@ export class RaceFileError extends Error {
     this.name = 'RaceFileError'
     this.fileName = fileName
     this.kind = kind
+    this.causeCode = causeCode
     this.stack = message
   }
 }

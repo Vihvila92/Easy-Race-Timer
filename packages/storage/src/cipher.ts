@@ -101,6 +101,20 @@ export function openPlaintextSqlite(filePath: string): SqliteDatabase {
   return new Database(filePath)
 }
 
+function cipherRejected(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const code = 'code' in error && typeof error.code === 'string' ? error.code : ''
+  if (code === 'SQLITE_NOTADB') return true
+  const message = 'message' in error && typeof error.message === 'string' ? error.message : ''
+  return message.includes('not a database')
+}
+
+function asOpenError(filePath: string, error: unknown): RaceFileError {
+  if (error instanceof RaceFileError) return error
+  const causeCode = cipherRejected(error) ? 'SQLITE_NOTADB' : undefined
+  return new RaceFileError(path.basename(filePath), 'open', causeCode)
+}
+
 export function openEncrypted(filePath: string, dataKey: Buffer): SqliteDatabase {
   let raw: SqliteDatabase | undefined
   try {
@@ -114,8 +128,7 @@ export function openEncrypted(filePath: string, dataKey: Buffer): SqliteDatabase
     } catch {
       // The handle may already be closed.
     }
-    if (error instanceof RaceFileError) throw error
-    throw new RaceFileError(path.basename(filePath), 'open')
+    throw asOpenError(filePath, error)
   }
 }
 
@@ -130,8 +143,7 @@ export function peekSchemaVersion(filePath: string, dataKey: Buffer): number | u
     const row = raw.prepare('SELECT schema_version FROM schema_meta WHERE id = 1').get() as { schema_version: number } | undefined
     return row?.schema_version
   } catch (error) {
-    if (error instanceof RaceFileError) throw error
-    throw new RaceFileError(path.basename(filePath), 'open')
+    throw asOpenError(filePath, error)
   } finally {
     try {
       raw?.close()

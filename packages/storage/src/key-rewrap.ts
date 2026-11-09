@@ -5,7 +5,7 @@ import { allocateEnvelope, type ParsedEnvelope, type ParsedSlot, parseEnvelope, 
 import { keyFilePath, withKeyFileLock, writePrivateBytes } from './key-file.js'
 import { BASELINE_ARGON, buffersEqual, deriveAdminKek, deriveRecoveryKek, formatRecoveryKey, passwordBytes, utf8Password } from './key-kdf.js'
 import { keyRandom } from './key-random.js'
-import { ensureKeyColumns, setRecoveryUnshown } from './schema.js'
+import { ensureKeyColumns, issueRecoveryGeneration, setRecoveryUnshown } from './schema.js'
 import { adminMaterial, freshMaterial, readKeyBytes, recoveryMaterial, unwrapAdminSlot, type ConfirmedPassword } from './key-slots.js'
 
 function requireDek(db: AppDb): Buffer {
@@ -152,7 +152,35 @@ export async function rewrapAdminSlot(db: AppDb, slot: 0 | 1, next: ConfirmedPas
   })
 }
 
-async function regenerateLocked(db: AppDb, dek: Buffer): Promise<Buffer> {
+export interface IssuedRecoveryKey {
+  recoveryKey: Buffer
+  /** Id of this issue. Not key material. */
+  generation: number
+}
+
+/** Test seam. Production never sets these. A throw stands in for a crash between the two writes. */
+export const recoveryHooks: {
+  afterFlag?: () => void
+  afterEnvelope?: () => void
+} = {}
+
+function blockUntilShown(db: AppDb): void {
+  const session = db.keySession
+  if (session?.kind === 'admin') db.keySession = { kind: 'recovery-unshown', slotIndex: session.slotIndex }
+}
+
+/** Flag first, then the envelope, so a crash cannot drop the only remaining key without a warning. */
+function persistUnshownKey(db: AppDb, envelope: Buffer): number {
+  const generation = issueRecoveryGeneration(db.raw)
+  db.raw.pragma('wal_checkpoint(TRUNCATE)')
+  blockUntilShown(db)
+  recoveryHooks.afterFlag?.()
+  writePrivateBytes(keyFilePath(db.filePath), envelope)
+  recoveryHooks.afterEnvelope?.()
+  return generation
+}
+
+async function regenerateLocked(db: AppDb, dek: Buffer): Promise<IssuedRecoveryKey> {
   const bytes = readKeyBytes(keyFilePath(db.filePath))
   const parsed = parseEnvelope(bytes)
   const secret = keyRandom.bytes(20)
@@ -161,8 +189,7 @@ async function regenerateLocked(db: AppDb, dek: Buffer): Promise<Buffer> {
   const kek = deriveRecoveryKek(secret, drawn.salt, 2, 2)
   try {
     const envelope = rewriteSlot({ bytes, slot: 2, material: recoveryMaterial(drawn.salt, drawn.nonce), kek, dek })
-    writePrivateBytes(keyFilePath(db.filePath), envelope)
-    return shown
+    return { recoveryKey: shown, generation: persistUnshownKey(db, envelope) }
   } catch (error) {
     shown.fill(0)
     throw error
@@ -178,13 +205,12 @@ function mayRegenerate(db: AppDb): boolean {
 }
 
 /** Replace the recovery wrap. The read and the write share one in-process key-file lock. */
-export async function regenerateRecoveryKey(db: AppDb): Promise<Buffer> {
+export async function regenerateRecoveryKey(db: AppDb): Promise<IssuedRecoveryKey> {
   if (!mayRegenerate(db)) throw new KeyError('UNLOCK_FAILED')
   return withKeyFileLock(keyFilePath(db.filePath), async () => {
     const dek = copyDek(db)
     try {
       const shown = await regenerateLocked(db, dek)
-      setRecoveryUnshown(db.raw, true)
       db.recoveryKeyIssued = true
       return shown
     } finally {
@@ -193,13 +219,20 @@ export async function regenerateRecoveryKey(db: AppDb): Promise<Buffer> {
   })
 }
 
-/** Clear the unshown flag after the operator has seen the recovery key. */
-export function acknowledgeRecoveryKeyShown(db: AppDb): void {
-  if (!db.recoveryKeyIssued) throw new KeyError('UNLOCK_FAILED')
+function clearShownFlag(db: AppDb): void {
   setRecoveryUnshown(db.raw, false)
   db.recoveryKeyIssued = false
   const session = db.keySession
   if (session?.kind === 'recovery-unshown' && session.slotIndex !== 2) {
     db.keySession = { kind: 'admin', slotIndex: session.slotIndex }
   }
+}
+
+/** Clear the unshown flag only when `generation` is still the newest issue. */
+export async function acknowledgeRecoveryKeyShown(db: AppDb, generation: number): Promise<void> {
+  if (!db.recoveryKeyIssued || !Number.isInteger(generation) || generation < 1) throw new KeyError('UNLOCK_FAILED')
+  await withKeyFileLock(keyFilePath(db.filePath), async () => {
+    if (ensureKeyColumns(db.raw).recoveryGeneration !== generation) throw new KeyError('UNLOCK_FAILED')
+    clearShownFlag(db)
+  })
 }

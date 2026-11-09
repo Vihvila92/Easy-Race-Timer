@@ -200,10 +200,16 @@ function sessionFor(temporarySlot: number | null, kind: 'password' | 'recovery',
   return { kind: 'admin', slotIndex: slotIndex as 0 | 1 }
 }
 
+function rejectedKeyFile(error: unknown): boolean {
+  if (!(error instanceof RaceFileError)) return false
+  if (error.kind === 'key-file') return true
+  return error.kind === 'open' && error.causeCode === 'SQLITE_NOTADB'
+}
+
 function rethrowOpen(error: unknown): never {
   if (error instanceof KeyError) throw error
   if (error instanceof RaceFileError && error.kind === 'newer') throw error
-  if (error instanceof RaceFileError && error.kind === 'key-file') throw new KeyError('KEY_FILE_MISMATCH')
+  if (rejectedKeyFile(error)) throw new KeyError('KEY_FILE_MISMATCH')
   throw new KeyError('UNLOCK_FAILED')
 }
 

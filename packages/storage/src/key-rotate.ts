@@ -7,7 +7,7 @@ import { keyFilePath, withKeyFileLock, writePrivateBytes } from './key-file.js'
 import { buffersEqual, formatRecoveryKey, passwordBytes, utf8Password } from './key-kdf.js'
 import { keyRandom } from './key-random.js'
 import { type ConfirmedPassword, sealEnvelope, unwrapAdminSlot } from './key-slots.js'
-import { ensureKeyColumns, recordKeyAudit, setKeyGeneration, setRecoveryUnshown, setTemporarySlot } from './schema.js'
+import { ensureKeyColumns, issueRecoveryGeneration, recordKeyAudit, setKeyGeneration, setTemporarySlot } from './schema.js'
 
 function requireActingAdmin(db: AppDb): 0 | 1 {
   const session = db.keySession
@@ -36,7 +36,7 @@ async function sealRotation(input: {
   otherKind: 'password' | 'temporary'
   nextDek: Buffer
   secret: Buffer
-}): Promise<Buffer> {
+}): Promise<number> {
   const bytes = fs.readFileSync(keyFilePath(input.db.filePath))
   const parsed = parseEnvelope(bytes)
   const dek = input.db.dataKey
@@ -55,24 +55,25 @@ async function sealRotation(input: {
     recoverySecret: input.secret,
   })
   const reason = input.otherKind === 'temporary' ? 'temporary_password' : 'other_admin_present'
+  let recoveryGeneration = 0
   rekeyDataFile(input.db, input.nextDek, {
     prepareCopy(copy) {
       setKeyGeneration(copy, generation)
       setTemporarySlot(copy, input.otherKind === 'temporary' ? otherSlot : null)
-      setRecoveryUnshown(copy, true)
+      recoveryGeneration = issueRecoveryGeneration(copy)
       recordKeyAudit(copy, 'dek_rotation', reason)
     },
     writeKeyFile(tempKey) {
       writePrivateBytes(tempKey, envelope)
     },
   })
-  return envelope
+  return recoveryGeneration
 }
 
 export async function rotateDataKey(db: AppDb, options: {
   actingPassword: string
   other: { kind: 'password' | 'temporary'; password: ConfirmedPassword }
-}): Promise<{ recoveryKey: Buffer }> {
+}): Promise<{ recoveryKey: Buffer; generation: number }> {
   const actingSlot = requireActingAdmin(db)
   const acting = utf8Password(options.actingPassword)
   const other = passwordBytes(options.other.password.password, options.other.password.confirm)
@@ -81,9 +82,11 @@ export async function rotateDataKey(db: AppDb, options: {
   const recoveryKey = Buffer.from(formatRecoveryKey(secret), 'ascii')
   try {
     if (buffersEqual(acting, other)) throw new KeyError('PASSWORD_MISMATCH')
-    await withKeyFileLock(keyFilePath(db.filePath), () => sealRotation({ db, actingSlot, acting, other, otherKind: options.other.kind, nextDek, secret }))
+    const generation = await withKeyFileLock(keyFilePath(db.filePath), () => sealRotation({ db, actingSlot, acting, other, otherKind: options.other.kind, nextDek, secret }))
     db.recoveryKeyIssued = true
-    return { recoveryKey }
+    const session = db.keySession
+    if (session?.kind === 'admin') db.keySession = { kind: 'recovery-unshown', slotIndex: session.slotIndex }
+    return { recoveryKey, generation }
   } catch (error) {
     recoveryKey.fill(0)
     throw error

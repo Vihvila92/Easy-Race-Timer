@@ -6,9 +6,10 @@ import { afterEach, describe, expect, it } from 'vitest'
 import { KeyError } from './errors.js'
 import { setKeyLogger } from './key-log.js'
 import { keyFilePath } from './key-file.js'
-import { acknowledgeRecoveryKeyShown, regenerateRecoveryKey, rewrapAdminSlot } from './key-rewrap.js'
+import { acknowledgeRecoveryKeyShown, recoveryHooks, regenerateRecoveryKey, rewrapAdminSlot } from './key-rewrap.js'
 import { rotateDataKey } from './key-rotate.js'
 import { createProtectedRaceFile, normalUseAllowed, unlockWithPassword, unlockWithRecovery } from './key-slots.js'
+import { ensureKeyColumns } from './schema.js'
 
 const ADMIN_A = 'correct-horse-battery'
 const ADMIN_B = 'staple-river-margin'
@@ -24,6 +25,8 @@ function tempFile(): string {
 
 afterEach(() => {
   setKeyLogger(null)
+  recoveryHooks.afterFlag = undefined
+  recoveryHooks.afterEnvelope = undefined
   for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true })
 })
 
@@ -39,33 +42,45 @@ function generation(file: string): number {
 
 const BELONGS = 'This key file does not belong to this race file. Use the key file that was saved together with the race file.'
 
+function watchLogs(): string[] {
+  const logs: string[] = []
+  setKeyLogger((event) => logs.push(event))
+  return logs
+}
+
+function expectBelongs(error: unknown, file: string, fileId: string): void {
+  expect(error).toBeInstanceOf(KeyError)
+  const keyError = error as KeyError
+  expect(keyError.code).toBe('KEY_FILE_MISMATCH')
+  expect(keyError.message).toBe(BELONGS)
+  expect(keyError.message).not.toContain(file)
+  expect(keyError.message).not.toContain(fileId)
+  expect(JSON.stringify(keyError)).not.toContain(fileId)
+}
+
+function expectQuiet(logs: string[], hidden: string[]): void {
+  const captured = logs.join('\n')
+  for (const secret of hidden) expect(captured).not.toContain(secret)
+}
+
+async function rejected(file: string, secret: string): Promise<unknown> {
+  return unlockWithPassword(file, secret).then(() => null, (error: unknown) => error)
+}
+
 describe('key file mismatch', () => {
   it('follows a correct password, counts the attempt, and names no secret', async () => {
     const { file, db } = await created()
     const fileId = db.get<{ file_id: string }>('SELECT file_id FROM schema_meta WHERE id = 1')?.file_id ?? ''
     db.raw.close()
-    const logs: string[] = []
-    setKeyLogger((event) => logs.push(event))
-    const wrong = await unlockWithPassword(file, 'not-the-admin-password').then(() => null, (error: unknown) => error)
-    expect(wrong).toMatchObject({ code: 'UNLOCK_FAILED' })
+    const logs = watchLogs()
+    expect(await rejected(file, 'not-the-admin-password')).toMatchObject({ code: 'UNLOCK_FAILED' })
     const matched = await unlockWithPassword(file, ADMIN_A)
     matched.run('UPDATE schema_meta SET key_generation = 2 WHERE id = 1')
     matched.raw.close()
-    const mismatch = await unlockWithPassword(file, ADMIN_A).then(() => null, (error: unknown) => error)
-    expect(mismatch).toBeInstanceOf(KeyError)
-    const keyError = mismatch as KeyError
-    expect(keyError.code).toBe('KEY_FILE_MISMATCH')
-    expect(keyError.message).toBe(BELONGS)
-    expect(keyError.message).not.toContain(file)
-    expect(keyError.message).not.toContain(fileId)
-    expect(JSON.stringify(keyError)).not.toContain(fileId)
-    const captured = logs.join('\n')
-    expect(captured).not.toContain(file)
-    expect(captured).not.toContain(ADMIN_A)
-    expect(captured).not.toContain(fileId)
+    expectBelongs(await rejected(file, ADMIN_A), file, fileId)
+    expectQuiet(logs, [file, ADMIN_A, fileId])
     const record = JSON.parse(fs.readFileSync(path.join(path.dirname(file), 'unlock-backoff.json'), 'utf8')) as { failureCount: number }
     expect(record.failureCount).toBe(1)
-    setKeyLogger(null)
   })
 })
 
@@ -115,10 +130,10 @@ describe('serialized recovery keys', () => {
     const [rotated, shown] = await Promise.all([rotation, regenerated])
     db.raw.close()
     await expect(unlockWithRecovery(file, rotated.recoveryKey.toString('ascii'))).rejects.toMatchObject({ code: 'UNLOCK_FAILED' })
-    const opened = await unlockWithRecovery(file, shown.toString('ascii'))
+    const opened = await unlockWithRecovery(file, shown.recoveryKey.toString('ascii'))
     opened.raw.close()
     rotated.recoveryKey.fill(0)
-    shown.fill(0)
+    shown.recoveryKey.fill(0)
   })
 })
 
@@ -131,15 +146,96 @@ describe('unshown recovery key', () => {
     db.raw.close()
     const opened = await unlockWithPassword(file, ADMIN_A)
     expect(normalUseAllowed(opened)).toBe(false)
-    expect(() => acknowledgeRecoveryKeyShown(opened)).toThrow(KeyError)
+    await expect(acknowledgeRecoveryKeyShown(opened, rotated.generation)).rejects.toThrow(KeyError)
     const shown = await regenerateRecoveryKey(opened)
     expect(normalUseAllowed(opened)).toBe(false)
-    acknowledgeRecoveryKeyShown(opened)
+    await acknowledgeRecoveryKeyShown(opened, shown.generation)
     expect(normalUseAllowed(opened)).toBe(true)
     opened.raw.close()
     await expect(unlockWithRecovery(file, hidden)).rejects.toMatchObject({ code: 'UNLOCK_FAILED' })
-    const recovered = await unlockWithRecovery(file, shown.toString('ascii'))
+    const recovered = await unlockWithRecovery(file, shown.recoveryKey.toString('ascii'))
     recovered.raw.close()
-    shown.fill(0)
+    shown.recoveryKey.fill(0)
+  })
+
+  it('keeps use blocked when an older recovery key is acknowledged', async () => {
+    const { db } = await created()
+    const first = regenerateRecoveryKey(db)
+    const second = regenerateRecoveryKey(db)
+    const [older, newer] = await Promise.all([first, second])
+    expect(older.generation).toBeLessThan(newer.generation)
+    await expect(acknowledgeRecoveryKeyShown(db, older.generation)).rejects.toThrow(KeyError)
+    expect(normalUseAllowed(db)).toBe(false)
+    expect(ensureKeyColumns(db.raw).recoveryUnshown).toBe(true)
+    expect(ensureKeyColumns(db.raw).recoveryGeneration).toBe(newer.generation)
+    await acknowledgeRecoveryKeyShown(db, newer.generation)
+    expect(normalUseAllowed(db)).toBe(true)
+    older.recoveryKey.fill(0)
+    newer.recoveryKey.fill(0)
+    db.raw.close()
+  })
+})
+
+async function stopped(hook: 'afterFlag' | 'afterEnvelope'): Promise<{ file: string; recovery: string; before: Buffer }> {
+  const file = tempFile()
+  const made = await createProtectedRaceFile(file, { password: ADMIN_A, confirm: ADMIN_A }, { password: ADMIN_B, confirm: ADMIN_B })
+  const recovery = made.recoveryKey.toString('ascii')
+  const before = fs.readFileSync(keyFilePath(file))
+  recoveryHooks[hook] = () => {
+    throw new Error('stop')
+  }
+  await expect(regenerateRecoveryKey(made.db)).rejects.toThrow(/stop/)
+  made.db.raw.close()
+  made.recoveryKey.fill(0)
+  return { file, recovery, before }
+}
+
+async function expectUnshown(file: string): Promise<void> {
+  const opened = await unlockWithPassword(file, ADMIN_A)
+  expect(opened.keySession?.kind).toBe('recovery-unshown')
+  expect(normalUseAllowed(opened)).toBe(false)
+  opened.raw.close()
+}
+
+describe('recovery key crash points', () => {
+  it('keeps the previous key and the warning when regeneration stops before the key file', async () => {
+    const { file, recovery, before } = await stopped('afterFlag')
+    expect(fs.readFileSync(keyFilePath(file)).equals(before)).toBe(true)
+    await expectUnshown(file)
+    const recovered = await unlockWithRecovery(file, recovery)
+    expect(normalUseAllowed(recovered)).toBe(false)
+    recovered.raw.close()
+  })
+
+  it('keeps the warning when regeneration stops after both writes', async () => {
+    const { file, recovery, before } = await stopped('afterEnvelope')
+    expect(fs.readFileSync(keyFilePath(file)).equals(before)).toBe(false)
+    await expectUnshown(file)
+    await expect(unlockWithRecovery(file, recovery)).rejects.toMatchObject({ code: 'UNLOCK_FAILED' })
+  })
+})
+
+describe('old key file beside a new database', () => {
+  it('reports a mismatch after the slot opens and still counts the attempt', async () => {
+    const file = tempFile()
+    const first = await createProtectedRaceFile(file, { password: ADMIN_A, confirm: ADMIN_A }, { password: ADMIN_B, confirm: ADMIN_B })
+    const oldKey = fs.readFileSync(keyFilePath(file))
+    const oldRecovery = first.recoveryKey.toString('ascii')
+    const fileId = first.db.get<{ file_id: string }>('SELECT file_id FROM schema_meta WHERE id = 1')?.file_id ?? ''
+    first.db.raw.close()
+    first.recoveryKey.fill(0)
+    const next = tempFile()
+    const made = await createProtectedRaceFile(next, { password: ADMIN_A, confirm: ADMIN_A }, { password: ADMIN_B, confirm: ADMIN_B })
+    made.db.raw.close()
+    made.recoveryKey.fill(0)
+    fs.writeFileSync(keyFilePath(next), oldKey)
+    const logs = watchLogs()
+    expect(await rejected(next, 'not-the-admin-password')).toMatchObject({ code: 'UNLOCK_FAILED' })
+    expectBelongs(await rejected(next, ADMIN_A), next, fileId)
+    const recovered = await unlockWithRecovery(next, oldRecovery).then(() => null, (error: unknown) => error)
+    expect(recovered).toMatchObject({ code: 'KEY_FILE_MISMATCH' })
+    expectQuiet(logs, [next, ADMIN_A, oldRecovery, fileId])
+    const record = JSON.parse(fs.readFileSync(path.join(path.dirname(next), 'unlock-backoff.json'), 'utf8')) as { failureCount: number }
+    expect(record.failureCount).toBe(3)
   })
 })
