@@ -17,6 +17,13 @@ export function formatRaceFileError(error: unknown, locale: Locale = 'fi'): stri
     }
     return translate(locale, 'file.openFailed', { name: error.fileName })
   }
-  if (error instanceof Error) return error.message
+  if (error instanceof Error) return loggedOpenFailure(error, locale)
+  return translate(locale, 'file.openFailed', { name: 'race file' })
+}
+
+/** A raw error message can contain a path. Keep only an error code, or one generic sentence. */
+function loggedOpenFailure(error: Error, locale: Locale): string {
+  const code = 'code' in error && typeof error.code === 'string' ? error.code : ''
+  if (/^[A-Z][A-Z0-9_]*$/.test(code)) return code
   return translate(locale, 'file.openFailed', { name: 'race file' })
 }

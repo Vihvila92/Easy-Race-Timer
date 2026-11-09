@@ -40,15 +40,30 @@ function numberedWriteTemp(name: string, prefix: string): boolean {
   return parts.length === 2 && parts.every((part) => part.length > 0 && [...part].every((char) => char >= '0' && char <= '9'))
 }
 
-/** Delete leftover key-file temps: `..ert.keys.rekey.*.tmp` and `.ert.keys.<pid>.<time>.tmp`. */
-export function removeRekeyWriteTemps(databasePath: string): void {
+/** Delete leftover key-file temps. Holds the in-process key-file lock so an open cannot remove a temp a password change has not renamed yet. */
+export async function removeRekeyWriteTemps(databasePath: string): Promise<void> {
+  await withKeyFileLock(keyFilePath(databasePath), async () => {
+    deleteStaleTemps(databasePath)
+  })
+}
+
+function deleteStaleTemps(databasePath: string): void {
   const directory = path.dirname(databasePath)
   if (!fs.existsSync(directory)) return
   const keyName = path.basename(keyFilePath(databasePath))
   for (const name of fs.readdirSync(directory)) {
     const stale = numberedWriteTemp(name, `..${keyName}.rekey.`) || numberedWriteTemp(name, `.${keyName}.`)
     if (!stale) continue
-    secureRemove(path.join(directory, name))
+    removeStaleTemp(path.join(directory, name))
+  }
+}
+
+/** A temp that cannot be deleted must not stop the race file from opening. */
+function removeStaleTemp(file: string): void {
+  try {
+    secureRemove(file)
+  } catch {
+    console.warn('A leftover temporary file could not be removed.')
   }
 }
 
@@ -97,6 +112,11 @@ export function backupPairComplete(databasePath: string): boolean {
   return info.kind === 'stub' || info.kind === 'envelope'
 }
 
+/** Test seam. Production never sets this. Runs after the temp file exists and before it is renamed. */
+export const keyWriteHooks: {
+  beforeRename?: () => void
+} = {}
+
 /** Temp file, fsync, rename, directory fsync, mode 0600. Shared by the stub, the envelope and the backoff file. */
 export function writePrivateBytes(filePath: string, bytes: Buffer): void {
   const directory = path.dirname(filePath)
@@ -105,6 +125,7 @@ export function writePrivateBytes(filePath: string, bytes: Buffer): void {
   try {
     fs.writeFileSync(tmp, bytes, { mode: 0o600 })
     fsyncFile(tmp)
+    keyWriteHooks.beforeRename?.()
     fs.renameSync(tmp, filePath)
     fsyncDirectory(directory)
     try {

@@ -31,6 +31,10 @@ export function secureRemove(file: string): void {
     return
   }
   if (!stat.isFile()) return
+  if (stat.nlink > 1) {
+    fs.unlinkSync(file)
+    return
+  }
   const flags = fs.constants.O_NOFOLLOW ? fs.constants.O_RDWR | fs.constants.O_NOFOLLOW : 'r+'
   let fd: number
   try {

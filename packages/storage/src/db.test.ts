@@ -2,7 +2,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { openEncrypted, peekSchemaVersion } from './cipher.js'
 import { assertBackupIntegrity, BACKUP_KEEP_RECENT, backupDatabase, backupHooks, migrationHooks, openDatabase, pruneBackups, pruneSchemaBackups, restoreBackupPair } from './db.js'
 import { keyFilePath, writeKeyStub } from './key-file.js'
@@ -319,6 +319,31 @@ describe('rekey write temps', () => {
     expect(fs.existsSync(writeTemp)).toBe(false)
     expect(fs.existsSync(keep)).toBe(true)
     expect(fs.existsSync(other)).toBe(true)
+  })
+
+  it('opens when a leftover temp file cannot be removed', async () => {
+    const dir = tempDir()
+    const file = path.join(dir, 'ert.sqlite')
+    const db = await openDatabase(file)
+    db.raw.close()
+    const stuck = path.join(dir, '.ert.keys.4242.1700000000000.tmp')
+    fs.mkdirSync(stuck)
+    const locked = path.join(dir, '.ert.keys.7.8.tmp')
+    fs.writeFileSync(locked, 'temp')
+    fs.chmodSync(locked, 0o000)
+    const warnings: string[] = []
+    const spy = vi.spyOn(console, 'warn').mockImplementation((message: unknown) => {
+      warnings.push(String(message))
+    })
+    const opened = await openDatabase(file)
+    spy.mockRestore()
+    opened.raw.close()
+    expect(fs.existsSync(stuck)).toBe(true)
+    if (fs.existsSync(locked)) fs.chmodSync(locked, 0o600)
+    const text = warnings.join('\n')
+    expect(text).not.toContain(dir)
+    expect(text).not.toContain(os.userInfo().username)
+    if (fs.existsSync(locked)) expect(text).toBe('A leftover temporary file could not be removed.')
   })
 })
 

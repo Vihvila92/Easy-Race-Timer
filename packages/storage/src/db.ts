@@ -305,7 +305,7 @@ export async function openDatabase(filePath: string, options: OpenOptions = {}):
   const resolved = path.resolve(filePath)
   fs.mkdirSync(path.dirname(resolved), { recursive: true })
   recoverRestore(resolved)
-  removeRekeyWriteTemps(resolved)
+  await removeRekeyWriteTemps(resolved)
   if (fs.existsSync(resolved)) recoverRekeyTemps(resolved, dataKey)
   recoverPlaintextMigration(resolved, dataKey)
   if (fs.existsSync(resolved) && isPlaintextSqlite(resolved)) migratePlaintextFile(resolved, dataKey)
