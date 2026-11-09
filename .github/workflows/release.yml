@@ -1,5 +1,6 @@
-# Builds unsigned Tauri installers for a dry run (workflow_dispatch) and
-# publishes a GitHub Release for a pushed v* tag.
+# Builds unsigned Tauri installers for a dry run (workflow_dispatch), for a
+# pull request that changes the sidecar or the desktop shell, and publishes a
+# GitHub Release for a pushed v* tag.
 #
 # Rust 1.90.0 is Tauri 2.12's minimum and is above the 1.89 floor.
 # macOS ad-hoc signing is signingIdentity "-" in src-tauri/tauri.conf.json.
@@ -8,6 +9,8 @@
 # stays off so `tauri build` does not sign inside the build. The sign job, and
 # only that job, runs on a v* tag push and reads the private key from the
 # release GitHub environment. The public key is plugins.updater.pubkey.
+# A pull request runs the installer matrix and the sidecar smoke test only.
+# It does not use that environment, signing secrets, or the release jobs.
 # A dry run does not use that environment and does not create a release.
 name: Release
 
@@ -19,10 +22,25 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+  pull_request:
+    paths:
+      - package.json
+      - .nvmrc
+      - rust-toolchain.toml
+      - scripts/build-sidecar.ts
+      - scripts/sidecar-*.ts
+      - scripts/argon-smoke.mjs
+      - scripts/desktop-smoke.mjs
+      - scripts/release-*.ts
+      - packages/storage/package.json
+      - packages/server/package.json
+      - pnpm-lock.yaml
+      - src-tauri/**
+      - .github/workflows/release.yml
 
 concurrency:
-  group: release-${{ github.ref }}
-  # A tag push must finish. workflow_dispatch replaces an older run on the same ref.
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # A tag push must finish. A pull request or workflow_dispatch replaces an older run.
   cancel-in-progress: ${{ github.event_name != 'push' || github.ref_type != 'tag' }}
 
 defaults:
@@ -146,6 +164,8 @@ jobs:
           path: dist/
           if-no-files-found: error
 
+  # Sidecar smoke test for the installers above. Pull requests run this job.
+  # It does not use the release environment or any secret.
   smoke:
     name: smoke (${{ matrix.platform }})
     needs: installers
@@ -178,8 +198,10 @@ jobs:
       - name: Install, launch, and stop the packaged app
         run: node scripts/desktop-smoke.mjs --platform ${{ matrix.platform }} --dist dist
 
+  # Tag pushes and dry runs. A pull request stops after the installer matrix and smoke test.
   sbom:
     name: sbom
+    if: (github.event_name == 'push' && github.ref_type == 'tag') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -231,7 +253,7 @@ jobs:
   sign:
     name: sign
     needs: installers
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     environment: release
     timeout-minutes: 20
@@ -302,7 +324,7 @@ jobs:
   bundle:
     name: bundle
     needs: [installers, sbom, sign]
-    if: always() && needs.installers.result == 'success' && needs.sbom.result == 'success' && (needs.sign.result == 'success' || needs.sign.result == 'skipped')
+    if: always() && (github.event_name == 'push' && github.ref_type == 'tag' || github.event_name == 'workflow_dispatch') && needs.installers.result == 'success' && needs.sbom.result == 'success' && (needs.sign.result == 'success' || needs.sign.result == 'skipped')
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -346,7 +368,7 @@ jobs:
   publish:
     name: publish
     needs: bundle
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
@@ -447,7 +469,7 @@ jobs:
   verify:
     name: verify
     needs: publish
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    if: github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
