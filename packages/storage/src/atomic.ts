@@ -72,7 +72,9 @@ export function fsyncFile(file: string): void {
  */
 export function atomicCopyFile(source: string, dest: string): void {
   const directory = path.dirname(dest)
-  fs.mkdirSync(directory, { recursive: true })
+  // POSIX mode 0700. Windows ignores this; the equivalent ACL is
+  // icacls <dir> /inheritance:r /grant:r "<user>:(OI)(CI)F".
+  fs.mkdirSync(directory, { recursive: true, mode: 0o700 })
   const tmp = path.join(directory, `.${path.basename(dest)}.${process.pid}.${Date.now()}.tmp`)
   try {
     fs.copyFileSync(source, tmp)

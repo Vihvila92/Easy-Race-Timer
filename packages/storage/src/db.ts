@@ -9,6 +9,7 @@ import { isPlaintextSqlite, openEncrypted, peekSchemaVersion, restrictPermission
 import { RaceFileError } from './errors.js'
 import { omitInternal } from './internal.js'
 import { resolveDataKey, type OpenOptions } from './key.js'
+import { recoverRestore } from './backup-file.js'
 import { ensureKeyFile, inspectKeyFile, keyFilePath, rekeyTempPaths, removeRekeyWriteTemps } from './key-file.js'
 import { migratePlaintextFile, purgeExpiredQuarantine, quarantinePlaintextCopies, recoverPlaintextMigration } from './plaintext.js'
 import { readEnvelopeIdentity } from './key-envelope.js'
@@ -303,6 +304,7 @@ export async function openDatabase(filePath: string, options: OpenOptions = {}):
   const dataKey = resolveDataKey(options)
   const resolved = path.resolve(filePath)
   fs.mkdirSync(path.dirname(resolved), { recursive: true })
+  recoverRestore(resolved)
   removeRekeyWriteTemps(resolved)
   if (fs.existsSync(resolved)) recoverRekeyTemps(resolved, dataKey)
   recoverPlaintextMigration(resolved, dataKey)
@@ -346,5 +348,6 @@ export function initializeEncryptedFile(filePath: string, dataKey: Buffer, fileI
   }
 }
 
-export { assertBackupIntegrity, backupDatabase, pruneBackups, pruneSchemaBackups, restoreBackupPair } from './backup-file.js'
+export { assertBackupIntegrity, backupDatabase, recoverRestore, restoreBackupPair, restoreHooks } from './backup-file.js'
+export { BACKUP_KEEP_RECENT, pruneBackups, pruneSchemaBackups } from './backup-prune.js'
 export { rekeyDataFile } from './rekey.js'

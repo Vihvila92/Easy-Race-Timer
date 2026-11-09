@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 const release = readFileSync('.github/workflows/release.yml', 'utf8')
@@ -8,6 +8,37 @@ const ci = readFileSync('.github/workflows/ci.yml', 'utf8')
 function job(name: string): string {
   const match = release.split(new RegExp(`^ {2}${name}:`, 'm'))
   return match[1]?.split(/^ {2}[a-z]+:/m)[0] ?? ''
+}
+
+const tagRelease = "github.event_name == 'push' && github.ref_type == 'tag'"
+
+const pullRequestPaths = [
+  'package.json',
+  '.nvmrc',
+  'rust-toolchain.toml',
+  'scripts/build-sidecar.ts',
+  'scripts/sidecar-*.ts',
+  'scripts/argon-smoke.mjs',
+  'scripts/desktop-smoke.mjs',
+  'scripts/release-*.ts',
+  'packages/storage/package.json',
+  'packages/server/package.json',
+  'pnpm-lock.yaml',
+  'src-tauri/**',
+  '.github/workflows/release.yml',
+]
+
+function expectPullRequestJob(body: string): void {
+  expect(body).not.toContain('github.event_name')
+  expect(body).not.toContain('secrets.')
+  expect(body).not.toContain('environment:')
+  expect(body).not.toContain('github.token')
+}
+
+function between(source: string, start: string, end: string): string {
+  const from = source.indexOf(start)
+  const to = source.indexOf(end, from + start.length)
+  return from === -1 || to === -1 ? '' : source.slice(from, to)
 }
 
 describe('release workflow pins and triggers', () => {
@@ -121,7 +152,7 @@ describe('release workflow publish and sign', () => {
   it('signs only on a tag push, from the release environment', () => {
     const sign = job('sign')
     expect(sign).toContain('environment: release')
-    expect(sign).toContain("github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')")
+    expect(sign).toContain("github.event_name == 'push' && github.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')")
     expect(sign).toContain('TAURI_SIGNING_PRIVATE_KEY')
     expect(sign).toContain('TAURI_SIGNING_PRIVATE_KEY_PASSWORD')
     expect(sign).not.toContain('TAURI_SIGNING_PUBLIC_KEY')
@@ -144,6 +175,52 @@ describe('release workflow publish and sign', () => {
     expect(release).not.toContain('TAURI_SIGNING_PUBLIC_KEY')
     const outside = release.replace(sign, '')
     expect(outside).not.toContain('TAURI_SIGNING_PRIVATE_KEY')
+  })
+})
+
+describe('release workflow pull requests', () => {
+  it('runs the installer matrix and sidecar smoke test on sidecar paths', () => {
+    const trigger = between(release, 'pull_request:', 'concurrency:')
+    expect(trigger).toContain('paths:')
+    for (const entry of pullRequestPaths) {
+      expect(trigger).toContain(`- ${entry}`)
+    }
+    expect(release).not.toContain('pull_request_target')
+    expect(release).not.toContain('workflow_call:')
+    expect(readdirSync('.github/workflows').some((name) => name.includes('smoke'))).toBe(false)
+    const installers = job('installers')
+    expect(installers).toContain('platform: linux')
+    expect(installers).toContain('platform: macos')
+    expect(installers).toContain('universal-apple-darwin')
+    expect(installers).toContain('platform: windows')
+    expectPullRequestJob(installers)
+    const smoke = job('smoke')
+    expect(smoke).toContain('desktop-smoke.mjs')
+    expectPullRequestJob(smoke)
+  })
+
+  it('gates sign, publish, and release jobs to a tag push or a dry run', () => {
+    for (const name of ['sign', 'publish', 'verify', 'sbom', 'bundle']) {
+      expect(job(name)).toContain(tagRelease)
+    }
+    for (const name of ['sbom', 'bundle']) {
+      expect(job(name)).toContain("github.event_name == 'workflow_dispatch'")
+    }
+    expect(job('sign')).toContain('environment: release')
+    const environments = release.split('\n').filter((line) => line.includes('environment:'))
+    expect(environments).toEqual(['    environment: release'])
+    const secretUses = release.split('\n').filter((line) => line.includes('secrets.'))
+    expect(secretUses.length).toBeGreaterThan(0)
+    for (const line of secretUses) {
+      expect(job('sign')).toContain(line.trim())
+    }
+    expect(release).toMatch(/^permissions:\n {2}contents: read\n/m)
+    expect(release).toContain(
+      'group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}',
+    )
+    expect(release).toContain(
+      "cancel-in-progress: ${{ github.event_name != 'push' || github.ref_type != 'tag' }}",
+    )
   })
 })
 
