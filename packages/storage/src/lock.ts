@@ -8,7 +8,8 @@ export interface HeldLock {
 }
 
 /**
- * Hold `lockPath` so a second server cannot start on the same data directory.
+ * Hold `server.lock` for one data directory so a second server cannot start there.
+ * `ERT_DB` must stay inside that directory; a path outside it is not covered.
  * The connection stays open. The operating system releases it when this process exits.
  */
 export function holdExclusiveLock(lockPath: string): HeldLock {

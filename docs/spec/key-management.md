@@ -45,7 +45,7 @@ Out of scope:
 - The v0.1 event PIN (`pin_hash`, `PIN_REQUIRED`). It stays as it is until a later issue changes it. File unlock and the event PIN are different secrets.
 - Choosing the SQLCipher package, the page format, and the migration mechanics. Those stay in [#175](https://github.com/Vihvila92/Easy-Race-Timer/pull/175). This spec adds the key file those backups must copy, and it does not change the page cipher.
 
-The database path stays the one [#175](https://github.com/Vihvila92/Easy-Race-Timer/pull/175) uses (`ERT_DB`, otherwise `ert.sqlite` in the data directory). Its first bytes are the SQLCipher header, not an application prefix. `openDataFile(path, dek: Buffer)` receives the unwrapped DEK only after a slot verifies and only in memory.
+The database path stays the one [#175](https://github.com/Vihvila92/Easy-Race-Timer/pull/175) uses (`ERT_DB`, otherwise `ert.sqlite` in the data directory). Its first bytes are the SQLCipher header, not an application prefix. `openDataFile(path, dek: Buffer)` receives the unwrapped DEK only after a slot verifies and only in memory. `server.lock` is one exclusive lock for that data directory. `ERT_DB` must stay inside the same directory, or the lock does not cover the race file.
 
 ## File layout
 
@@ -289,7 +289,7 @@ The file is rewritten by the same temp-file, `fsync`, rename sequence as the env
 Procedure for one attempt:
 
 1. Take the lock and read the record. A missing file means `failureCount = 0` and `lastAttemptMs = 0`, and the app creates it.
-2. `delayMs = delaySeconds(failureCount) * 1000`. If `failureCount` is 0, the wait is 0. If `lastAttemptMs` is 0 or is in the future, the wait is the full `delayMs`, so a cleared timestamp or a clock moved backward does not skip the delay. Otherwise the wait is `max(0, lastAttemptMs + delayMs - now)`.
+2. A corrupt or overwritten record is rewritten, still inside the lock, to `{version: 1, failureCount: 15, lastAttemptMs: now}`. If `lastAttemptMs` is in the future, it is clamped to now and saved. `delayMs = delaySeconds(failureCount) * 1000`. If `failureCount` is 0, the wait is 0. If `lastAttemptMs` is 0, the wait is the full `delayMs`. Otherwise the wait is `max(0, lastAttemptMs + delayMs - now)`.
 3. If the wait is greater than 0, release the lock and return `UNLOCK_FAILED` with `retryAfterMs`. Do not run a KDF. Do not increment again.
 4. Otherwise set `failureCount` to `failureCount + 1` and `lastAttemptMs` to now, `fsync` the record, and release the lock. A crash during the later KDF still leaves the increment on disk.
 5. Run the checksum check or the KDF and GCM.
@@ -298,7 +298,7 @@ Procedure for one attempt:
 
 Replacing the race file does not reset the counter. The counter belongs to the directory that holds the database, not to `file_id`. `ERT_DB=/media/usb/ert.sqlite` reads and writes `/media/usb/unlock-backoff.json`, so every race file in that USB directory shares one counter. A different data directory has its own file. A restart of the process or of the operating system reads the same file and continues the wait.
 
-This backoff is a user-interface throttle. It does not bind an attacker who copies the database and the key file onto another computer, or who deletes `unlock-backoff.json`. Those limits are in the [ADR threat model](../adr/0013-key-management.md#threat-model). Argon2id is what protects an admin password offline. The recovery key is protected offline by its entropy, not by this delay. A missing record starts at zero. A corrupt or overwritten record is the maximum wait, so a broken file does not become a free retry.
+This backoff is a user-interface throttle. It does not bind an attacker who copies the database and the key file onto another computer, or who deletes `unlock-backoff.json`. Those limits are in the [ADR threat model](../adr/0013-key-management.md#threat-model). Argon2id is what protects an admin password offline. The recovery key is protected offline by its entropy, not by this delay. A missing record starts at zero. A corrupt or overwritten record is rewritten to the maximum wait starting at now, so the wait can elapse and the counter continues. A broken file does not become a free retry, and it does not block the recovery key forever.
 
 ## Zeroization and the on-disk DEK scan
 

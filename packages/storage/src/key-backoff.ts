@@ -33,26 +33,50 @@ function recordPath(databasePath: string): string {
   return path.join(path.dirname(databasePath), 'unlock-backoff.json')
 }
 
-/** A broken record waits the full 15 minutes. A missing file is still a fresh counter. */
-function maximumWaitRecord(): BackoffRecord {
-  return { failureCount: 15, lastAttemptMs: 0 }
-}
+type LoadedRecord = BackoffRecord | 'missing' | 'corrupt'
 
 function validCount(value: unknown): value is number {
   return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0
 }
 
-function readRecord(file: string): BackoffRecord {
-  if (!fs.existsSync(file)) return { failureCount: 0, lastAttemptMs: 0 }
+function readRecord(file: string): LoadedRecord {
+  if (!fs.existsSync(file)) return 'missing'
   try {
     const parsed = JSON.parse(fs.readFileSync(file, 'utf8')) as { version?: unknown; failureCount?: unknown; lastAttemptMs?: unknown }
     if (parsed?.version === 1 && validCount(parsed.failureCount) && validCount(parsed.lastAttemptMs)) {
       return { failureCount: parsed.failureCount, lastAttemptMs: parsed.lastAttemptMs }
     }
-    return maximumWaitRecord()
   } catch {
-    return maximumWaitRecord()
+    return 'corrupt'
   }
+  return 'corrupt'
+}
+
+/** Repair a broken record, or clamp a future timestamp, before the wait is measured. */
+function prepareRecord(file: string, loaded: LoadedRecord, now: number): BackoffRecord {
+  if (loaded === 'missing') {
+    const fresh = { failureCount: 0, lastAttemptMs: 0 }
+    writeRecord(file, fresh)
+    return fresh
+  }
+  if (loaded === 'corrupt') {
+    const repaired = { failureCount: 15, lastAttemptMs: now }
+    writeRecord(file, repaired)
+    return repaired
+  }
+  if (loaded.lastAttemptMs > now) {
+    const clamped = { failureCount: loaded.failureCount, lastAttemptMs: now }
+    writeRecord(file, clamped)
+    return clamped
+  }
+  return loaded
+}
+
+function waitMs(record: BackoffRecord, now: number): number {
+  if (record.failureCount === 0) return 0
+  const delayMs = delaySeconds(record.failureCount) * 1000
+  if (record.lastAttemptMs === 0) return delayMs
+  return Math.max(0, record.lastAttemptMs + delayMs - now)
 }
 
 function writeRecord(file: string, record: BackoffRecord): void {
@@ -118,13 +142,8 @@ function withLock<T>(databasePath: string, fn: () => T): T {
 export function beginAttempt(databasePath: string, now = backoffClock.now()): AttemptDecision {
   return withLock(databasePath, () => {
     const file = recordPath(databasePath)
-    const record = readRecord(file)
-    if (!fs.existsSync(file)) writeRecord(file, record)
-    const delayMs = delaySeconds(record.failureCount) * 1000
-    let wait = 0
-    if (record.failureCount === 0) wait = 0
-    else if (record.lastAttemptMs === 0 || record.lastAttemptMs > now) wait = delayMs
-    else wait = Math.max(0, record.lastAttemptMs + delayMs - now)
+    const record = prepareRecord(file, readRecord(file), now)
+    const wait = waitMs(record, now)
     if (wait > 0) return { proceed: false, failureCount: record.failureCount, retryAfterMs: wait }
     const next = { failureCount: record.failureCount + 1, lastAttemptMs: now }
     writeRecord(file, next)

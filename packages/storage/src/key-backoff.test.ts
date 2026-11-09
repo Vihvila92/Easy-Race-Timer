@@ -80,16 +80,34 @@ describe('unlock backoff file', () => {
 })
 
 describe('corrupt backoff record', () => {
-  it('waits the maximum when the record is corrupt or overwritten', () => {
+  it('rewrites a corrupt record and continues from 16 after the maximum wait', () => {
     const file = databasePath()
     const record = path.join(path.dirname(file), 'unlock-backoff.json')
     fs.writeFileSync(record, 'not-json')
-    const garbage = beginAttempt(file, 10_000)
-    expect(garbage.proceed).toBe(false)
-    expect(garbage.retryAfterMs).toBe(900_000)
-    fs.writeFileSync(record, JSON.stringify({ version: 1, failureCount: -1, lastAttemptMs: 0 }))
-    const overwritten = beginAttempt(file, 10_000)
-    expect(overwritten.proceed).toBe(false)
-    expect(overwritten.retryAfterMs).toBe(900_000)
+    const now = Date.parse('2026-11-09T18:00:00Z')
+    const waiting = beginAttempt(file, now)
+    expect(waiting.proceed).toBe(false)
+    expect(waiting.retryAfterMs).toBe(900_000)
+    const repaired = JSON.parse(fs.readFileSync(record, 'utf8')) as { version: number; failureCount: number; lastAttemptMs: number }
+    expect(repaired).toEqual({ version: 1, failureCount: 15, lastAttemptMs: now })
+    const next = beginAttempt(file, now + 900_001)
+    expect(next.proceed).toBe(true)
+    expect(next.failureCount).toBe(16)
+  })
+
+  it('clamps a future timestamp when the clock moves backward and then lets the delay elapse', () => {
+    const file = databasePath()
+    const record = path.join(path.dirname(file), 'unlock-backoff.json')
+    const later = Date.parse('2026-11-09T18:00:00Z')
+    fs.writeFileSync(record, JSON.stringify({ version: 1, failureCount: 5, lastAttemptMs: later }))
+    const now = later - 60_000
+    const waiting = beginAttempt(file, now)
+    expect(waiting.proceed).toBe(false)
+    expect(waiting.retryAfterMs).toBe(1_000)
+    const clamped = JSON.parse(fs.readFileSync(record, 'utf8')) as { failureCount: number; lastAttemptMs: number }
+    expect(clamped).toMatchObject({ failureCount: 5, lastAttemptMs: now })
+    const after = beginAttempt(file, now + 1_000)
+    expect(after.proceed).toBe(true)
+    expect(after.failureCount).toBe(6)
   })
 })
