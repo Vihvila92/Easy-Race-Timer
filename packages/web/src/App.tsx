@@ -7,7 +7,7 @@ import { sourceCodeUrl } from './source-link.js'
 import { Banner, TextLink } from './ui/components.js'
 import { UnreachableView } from './unreachable.js'
 import { Wizard } from './wizard.js'
-import { useKeyAccess, type KeyStateName } from './key-client.js'
+import { useKeyAccess, type KeyFileLabel, type KeyStateName } from './key-client.js'
 import { KeyGate, KeyManage } from './key-manage.js'
 import { About, Audit, Clubs, Corrections, Entries, Finish, ImportView, Office, PrintView, Results, Start, Ties } from './views.js'
 
@@ -15,7 +15,7 @@ function KeysPage() {
   const { reload } = useApp()
   const access = useKeyAccess()
   const refresh = () => { void access.reload(); void reload() }
-  return <KeyManage state={access.status?.state ?? 'admin'} onChanged={refresh} />
+  return <KeyManage state={access.status?.state ?? 'admin'} label={access.status ?? {}} onChanged={refresh} />
 }
 
 const VIEWS = [
@@ -194,12 +194,12 @@ function RaceShell({ hash, preview, showKeys }: { hash: string; preview: boolean
   )
 }
 
-function KeyShell({ state, reload }: { state: KeyStateName; reload: () => void }) {
+function KeyShell({ state, label, reload }: { state: KeyStateName; label: KeyFileLabel; reload: () => void }) {
   return (
     <div className="shell wizard-shell">
       <main className="main">
         <Preferences />
-        <KeyGate state={state} reload={reload} />
+        <KeyGate state={state} label={label} reload={reload} />
         <SourceFooter />
       </main>
     </div>
@@ -211,7 +211,7 @@ export function App() {
   const hash = useHash()
   const keys = useKeyAccess()
   const refresh = () => { void keys.reload(); void reload() }
-  if (keys.blocking && keys.status) return <KeyShell state={keys.status.state} reload={refresh} />
+  if (keys.blocking && keys.status) return <KeyShell state={keys.status.state} label={keys.status} reload={refresh} />
   if (needsPin) return <PinGate />
   const preview = import.meta.env.DEV && hash === '/preview' && PreviewPage != null
   if (!data && !preview) return <Startup />

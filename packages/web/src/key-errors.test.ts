@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { describe, expect, it } from 'vitest'
 import { en, fi, translate } from '@ert/i18n'
+import { ApiError } from './api.js'
+import { openFileFailure } from './key-client.js'
 import { RACE_FILE_CODES, RaceFileError, keyMessageKey, raceFileErrorFromCode } from './key-errors.js'
 
 const API = {
@@ -36,5 +38,13 @@ describe('RaceFileError', () => {
     expect(pending?.i18nKey).toBe('keys.acknowledgeFirst')
     expect(en['keys.acknowledgeFirst']).toBe('First confirm that you have printed or written down the new recovery key.')
     expect(fi['keys.acknowledgeFirst']).toBe('Vahvista ensin, että olet tulostanut tai kirjoittanut ylös uuden palautusavaimen.')
+    const wrong = openFileFailure(new ApiError('UNLOCK_FAILED', 'no'), 'keys.passwordWrong')
+    const stale = openFileFailure(new ApiError('UNLOCK_FAILED', 'no'), 'keys.ackStale')
+    const unacked = openFileFailure(new ApiError('RECOVERY_UNACKNOWLEDGED', 'no'), 'keys.passwordWrong')
+    expect(wrong.key).toBe('keys.passwordWrong')
+    expect(stale.key).toBe('keys.ackStale')
+    expect(unacked.key).toBe('keys.recoveryUnshown')
+    expect(en['keys.passwordWrong']).toBe('The current password is wrong.')
+    expect(fi['keys.passwordWrong']).toBe('Nykyinen salasana on väärä.')
   })
 })

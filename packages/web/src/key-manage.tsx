@@ -3,7 +3,7 @@ import type { MessageKey } from '@ert/i18n'
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
 import { useApp } from './context.js'
 import { useHeadingFocus } from './focus-heading.js'
-import { changeKeyPassword, keyFailure, regenerateKey, rotateKey, type IssuedKey, type KeyStateName } from './key-client.js'
+import { changeKeyPassword, openFileFailure, regenerateKey, rotateKey, type IssuedKey, type KeyFileLabel, type KeyStateName } from './key-client.js'
 import { RecoveryGuide, RecoveryPrint } from './recovery-view.js'
 import { RecoveryGate, UnlockForm } from './unlock-view.js'
 import { Banner, Button, PasswordPair, Select, TextField } from './ui/components.js'
@@ -36,7 +36,7 @@ function useConfirm(run: () => void) {
   return { open, submit, close: () => setOpen(false) }
 }
 
-function PasswordChange({ onSingleAdmin }: { onSingleAdmin: () => void }) {
+function PasswordChange({ onSingleAdmin, onChanged }: { onSingleAdmin: () => void; onChanged: () => void }) {
   const { t } = useApp()
   const [target, setTarget] = useState<'self' | 'other'>('self')
   const [currentPassword, setCurrent] = useState('')
@@ -44,9 +44,11 @@ function PasswordChange({ onSingleAdmin }: { onSingleAdmin: () => void }) {
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [notice, setNotice] = useState<MessageKey | undefined>()
+  const [saved, setSaved] = useState(false)
   const save = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     setNotice(undefined)
+    setSaved(false)
     const acting = target === 'other' ? actingPassword : undefined
     const current = target === 'self' ? currentPassword : undefined
     changeKeyPassword({ target, password, confirm, currentPassword: current, actingPassword: acting }).then((status) => {
@@ -54,8 +56,10 @@ function PasswordChange({ onSingleAdmin }: { onSingleAdmin: () => void }) {
       setActing('')
       setPassword('')
       setConfirm('')
+      setSaved(true)
       if (status.singleAdmin) onSingleAdmin()
-    }).catch((error: unknown) => setNotice(keyFailure(error).key))
+      onChanged()
+    }).catch((error: unknown) => setNotice(openFileFailure(error, 'keys.passwordWrong').key))
   }
   return (
     <section data-testid="password-change" className="ui-section" aria-labelledby="password-task">
@@ -69,6 +73,7 @@ function PasswordChange({ onSingleAdmin }: { onSingleAdmin: () => void }) {
         {target === 'self' ? <TextField id="current-password" label={t('keys.currentPassword')} type="password" value={currentPassword} onChange={setCurrent} testId="current-password" autoComplete="current-password" /> : <TextField id="acting-change" label={t('keys.actingPassword')} type="password" value={actingPassword} onChange={setActing} testId="acting-change" autoComplete="current-password" />}
         <PasswordPair passwordId="new-password" confirmId="confirm-password" passwordLabel={t('keys.newPassword')} confirmLabel={t('keys.confirmPassword')} password={password} confirm={confirm} onPassword={setPassword} onConfirm={setConfirm} passwordTestId="new-password" confirmTestId="confirm-password" />
         <Notice code={notice} />
+        {saved ? <Banner tone="ok" testId="keys-password-saved">{t('keys.passwordSaved')}</Banner> : null}
         <Button type="submit" data-testid="password-save">{t('keys.change')}</Button>
       </form>
     </section>
@@ -90,7 +95,7 @@ function RotationForm({ onIssued }: { onIssued: (issued: IssuedKey) => void }) {
       setPassword('')
       setConfirm('')
       onIssued(issued)
-    }).catch((error: unknown) => setNotice(keyFailure(error).key))
+    }).catch((error: unknown) => setNotice(openFileFailure(error, 'keys.passwordWrong').key))
   }
   const step = useConfirm(save)
   return (
@@ -119,7 +124,7 @@ function RegenerateKey({ onIssued }: { onIssued: (issued: IssuedKey) => void }) 
     regenerateKey(actingPassword).then((issued) => {
       setActing('')
       onIssued(issued)
-    }).catch((error: unknown) => setNotice(keyFailure(error).key))
+    }).catch((error: unknown) => setNotice(openFileFailure(error, 'keys.passwordWrong').key))
   }
   const step = useConfirm(save)
   return (
@@ -131,7 +136,7 @@ function RegenerateKey({ onIssued }: { onIssued: (issued: IssuedKey) => void }) 
   )
 }
 
-export function KeyManage({ state, onChanged }: { state: KeyStateName; onChanged: () => void }) {
+export function KeyManage({ state, label = {}, onChanged }: { state: KeyStateName; label?: KeyFileLabel; onChanged: () => void }) {
   const { t } = useApp()
   const heading = useHeadingFocus()
   const [issued, setIssued] = useState<IssuedKey | null>(null)
@@ -148,6 +153,7 @@ export function KeyManage({ state, onChanged }: { state: KeyStateName; onChanged
         recoveryKey={issued.recoveryKey}
         generation={issued.generation}
         onKeyHidden={hideKey}
+        label={label}
         onAcknowledged={() => { setIssued(null); onChanged() }}
         extra={(
           <>
@@ -162,9 +168,10 @@ export function KeyManage({ state, onChanged }: { state: KeyStateName; onChanged
     <section data-testid="key-manage">
       <h1 ref={heading} tabIndex={-1}>{t('keys.title')}</h1>
       <p className="lead">{t('keys.lead')}</p>
-      {state === 'temporary-password' ? <Banner tone="warning" testId="keys-temporary">{t('keys.temporaryPassword')}</Banner> : null}
+      {state === 'temporary-password' ? <Banner tone="warning" testId="keys-temporary-holder">{t('keys.temporaryHolder')}</Banner> : null}
+      {state === 'recovery-unshown' ? <Banner tone="warning" testId="keys-unshown">{t('keys.recoveryUnshown')}</Banner> : null}
       {singleAdmin ? <Banner tone="warning" testId="keys-single-admin">{t('keys.singleAdmin')}</Banner> : null}
-      <PasswordChange onSingleAdmin={() => setSingleAdmin(true)} />
+      <PasswordChange onSingleAdmin={() => setSingleAdmin(true)} onChanged={onChanged} />
       <section className="ui-section" data-testid="key-regenerate-task" aria-labelledby="regenerate-task">
         <h2 id="regenerate-task">{t('keys.regenerate')}</h2>
         <RecoveryGuide />
@@ -176,8 +183,8 @@ export function KeyManage({ state, onChanged }: { state: KeyStateName; onChanged
 }
 
 /** Full-screen key step. The rest of the race stays hidden until this is done. */
-export function KeyGate({ state, reload }: { state: KeyStateName; reload: () => void }) {
+export function KeyGate({ state, label = {}, reload }: { state: KeyStateName; label?: KeyFileLabel; reload: () => void }) {
   if (state === 'locked') return <UnlockForm onUnlocked={reload} />
   if (state === 'recovery-gate') return <RecoveryGate onDone={reload} />
-  return <KeyManage state={state} onChanged={reload} />
+  return <KeyManage state={state} label={label} onChanged={reload} />
 }

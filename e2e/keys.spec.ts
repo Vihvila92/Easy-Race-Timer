@@ -75,6 +75,10 @@ async function setPasswordFromPaper(page: Page, recoveryKey: string): Promise<vo
   await page.getByTestId('gate-confirm').fill(NEXT)
   await page.getByTestId('gate-confirm').press('Enter')
   await expect(page.getByTestId('wizard')).toBeVisible()
+  await expect(page.getByTestId('recovery-gate')).toHaveCount(0)
+  const status = await page.request.get(`http://127.0.0.1:${PORT}/api/v1/keys/status`)
+  expect(status.ok()).toBeTruthy()
+  expect(await status.json()).toMatchObject({ state: 'admin' })
 }
 
 async function printAndAcknowledge(page: Page): Promise<void> {
@@ -92,7 +96,10 @@ async function printAndAcknowledge(page: Page): Promise<void> {
   const shown = page.getByTestId('recovery-key-display')
   const keyText = (await shown.innerText()).replace(/\s+/g, '')
   expect(keyText.length).toBeGreaterThan(20)
+  await expect(page.getByTestId('recovery-print-label')).toContainText('ert.sqlite')
+  await expect(page.getByTestId('recovery-print-date')).not.toBeEmpty()
   await expectClean(page, 'print')
+  await page.getByTestId('recovery-print-button').click()
   await page.emulateMedia({ media: 'print' })
   await expect(page.getByTestId('recovery-ack-submit')).toBeHidden()
   expect(await page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe('rgb(255, 255, 255)')

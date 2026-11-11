@@ -193,6 +193,16 @@ function setInput(input: HTMLInputElement, value: string) {
   input.dispatchEvent(new Event('input', { bubbles: true }))
 }
 
+describe('key state banners', () => {
+  it('explains a missing recovery key and speaks to the person who holds the temporary password', () => {
+    const unshown = text(renderToStaticMarkup(createElement(KeyManage, { state: 'recovery-unshown', onChanged: () => undefined })))
+    const holder = text(renderToStaticMarkup(createElement(KeyManage, { state: 'temporary-password', onChanged: () => undefined })))
+    expect(unshown).toContain(en['keys.recoveryUnshown'])
+    expect(holder).toContain(en['keys.temporaryHolder'])
+    expect(holder).not.toContain(en['keys.temporaryPassword'])
+  })
+})
+
 describe('unlock form', () => {
   it('clears the typed secret when the mode changes', async () => {
     const host = document.createElement('div')

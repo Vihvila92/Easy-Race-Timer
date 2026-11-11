@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import type { ReactNode } from 'react'
 import { useEffect, useState } from 'react'
+import { formatDate } from '@ert/i18n'
 import { useApp } from './context.js'
 import { useHeadingFocus } from './focus-heading.js'
-import { acknowledgeKey, keyFailure } from './key-client.js'
+import { acknowledgeKey, openFileFailure, type KeyFileLabel } from './key-client.js'
 import { Banner, Button, Checkbox, RecoveryKeyDisplay } from './ui/components.js'
 
 /** Plain-language recovery guide. Shown with setup, regeneration, and the printed page. */
@@ -27,15 +28,17 @@ export function RecoveryPrint({
   generation,
   onAcknowledged,
   onKeyHidden,
+  label = {},
   extra,
 }: {
   recoveryKey: string
   generation: number
   onAcknowledged: () => void
   onKeyHidden: () => void
+  label?: KeyFileLabel
   extra?: ReactNode
 }) {
-  const { t } = useApp()
+  const { t, locale } = useApp()
   const heading = useHeadingFocus()
   const [shown, setShown] = useState(recoveryKey)
   const [acked, setAcked] = useState(false)
@@ -50,13 +53,17 @@ export function RecoveryPrint({
   }, [onKeyHidden])
   const confirm = () => {
     acknowledgeKey(generation).then(() => onAcknowledged()).catch((error: unknown) => {
-      const failure = keyFailure(error)
+      const failure = openFileFailure(error, 'keys.ackStale')
       setNotice(t(failure.key, failure.seconds ? { seconds: failure.seconds } : undefined))
     })
   }
   return (
     <section data-testid="recovery-print" className="ui-section">
       <h1 ref={heading} tabIndex={-1}>{t('keys.printTitle')}</h1>
+      <p data-testid="recovery-print-label">{label.raceName || label.fileName}</p>
+      {label.raceName && label.fileName ? <p data-testid="recovery-print-file">{t('keys.printFile', { name: label.fileName })}</p> : null}
+      {label.raceDate ? <p data-testid="recovery-print-race-date">{formatDate(label.raceDate, locale)}</p> : null}
+      <p data-testid="recovery-print-date">{t('keys.printedOn', { date: formatDate(new Date(), locale) })}</p>
       <RecoveryKeyDisplay value={shown} />
       <RecoveryGuide />
       {extra}

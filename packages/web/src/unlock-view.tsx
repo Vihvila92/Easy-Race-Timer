@@ -3,7 +3,7 @@ import type { MessageKey } from '@ert/i18n'
 import { useEffect, useState } from 'react'
 import { useApp } from './context.js'
 import { useHeadingFocus } from './focus-heading.js'
-import { changeKeyPassword, keyFailure, unlockWithAdminPassword, unlockWithPaper } from './key-client.js'
+import { changeKeyPassword, keyFailure, openFileFailure, unlockWithAdminPassword, unlockWithPaper } from './key-client.js'
 import { Banner, Button, Checkbox, HintFrame, PasswordPair, TextField } from './ui/components.js'
 import { RecoveryGuide } from './recovery-view.js'
 
@@ -99,7 +99,7 @@ export function RecoveryGate({ onDone }: { onDone: () => void }) {
     changeKeyPassword({ slot: 0, password, confirm }).then(async () => {
       if (otherLost) await changeKeyPassword({ target: 'other', actingPassword: password, password: other, confirm: otherConfirm })
       onDone()
-    }).catch((error: unknown) => setNotice(keyFailure(error).key))
+    }).catch((error: unknown) => setNotice(openFileFailure(error, 'keys.passwordWrong').key))
   }
   return (
     <section data-testid="recovery-gate" className="ui-section">

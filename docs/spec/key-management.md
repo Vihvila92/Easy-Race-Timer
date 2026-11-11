@@ -459,6 +459,13 @@ These are the strings for the screens. The same sentences are in `packages/i18n/
 | `keys.rotateLeftover` | A copy you do not have anymore stays readable. This program cannot erase someone else's USB stick. | Kopio, joka ei ole enää sinulla, pysyy luettavana. Ohjelma ei voi hävittää toisen henkilön muistitikkua. |
 | `keys.singleAdmin` | Both passwords are now held by one person. Ask a second admin to set their own password as soon as you can. | Molemmat salasanat ovat nyt yhdellä henkilöllä. Pyydä toista ylläpitäjää asettamaan oma salasanansa heti kun se on mahdollista. |
 | `keys.temporaryPassword` | The other admin's password is temporary. They must set their own password the next time the file is opened. | Toisen ylläpitäjän salasana on väliaikainen. Hänen on asetettava oma salasanansa, kun tiedosto avataan seuraavan kerran. |
+| `keys.temporaryHolder` | Your password is temporary. Set your own password to continue. | Salasanasi on väliaikainen. Aseta oma salasanasi, jotta voit jatkaa. |
+| `keys.recoveryUnshown` | The new recovery key is not on the screen. Create a new recovery key, then print or write it down. | Uusi palautusavain ei ole näytöllä. Luo uusi palautusavain ja tulosta tai kirjoita se ylös. |
+| `keys.passwordSaved` | The password is saved. | Salasana on tallennettu. |
+| `keys.passwordWrong` | The current password is wrong. | Nykyinen salasana on väärä. |
+| `keys.ackStale` | That recovery key is no longer current. Create a new one. | Tuo palautusavain ei ole enää voimassa. Luo uusi. |
+| `keys.printedOn` | Printed {date} | Tulostettu {date} |
+| `keys.printFile` | File {name} | Tiedosto {name} |
 | `keys.pairFiles` | A backup has to include both the race file and the key file next to it. The paper recovery key does not replace the key file. | Varmuuskopiossa on oltava sekä kisatiedosto että sen vieressä oleva avaintiedosto. Paperinen palautusavain ei korvaa avaintiedostoa. |
 
 `keys.oldCopies` is the loss warning, shown when changing or resetting an admin password. The same statement is not given a second key. `keys.singleAdmin` is shown when one person ends up holding both slots. `keys.temporaryPassword` is shown when rotation sets a temporary password for the other admin, and again at the next unlock until that password is replaced. `keys.pairFiles` is shown wherever the app offers a backup or a USB copy. `keys.rotateLeftover` is shown at the end of DEK rotation.

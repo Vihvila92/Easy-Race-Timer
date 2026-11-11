@@ -12,7 +12,13 @@ export type KeyStateName =
   | 'recovery-unshown'
   | 'temporary-password'
 
-export interface KeyStatus {
+export interface KeyFileLabel {
+  fileName?: string
+  raceName?: string
+  raceDate?: string
+}
+
+export interface KeyStatus extends KeyFileLabel {
   state: KeyStateName
   singleAdmin?: boolean
 }
@@ -41,6 +47,14 @@ export function keyFailure(error: unknown): KeyFailure {
   const seconds = retrySeconds(error)
   if (seconds) return { key: 'unlock.wait', seconds }
   return { key: keyMessageKey(error.code) ?? 'unlock.failed' }
+}
+
+/** The file is already open, so a failed check must not say that opening failed. */
+export function openFileFailure(error: unknown, whenOpen: MessageKey): KeyFailure {
+  const failure = keyFailure(error)
+  if (failure.key === 'unlock.failed') return { key: whenOpen }
+  if (failure.key === 'keys.acknowledgeFirst') return { key: 'keys.recoveryUnshown' }
+  return failure
 }
 
 function readKeyStatus(): Promise<KeyStatus> {

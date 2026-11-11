@@ -36,7 +36,7 @@ describe('key routes', () => {
     const { app, db } = await openApp()
     const status = await app.inject({ method: 'GET', url: '/api/v1/keys/status', headers: { host: 'localhost' } })
     expect(status.statusCode).toBe(200)
-    expect(status.json()).toEqual({ state: 'admin' })
+    expect(status.json()).toMatchObject({ state: 'admin', fileName: 'ert.sqlite' })
     const rotated = await app.inject({
       method: 'POST',
       url: '/api/v1/keys/rotate',
@@ -78,7 +78,7 @@ describe('recovery gate', () => {
     expect(blocked.json().error.code).toBe('KEY_GATE')
     const recovered = await app.inject({ method: 'POST', url: '/api/v1/keys/recover', headers: HOST, payload: { recoveryKey } })
     expect(recovered.statusCode).toBe(200)
-    expect(recovered.json()).toEqual({ state: 'recovery-gate' })
+    expect(recovered.json()).toMatchObject({ state: 'recovery-gate', fileName: 'ert.sqlite' })
     const during = await app.inject({ method: 'POST', url: '/api/v1/events/import', headers: HOST, payload: {} })
     expect(during.statusCode).toBe(423)
     const next = 'replacement-admin-password'

@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+import path from 'node:path'
 import type { FastifyInstance, FastifyReply } from 'fastify'
 import { z } from 'zod'
 import { AppError } from '@ert/core'
@@ -59,13 +60,22 @@ export function raceApiOpen(db: AppDb, racePath: string): boolean {
   return state === 'admin' || state === 'dev'
 }
 
-function describeKeys(db: AppDb, racePath: string): { state: KeyStateName } {
-  if (db.filePath === ':memory:' && envelopeReady(racePath)) return { state: 'locked' }
+function raceHeading(db: AppDb): { raceName?: string; raceDate?: string } {
+  if (db.filePath === ':memory:') return {}
+  const event = db.get<{ name: string; date_start: string }>('SELECT name, date_start FROM event LIMIT 1')
+  if (!event) return {}
+  return { raceName: event.name, raceDate: event.date_start }
+}
+
+function describeKeys(db: AppDb, racePath: string): { state: KeyStateName; fileName: string; raceName?: string; raceDate?: string } {
+  const fileName = path.basename(db.filePath === ':memory:' ? racePath : db.filePath)
+  const label = { fileName, ...raceHeading(db) }
+  if (db.filePath === ':memory:' && envelopeReady(racePath)) return { state: 'locked', ...label }
   const kind = db.keySession?.kind
   if (kind === 'admin' || kind === 'recovery-gate' || kind === 'recovery-unshown' || kind === 'temporary-password') {
-    return { state: kind }
+    return { state: kind, ...label }
   }
-  return { state: 'dev' }
+  return { state: 'dev', ...label }
 }
 
 function parseBody<T>(schema: z.ZodType<T>, body: unknown): T {
