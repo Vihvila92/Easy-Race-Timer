@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { parseCsv, RESULT_FIELDS } from '../packages/core/src/index.ts'
 import { noError, open, runAction } from './kuulan-actions.ts'
-import { authorize, killServer, startServer, type RunningServer } from './server.ts'
+import { apiOrigin, authorize, killServer, startServer, type RunningServer } from './server.ts'
 
 const dir = path.resolve('testdata/kuulan-holkka')
 const read = (name: string) => readFileSync(path.join(dir, name), 'utf8')
@@ -38,7 +38,7 @@ async function expectOffsetPolicy(page: Page, request: APIRequestContext, testId
 
 async function startKuulan(page: Page, request: APIRequestContext) {
   await page.route((url) => !['127.0.0.1', 'localhost'].includes(url.hostname), (route) => route.abort())
-  await page.goto('/')
+  await page.goto(apiOrigin())
   await page.evaluate(() => sessionStorage.setItem('ert-next-tap', '1'))
   await expect.poll(() => page.evaluate(async () => Boolean(await navigator.serviceWorker.getRegistration()))).toBe(true)
   await expect(page.getByTestId('nav-import')).toBeVisible()
@@ -111,7 +111,7 @@ async function restartDuringFinish(page: Page, request: APIRequestContext, runni
   const current = running.server
   if (!current) throw new Error('server is not running')
   await killServer(current)
-  running.server = await startServer(port, current.dbFile)
+  running.server = await startServer(current.dbFile, {}, port)
   await page.reload()
   await expect(page.getByTestId('nav-finish')).toBeVisible()
   const after = await request.get('/api/v1/timing-events')
@@ -204,12 +204,11 @@ async function expectAxe(page: Page) {
 }
 
 test.describe('Kuulan hölkkä', () => {
-  const port = 8099
   const running: { server?: RunningServer } = {}
 
   test.beforeAll(async () => {
     const dbFile = path.join(mkdtempSync(path.join(tmpdir(), 'ert-')), 'ert.sqlite')
-    running.server = await startServer(port, dbFile)
+    running.server = await startServer(dbFile)
   })
 
   test.afterAll(async () => {
@@ -222,7 +221,7 @@ test.describe('Kuulan hölkkä', () => {
     await importKuulan(page, request)
     await expectImportPreview(page)
     await expectAgeBasis(page)
-    await runRaceDay(page, request, running, port)
+    await runRaceDay(page, request, running, running.server?.port ?? 0)
     await expectAudit(page)
     await expectRankedResults(page, request)
     await expectPrint(page)

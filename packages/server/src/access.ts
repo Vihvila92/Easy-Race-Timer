@@ -13,6 +13,13 @@ export const PUBLIC_ROUTES = [
 /** Loopback may read these without a token. Other clients need a device token. */
 export const LOCAL_ROUTES = [
   'GET /api/v1/runtime',
+  'GET /api/v1/keys/status',
+  'POST /api/v1/keys/unlock',
+  'POST /api/v1/keys/recover',
+  'POST /api/v1/keys/password',
+  'POST /api/v1/keys/recovery',
+  'POST /api/v1/keys/recovery/ack',
+  'POST /api/v1/keys/rotate',
 ] as const
 
 export const PROTECTED_ROUTES = [

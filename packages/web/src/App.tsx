@@ -7,7 +7,16 @@ import { sourceCodeUrl } from './source-link.js'
 import { Banner, TextLink } from './ui/components.js'
 import { UnreachableView } from './unreachable.js'
 import { Wizard } from './wizard.js'
+import { useKeyAccess, type KeyFileLabel, type KeyStateName } from './key-client.js'
+import { KeyGate, KeyManage } from './key-manage.js'
 import { About, Audit, Clubs, Corrections, Entries, Finish, ImportView, Office, PrintView, Results, Start, Ties } from './views.js'
+
+function KeysPage() {
+  const { reload } = useApp()
+  const access = useKeyAccess()
+  const refresh = () => { void access.reload(); void reload() }
+  return <KeyManage state={access.status?.state ?? 'admin'} label={access.status ?? {}} onChanged={refresh} />
+}
 
 const VIEWS = [
   ['/office', 'nav.office', Office],
@@ -22,6 +31,7 @@ const VIEWS = [
   ['/print', 'nav.print', PrintView],
   ['/audit', 'nav.audit', Audit],
   ['/about', 'nav.about', About],
+  ['/keys', 'nav.keys', KeysPage],
 ] as const
 
 /** Dev-only. The production build constant-folds this to null and drops the page. */
@@ -102,7 +112,7 @@ function useHash(): string {
 function ConnectionStatus() {
   const { connection, t } = useApp()
   return (
-    <div role="status" aria-live="polite" aria-atomic="true" data-testid="connection-status">
+    <div className="connection-status" role="status" aria-live="polite" aria-atomic="true" data-testid="connection-status">
       {connection === 'reconnecting' ? <Banner tone="info">{t('connection.reconnecting')}</Banner> : null}
     </div>
   )
@@ -116,9 +126,10 @@ function Startup() {
 
 type ViewEntry = (typeof VIEWS)[number]
 
-function navLinks(data: { event?: unknown } | null, settingUp: boolean): readonly ViewEntry[] {
-  if (!data || settingUp) return VIEWS.filter(([path]) => Boolean(data) && (path === '/import' || path === '/about'))
-  return VIEWS
+function navLinks(data: { event?: unknown } | null, settingUp: boolean, showKeys: boolean): readonly ViewEntry[] {
+  const visible = VIEWS.filter(([path]) => showKeys || path !== '/keys')
+  if (!data || settingUp) return visible.filter(([path]) => Boolean(data) && (path === '/import' || path === '/about' || path === '/keys'))
+  return visible
 }
 
 function AppNav({ links, current, waiting, showWizard, preview }: {
@@ -166,10 +177,10 @@ function AppMain({ preview, showWizard, View }: { preview: boolean; showWizard: 
 
 function wantsWizard(preview: boolean, settingUp: boolean, hash: string, hasData: boolean): boolean {
   if (preview || !settingUp || !hasData) return false
-  return hash !== '/import' && hash !== '/about'
+  return hash !== '/import' && hash !== '/about' && hash !== '/keys'
 }
 
-function RaceShell({ hash, preview }: { hash: string; preview: boolean }) {
+function RaceShell({ hash, preview, showKeys }: { hash: string; preview: boolean; showKeys: boolean }) {
   const { data } = useApp()
   const current = VIEWS.find(([path]) => path === hash) ?? VIEWS[0]
   const waiting = data?.ties?.filter((group) => group.status === 'unconfirmed').length ?? 0
@@ -177,17 +188,32 @@ function RaceShell({ hash, preview }: { hash: string; preview: boolean }) {
   const showWizard = wantsWizard(preview, settingUp, hash, !!data)
   return (
     <div className={showWizard ? 'shell wizard-shell' : 'shell'}>
-      <AppNav links={navLinks(data, settingUp)} current={current[0]} waiting={waiting} showWizard={showWizard} preview={preview} />
+      <AppNav links={navLinks(data, settingUp, showKeys)} current={current[0]} waiting={waiting} showWizard={showWizard} preview={preview} />
       <AppMain preview={preview} showWizard={showWizard} View={current[2]} />
     </div>
   )
 }
 
+function KeyShell({ state, label, reload }: { state: KeyStateName; label: KeyFileLabel; reload: () => void }) {
+  return (
+    <div className="shell wizard-shell">
+      <main className="main">
+        <Preferences />
+        <KeyGate state={state} label={label} reload={reload} />
+        <SourceFooter />
+      </main>
+    </div>
+  )
+}
+
 export function App() {
-  const { needsPin, data } = useApp()
+  const { needsPin, data, reload } = useApp()
   const hash = useHash()
+  const keys = useKeyAccess()
+  const refresh = () => { void keys.reload(); void reload() }
+  if (keys.blocking && keys.status) return <KeyShell state={keys.status.state} label={keys.status} reload={refresh} />
   if (needsPin) return <PinGate />
   const preview = import.meta.env.DEV && hash === '/preview' && PreviewPage != null
   if (!data && !preview) return <Startup />
-  return <RaceShell hash={hash} preview={preview} />
+  return <RaceShell hash={hash} preview={preview} showKeys={keys.showKeys} />
 }

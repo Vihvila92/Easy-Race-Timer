@@ -7,6 +7,8 @@ export type KeyErrorCode =
   | 'KEY_PARAMS_REJECTED'
   | 'FILE_HEADER_INVALID'
   | 'KEY_FILE_MISMATCH'
+  | 'RACE_FILE_CORRUPT'
+  | 'RECOVERY_UNACKNOWLEDGED'
   | 'PASSWORD_TOO_SHORT'
   | 'PASSWORD_TOO_LONG'
   | 'PASSWORD_COMMON'
@@ -18,6 +20,8 @@ const KEY_MESSAGES: Record<KeyErrorCode, string> = {
   KEY_PARAMS_REJECTED: "This file's key settings are not allowed, so it was not opened.",
   FILE_HEADER_INVALID: 'This file cannot be opened.',
   KEY_FILE_MISMATCH: 'This key file does not belong to this race file, or the race file is damaged. Use the key file that was saved together with the race file, or restore a backup.',
+  RACE_FILE_CORRUPT: 'The race file could not be read.',
+  RECOVERY_UNACKNOWLEDGED: 'Acknowledge the new recovery key first.',
   PASSWORD_TOO_SHORT: 'Password is too short.',
   PASSWORD_TOO_LONG: 'Password is too long.',
   PASSWORD_COMMON: 'Password is too common.',

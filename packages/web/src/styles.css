@@ -219,6 +219,19 @@ th { font-size: 0.8rem; color: var(--secondary); font-weight: 600; }
   .club-abbr { display: inline; }
   .club-full { display: none; }
 }
+@media print {
+  .nav, .footer, .settings, .ui-actions, .ui-check, .connection-status { display: none !important; }
+  .shell { display: block; }
+  html, body, .shell, .main {
+    background: #fff !important;
+    color: #111 !important;
+  }
+  .ui-section, .ui-banner, .ui-key, .lead, h1, h2, p {
+    background: #fff !important;
+    color: #111 !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { scroll-behavior: auto; transition: none !important; }
 }

@@ -3,12 +3,12 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { KeyError } from './errors.js'
+import { KeyError, RaceFileError } from './errors.js'
 import { setKeyLogger } from './key-log.js'
 import { keyFilePath } from './key-file.js'
 import { acknowledgeRecoveryKeyShown, recoveryHooks, regenerateRecoveryKey, rewrapAdminSlot } from './key-rewrap.js'
 import { rotateDataKey } from './key-rotate.js'
-import { createProtectedRaceFile, normalUseAllowed, unlockWithPassword, unlockWithRecovery } from './key-slots.js'
+import { createProtectedRaceFile, keyHooks, normalUseAllowed, unlockWithPassword, unlockWithRecovery } from './key-slots.js'
 import { ensureKeyColumns } from './schema.js'
 
 const ADMIN_A = 'correct-horse-battery'
@@ -25,6 +25,8 @@ function tempFile(): string {
 
 afterEach(() => {
   setKeyLogger(null)
+  keyHooks.integrityOk = undefined
+  keyHooks.openFailure = undefined
   recoveryHooks.afterFlag = undefined
   recoveryHooks.afterEnvelope = undefined
   for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true })
@@ -44,7 +46,7 @@ const BELONGS = 'This key file does not belong to this race file, or the race fi
 
 function watchLogs(): string[] {
   const logs: string[] = []
-  setKeyLogger((event) => logs.push(event))
+  setKeyLogger((event, fields) => logs.push(JSON.stringify({ event, ...fields })))
   return logs
 }
 
@@ -78,9 +80,29 @@ describe('key file mismatch', () => {
     matched.run('UPDATE schema_meta SET key_generation = 2 WHERE id = 1')
     matched.raw.close()
     expectBelongs(await rejected(file, ADMIN_A), file, fileId)
-    expectQuiet(logs, [file, ADMIN_A, fileId])
+    expect(logs).toContain(JSON.stringify({ event: 'unlock mismatch' }))
+    expectQuiet(logs, [file, ADMIN_A, fileId, 'path', 'password', 'file_id'])
     const record = JSON.parse(fs.readFileSync(path.join(path.dirname(file), 'unlock-backoff.json'), 'utf8')) as { failureCount: number }
     expect(record.failureCount).toBe(1)
+  })
+
+  it('logs a field-less mismatch when the integrity check fails', async () => {
+    const { file, db } = await created()
+    const fileId = db.get<{ file_id: string }>('SELECT file_id FROM schema_meta WHERE id = 1')?.file_id ?? ''
+    db.raw.close()
+    keyHooks.integrityOk = () => false
+    const logs = watchLogs()
+    const error = await rejected(file, ADMIN_A)
+    expect(error).toMatchObject({ code: 'RACE_FILE_CORRUPT' })
+    expect(JSON.stringify(error)).not.toContain('KEY_FILE_MISMATCH')
+    expect(logs).toContain(JSON.stringify({ event: 'unlock mismatch' }))
+    expectQuiet(logs, [file, ADMIN_A, fileId, 'path', 'password', 'file_id'])
+    keyHooks.openFailure = new RaceFileError('ert.sqlite', 'open')
+    const unread = watchLogs()
+    const unreadable = await rejected(file, ADMIN_A)
+    expect(unreadable).toMatchObject({ code: 'RACE_FILE_CORRUPT' })
+    expect(unread).toContain(JSON.stringify({ event: 'unlock mismatch' }))
+    expectQuiet(unread, [file, ADMIN_A, fileId, 'path', 'password', 'file_id'])
   })
 })
 
@@ -138,6 +160,15 @@ describe('serialized recovery keys', () => {
 })
 
 describe('unshown recovery key', () => {
+  it('rejects a password change until the new recovery key is acknowledged', async () => {
+    const { db } = await created()
+    const rotated = await rotateDataKey(db, { actingPassword: ADMIN_A, other: { kind: 'temporary', password: { password: OTHER, confirm: OTHER } } })
+    rotated.recoveryKey.fill(0)
+    const next = { password: 'replacement-admin-password', confirm: 'replacement-admin-password' }
+    await expect(rewrapAdminSlot(db, 0, next, ADMIN_A)).rejects.toMatchObject({ code: 'RECOVERY_UNACKNOWLEDGED' })
+    db.raw.close()
+  })
+
   it('requires a new recovery key when rotation died before the key was shown', async () => {
     const { file, db } = await created()
     const rotated = await rotateDataKey(db, { actingPassword: ADMIN_A, other: { kind: 'password', password: { password: OTHER, confirm: OTHER } } })

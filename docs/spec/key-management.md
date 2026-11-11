@@ -402,21 +402,21 @@ This is the plain-language guide. The implementation shows it from setup, from t
 
 **Where to store it.** Keep the paper away from the laptop, the way you keep a spare house key. A labelled envelope with a named officer of the club is enough. Two copies in two buildings are better than one copy in the laptop bag. Do not put the key in email, chat, a photo roll, or a file on the race laptop. Anyone who has the paper can open the race file.
 
-**How to use it.** On the locked screen, choose "I don't have the passwords" and type the groups, including the last group. You can type the letters O, I and L; the program reads them as 0 and 1. If a group is mistyped, the program says so and does not try to open the file. If the key is accepted, the program then asks for a new admin password and will not continue until that password is set.
+**How to use it.** On the locked screen, choose "I don't have the passwords" and type the groups, including the last group. You can type the letter O instead of 0, and I or L instead of 1. If a group is mistyped, the program says so and does not try to open the file. If the key is accepted, the program then asks for a new admin password and will not continue until that password is set.
 
-**If the key is lost or seen by someone else.** If you still know an admin password, open the file and create a new recovery key. The paper you have now stops working for this file. An old copy, such as a USB backup taken before that change, still opens with the old paper. That copy is both the database and the key file next to it. The paper key does not replace the key file. Destroy those copies, or rotate the data key if a former admin might still have one.
+**If the key is lost or seen by someone else.** If you still know an admin password, open the file and create a new recovery key. The paper you have now stops working for this file. An old copy, such as a USB backup taken before that change, still opens with the old paper. That copy is both the race file and the key file next to it. The paper key does not replace the key file. Destroy those copies, or rotate the data key if a former admin might still have one.
 
 **If both passwords and the paper are lost.** If both admin passwords and this recovery key are lost, the race file cannot be opened. There is no way to reset it and no one else has a copy of the key. The names, results and consents in the file would be gone.
 
 ### Suomi
 
-**Miten tulostaa.** Kun ohjelma näyttää palautusavaimen, tulosta sivu tai kirjoita ryhmät paperille käsin. Tarkista viimeinen ryhmä (tarkistussumma) kahdesti. Ohjelma näyttää avaimen vain tämän kerran. Kun poistut sivulta, ohjelma hävittää avaimen muistista eikä voi näyttää sitä uudelleen.
+**Tulostus.** Kun ohjelma näyttää palautusavaimen, tulosta sivu tai kirjoita ryhmät paperille käsin. Tarkista viimeinen ryhmä (tarkistussumma) kahdesti. Ohjelma näyttää avaimen vain tämän kerran. Kun poistut sivulta, ohjelma hävittää avaimen muistista eikä voi näyttää sitä uudelleen.
 
-**Säilytys.** Säilytä paperi eri paikassa kuin kannettava, kuten vara-avain. Seuran nimetyn toimihenkilön kirjekuori riittää. Kaksi kopiota kahdessa rakennuksessa on varmempi kuin yksi kopio kannettavan laukussa. Älä lähetä avainta sähköpostilla tai viestillä, älä kuvaa sitä puhelimeen äläkä tallenna sitä kisakoneen tiedostoksi. Jokainen, jolla on paperi, voi avata kisatiedoston.
+**Säilytys.** Säilytä paperi eri paikassa kuin kannettava, kuten talon vara-avain. Riittää, että paperi on merkityssä kirjekuoressa seuran sovitulla toimihenkilöllä. Kaksi kopiota kahdessa rakennuksessa on varmempi kuin yksi kopio kannettavan laukussa. Älä lähetä avainta sähköpostilla tai viestillä, älä kuvaa sitä puhelimeen äläkä tallenna sitä kisakoneen tiedostoksi. Jokainen, jolla on paperi, voi avata kisatiedoston.
 
-**Käyttö.** Lukitulla näytöllä valitse "Minulla ei ole salasanoja" ja kirjoita ryhmät, myös viimeinen. Kirjaimet O, I ja L kelpaavat: ohjelma lukee ne nollana ja ykkösenä. Jos ryhmässä on kirjoitusvirhe, ohjelma kertoo siitä eikä yritä avata tiedostoa. Jos avain käy, ohjelma pyytää uuden ylläpitäjän salasanan eikä jatka ennen kuin salasana on asetettu.
+**Käyttö.** Valitse lukitulla näytöllä "Minulla ei ole salasanoja" ja kirjoita ryhmät, myös viimeinen. Voit kirjoittaa O-kirjaimen nollan sijaan ja I- tai L-kirjaimen ykkösen sijaan. Jos ryhmässä on kirjoitusvirhe, ohjelma kertoo siitä eikä yritä avata tiedostoa. Jos avain käy, ohjelma pyytää uuden ylläpitäjän salasanan eikä jatka ennen kuin salasana on asetettu.
 
-**Jos avain katoaa tai joku muu näkee sen.** Jos tiedät vielä ylläpitäjän salasanan, avaa tiedosto ja luo uusi palautusavain. Nykyinen paperi ei enää avaa tätä tiedostoa. Vanha kopio, esimerkiksi USB-varmuuskopio ennen vaihtoa, aukeaa yhä vanhalla paperilla. Kopio on sekä tietokanta että sen vieressä oleva avaintiedosto. Paperiavain ei korvaa avaintiedostoa. Hävitä sellaiset kopiot, tai vaihda salausavain, jos entisellä ylläpitäjällä voi olla kopio.
+**Jos avain katoaa tai joku muu näkee sen.** Jos tiedät vielä ylläpitäjän salasanan, avaa tiedosto ja luo uusi palautusavain. Nykyinen paperi ei enää avaa tätä tiedostoa. Vanha kopio, esimerkiksi USB-varmuuskopio ennen vaihtoa, aukeaa yhä vanhalla paperilla. Kopio on sekä kisatiedosto että sen vieressä oleva avaintiedosto. Paperiavain ei korvaa avaintiedostoa. Hävitä sellaiset kopiot, tai vaihda salausavain, jos entisellä ylläpitäjällä voi olla kopio.
 
 **Jos molemmat salasanat ja paperi katoavat.** Jos molemmat ylläpitäjän salasanat ja tämä palautusavain katoavat, kisatiedostoa ei voi avata. Avainta ei voi nollata, eikä kellään muulla ole siitä kopiota. Tiedoston nimet, tulokset ja suostumukset katoavat.
 
@@ -437,19 +437,36 @@ The KDF input is the NFKC UTF-8 bytes with case preserved.
 
 ## User-facing strings
 
-These are the strings for the screens. `file.keyMismatch` is in `packages/i18n/locales/en.json` and `fi.json`. The other keys below are the copy for screens that are not built yet, so they are not in the locale files. Guided hints use `HintFrame` and render only while guided mode is on.
+These are the strings for the screens. The same sentences are in `packages/i18n/locales/en.json` and `fi.json`. Guided hints use `HintFrame` and render only while guided mode is on.
 
 | Key | English | Finnish |
 |---|---|---|
-| `unlock.failed` | That did not open the file. Check the password, or use the printed recovery key. | Tiedosto ei auennut. Tarkista salasana tai käytä paperista palautusavainta. |
+| `unlock.failed` | That did not open the file. Check the password, or use the printed recovery key. | Tiedosto ei auennut. Tarkista salasana tai käytä tulostettua palautusavainta. |
 | `unlock.wait` | Wait {seconds} seconds before trying again. | Odota {seconds} sekuntia ennen uutta yritystä. |
-| `keys.guide.print` | How to print it. Print it on paper. Do not save it as a PDF. When the program shows the recovery key, print that page or copy the groups onto paper by hand. Check the last group (the checksum) twice. The program shows the key only this once. After you leave the page, it deletes the key from memory and cannot show it again. | Miten tulostaa. Tulosta se paperille. Älä tallenna sitä PDF-tiedostoksi. Kun ohjelma näyttää palautusavaimen, tulosta sivu tai kirjoita ryhmät paperille käsin. Tarkista viimeinen ryhmä (tarkistussumma) kahdesti. Ohjelma näyttää avaimen vain tämän kerran. Kun poistut sivulta, ohjelma hävittää avaimen muistista eikä voi näyttää sitä uudelleen. |
-| `file.keyMismatch` | This key file does not belong to this race file, or the race file is damaged. Use the key file that was saved together with the race file, or restore a backup. | Avaintiedosto ei kuulu tähän kisatiedostoon, tai kisatiedosto on vaurioitunut. Käytä kisatiedoston kanssa samaan aikaan tallennettua avaintiedostoa tai palauta varmuuskopio. |
-| `keys.oldCopies` | Rotating the data key protects new copies only. A copy that someone else already has stays readable with the old password or paper. Destroy the copies you hold, and rotate the key so new copies need the new passwords. | Salausavaimen vaihto suojaa vain uudet kopiot. Kopio, joka on jo jollakulla toisella, pysyy luettavana vanhalla salasanalla tai paperilla. Hävitä kopiot, jotka sinulla on, ja vaihda avain, jotta uudet kopiot tarvitsevat uudet salasanat. |
-| `keys.rotateLeftover` | A copy you do not have anymore stays readable. This program cannot erase someone else's stick. | Kopio, joka ei ole enää sinulla, pysyy luettavana. Ohjelma ei voi hävittää toisen henkilön tikkua. |
+| `keys.guide.print` | How to print it. Print the recovery key on paper. Do not save it as a PDF. When the program shows the recovery key, print that page or copy the groups onto paper by hand. Check the last group (the checksum) twice. The program shows the key only this once. After you leave the page, it deletes the key from memory and cannot show it again. | Tulostus. Tulosta palautusavain paperille. Älä tallenna sitä PDF-tiedostoksi. Kun ohjelma näyttää palautusavaimen, tulosta sivu tai kirjoita ryhmät paperille käsin. Tarkista viimeinen ryhmä (tarkistussumma) kahdesti. Ohjelma näyttää avaimen vain tämän kerran. Kun poistut sivulta, ohjelma hävittää avaimen muistista eikä voi näyttää sitä uudelleen. |
+| `file.keyMismatch` | This key file does not belong to this race file, or the race file is damaged. Use the key file that was saved together with the race file, or restore a backup. | Avaintiedosto ei kuulu tähän kisatiedostoon tai kisatiedosto on vaurioitunut. Käytä kisatiedoston kanssa samaan aikaan tallennettua avaintiedostoa tai palauta varmuuskopio. |
+| `file.corrupt` | This race file could not be read. Restore a backup. The backup has to include the race file and the key file that were saved together. | Tätä kisatiedostoa ei voitu lukea. Palauta varmuuskopio. Varmuuskopiossa on oltava kisatiedosto ja sen kanssa samaan aikaan tallennettu avaintiedosto. |
+| `keys.acknowledgeFirst` | First confirm that you have printed or written down the new recovery key. | Vahvista ensin, että olet tulostanut tai kirjoittanut ylös uuden palautusavaimen. |
+| `keys.continue` | Continue | Jatka |
+| `keys.printTitle` | Recovery key | Palautusavain |
+| `keys.passwordTarget` | Which password | Mikä salasana |
+| `keys.otherMode` | The other admin | Toinen ylläpitäjä |
+| `keys.otherCurrent` | The other admin's current password | Toisen ylläpitäjän nykyinen salasana |
+| `keys.otherCurrentAgain` | Type that password again | Kirjoita se salasana uudelleen |
+| `keys.confirmRotate` | Yes, change the data key | Kyllä, vaihda salausavain |
+| `keys.confirmRegenerate` | Yes, create a new recovery key | Kyllä, luo uusi palautusavain |
+| `keys.oldCopies` | Changing the data key protects new copies only. A copy that someone else already has stays readable with the old password or paper. Destroy the copies you hold, and change the data key so new copies need the new passwords. | Salausavaimen vaihto suojaa vain uudet kopiot. Kopio, joka on jo jollakulla toisella, pysyy luettavana vanhalla salasanalla tai paperilla. Hävitä kopiot, jotka sinulla on, ja vaihda avain, jotta uudet kopiot tarvitsevat uudet salasanat. |
+| `keys.rotateLeftover` | A copy you do not have anymore stays readable. This program cannot erase someone else's USB stick. | Kopio, joka ei ole enää sinulla, pysyy luettavana. Ohjelma ei voi hävittää toisen henkilön muistitikkua. |
 | `keys.singleAdmin` | Both passwords are now held by one person. Ask a second admin to set their own password as soon as you can. | Molemmat salasanat ovat nyt yhdellä henkilöllä. Pyydä toista ylläpitäjää asettamaan oma salasanansa heti kun se on mahdollista. |
 | `keys.temporaryPassword` | The other admin's password is temporary. They must set their own password the next time the file is opened. | Toisen ylläpitäjän salasana on väliaikainen. Hänen on asetettava oma salasanansa, kun tiedosto avataan seuraavan kerran. |
-| `keys.pairFiles` | A backup has to include both the race database and the key file next to it. The paper recovery key does not replace the key file. | Varmuuskopiossa on oltava sekä kisatietokanta että sen vieressä oleva avaintiedosto. Paperinen palautusavain ei korvaa avaintiedostoa. |
+| `keys.temporaryHolder` | Your password is temporary. Set your own password to continue. | Salasanasi on väliaikainen. Aseta oma salasanasi, jotta voit jatkaa. |
+| `keys.recoveryUnshown` | The new recovery key is not on the screen. Create a new recovery key, then print or write it down. | Uusi palautusavain ei ole näytöllä. Luo uusi palautusavain ja tulosta tai kirjoita se ylös. |
+| `keys.passwordSaved` | The password is saved. | Salasana on tallennettu. |
+| `keys.passwordWrong` | The current password is wrong. | Nykyinen salasana on väärä. |
+| `keys.ackStale` | That recovery key is no longer current. Create a new one. | Tuo palautusavain ei ole enää voimassa. Luo uusi. |
+| `keys.printedOn` | Printed {date} | Tulostettu {date} |
+| `keys.printFile` | File {name} | Tiedosto {name} |
+| `keys.pairFiles` | A backup has to include both the race file and the key file next to it. The paper recovery key does not replace the key file. | Varmuuskopiossa on oltava sekä kisatiedosto että sen vieressä oleva avaintiedosto. Paperinen palautusavain ei korvaa avaintiedostoa. |
 
 `keys.oldCopies` is the loss warning, shown when changing or resetting an admin password. The same statement is not given a second key. `keys.singleAdmin` is shown when one person ends up holding both slots. `keys.temporaryPassword` is shown when rotation sets a temporary password for the other admin, and again at the next unlock until that password is replaced. `keys.pairFiles` is shown wherever the app offers a backup or a USB copy. `keys.rotateLeftover` is shown at the end of DEK rotation.
 
@@ -459,6 +476,9 @@ These are the strings for the screens. `file.keyMismatch` is in `packages/i18n/l
 |---|---|
 | `UNLOCK_FAILED` | Wrong password, checksum-valid wrong recovery key, GCM failure, body integrity failure, or a backoff wait. No slot id in the body. `retryAfterMs` is allowed during a wait. The message tells the operator the next step. The wait sentence includes the number of seconds. |
 | `KEY_FILE_MISMATCH` | `ert.keys` does not belong to this race file. This is not `UNLOCK_FAILED`. |
+| `RACE_FILE_CORRUPT` | The race file itself cannot be read, or the integrity check fails after a slot opens. This is not `KEY_FILE_MISMATCH`. |
+| `RACE_FILE_NEWER` | The race file was saved by a newer version of the program. |
+| `RECOVERY_UNACKNOWLEDGED` | A password change arrived before the new recovery key was acknowledged. |
 | `RECOVERY_KEY_CHECKSUM` | Recovery key fails the alphabet or the checksum. No KDF and no GCM. |
 | `KEY_PARAMS_REJECTED` | Any slot is below the Argon2id minimum, above the ceiling, or using a KDF the slot type forbids. No KDF. |
 | `FILE_HEADER_INVALID` | Magic, version, length, reserved bytes, or nonce length is wrong. |

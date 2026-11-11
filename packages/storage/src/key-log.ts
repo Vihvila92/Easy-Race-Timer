@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
-export type KeyLogEvent = 'unlock ok' | 'unlock failed' | 'unlock backoff'
+export type KeyLogEvent = 'unlock ok' | 'unlock failed' | 'unlock backoff' | 'unlock mismatch'
 
 const SECRET_KEYS = [
   'password',

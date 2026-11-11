@@ -31,6 +31,9 @@ export function TextField({
   type = 'text',
   inputMode,
   autoComplete,
+  spellCheck,
+  autoCorrect,
+  autoCapitalize,
   testId,
   hint,
   error,
@@ -41,9 +44,12 @@ export function TextField({
   label: string
   value: string
   onChange: (value: string) => void
-  type?: 'text' | 'time' | 'email'
+  type?: 'text' | 'time' | 'email' | 'password'
   inputMode?: 'text' | 'numeric' | 'decimal' | 'tel' | 'email'
   autoComplete?: string
+  spellCheck?: boolean
+  autoCorrect?: 'off' | 'on'
+  autoCapitalize?: 'off' | 'none' | 'sentences' | 'words' | 'characters'
   testId?: string
   hint?: string
   error?: string
@@ -62,6 +68,9 @@ export function TextField({
         value={value}
         inputMode={inputMode}
         autoComplete={autoComplete}
+        spellCheck={spellCheck}
+        autoCorrect={autoCorrect}
+        autoCapitalize={autoCapitalize}
         data-testid={testId}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy || undefined}
@@ -126,6 +135,50 @@ type TextLinkProps = AnchorHTMLAttributes<HTMLAnchorElement> & { testId?: string
 export function TextLink({ className, testId, children, ...rest }: TextLinkProps) {
   const classes = ['ui-text-link', className].filter(Boolean).join(' ')
   return <a className={classes} data-testid={testId} {...rest}><span>{children}</span></a>
+}
+
+export function PasswordPair({
+  passwordId,
+  confirmId,
+  passwordLabel,
+  confirmLabel,
+  password,
+  confirm,
+  onPassword,
+  onConfirm,
+  passwordTestId,
+  confirmTestId,
+}: {
+  passwordId: string
+  confirmId: string
+  passwordLabel: string
+  confirmLabel: string
+  password: string
+  confirm: string
+  onPassword: (value: string) => void
+  onConfirm: (value: string) => void
+  passwordTestId: string
+  confirmTestId: string
+}) {
+  return (
+    <>
+      <TextField id={passwordId} label={passwordLabel} type="password" value={password} onChange={onPassword} testId={passwordTestId} autoComplete="new-password" />
+      <TextField id={confirmId} label={confirmLabel} type="password" value={confirm} onChange={onConfirm} testId={confirmTestId} autoComplete="new-password" />
+    </>
+  )
+}
+
+/** Monospace groups. An empty value renders nothing, and a group does not wrap. */
+export function RecoveryKeyDisplay({ value, testId = 'recovery-key-display' }: { value: string; testId?: string }) {
+  const groups = value.split('-').filter((group) => group.length > 0)
+  if (groups.length === 0) return null
+  return (
+    <p className="ui-key" data-testid={testId} translate="no">
+      {groups.map((group, index) => (
+        <span className="ui-key-group" key={`${index}-${group}`}>{index > 0 ? `-${group}` : group}</span>
+      ))}
+    </p>
+  )
 }
 
 export function Checkbox({

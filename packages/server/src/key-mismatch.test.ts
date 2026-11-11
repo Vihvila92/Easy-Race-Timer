@@ -13,7 +13,7 @@ describe('mismatched key file', () => {
     expect(logged).not.toBe(translate('fi', 'file.keyMismatch'))
     expect(logged).not.toContain('ert.sqlite')
     expect(logged).not.toBe(BELONGS)
-    expect(translate('fi', 'file.keyMismatch')).toBe('Avaintiedosto ei kuulu tähän kisatiedostoon, tai kisatiedosto on vaurioitunut. Käytä kisatiedoston kanssa samaan aikaan tallennettua avaintiedostoa tai palauta varmuuskopio.')
+    expect(translate('fi', 'file.keyMismatch')).toBe('Avaintiedosto ei kuulu tähän kisatiedostoon tai kisatiedosto on vaurioitunut. Käytä kisatiedoston kanssa samaan aikaan tallennettua avaintiedostoa tai palauta varmuuskopio.')
     expect(BELONGS).toBe('This key file does not belong to this race file, or the race file is damaged. Use the key file that was saved together with the race file, or restore a backup.')
   })
 })

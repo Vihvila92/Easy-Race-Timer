@@ -22,6 +22,7 @@ tags:
   - name: results
   - name: privacy
   - name: sync
+  - name: keys
 paths:
   /api/v1/health:
     get:
@@ -39,6 +40,66 @@ paths:
                   ok: { type: boolean }
                   version: { type: string }
                   pinConfigured: { type: boolean }
+  /api/v1/keys/status:
+    get:
+      tags: [keys]
+      operationId: keyStatus
+      description: Whether the race file is locked, open for an admin, or waiting on a recovery key. No path and no secret.
+      responses:
+        '200':
+          description: Current key state
+  /api/v1/keys/unlock:
+    post:
+      tags: [keys]
+      operationId: unlockRaceFile
+      description: Open the race file with one admin password. The password is not logged.
+      responses:
+        '200':
+          description: File is open
+        '401':
+          description: The password did not open the file
+  /api/v1/keys/recover:
+    post:
+      tags: [keys]
+      operationId: recoverRaceFile
+      description: Open the race file with the printed recovery key. The key is not logged.
+      responses:
+        '200':
+          description: File is open and a new admin password is required
+  /api/v1/keys/password:
+    post:
+      tags: [keys]
+      operationId: changeAdminPassword
+      description: Replace one admin password. Refused until a new recovery key has been acknowledged.
+      responses:
+        '200':
+          description: Password saved
+        '409':
+          description: The new recovery key is not acknowledged yet
+  /api/v1/keys/recovery:
+    post:
+      tags: [keys]
+      operationId: regenerateRecoveryKey
+      description: Issue a new recovery key. The value is returned once for the print view and is not stored by the server.
+      responses:
+        '200':
+          description: New recovery key
+  /api/v1/keys/recovery/ack:
+    post:
+      tags: [keys]
+      operationId: acknowledgeRecoveryKey
+      description: Record that the operator has seen the current recovery key.
+      responses:
+        '200':
+          description: Normal use can continue
+  /api/v1/keys/rotate:
+    post:
+      tags: [keys]
+      operationId: rotateDataKey
+      description: Rotate the data key and return the new recovery key once for printing.
+      responses:
+        '200':
+          description: New key pair
   /api/v1/runtime:
     get:
       tags: [system]
@@ -808,6 +869,10 @@ components:
                       - KEY_PARAMS_REJECTED
                       - FILE_HEADER_INVALID
                       - KEY_FILE_MISMATCH
+                      - RACE_FILE_CORRUPT
+                      - RACE_FILE_NEWER
+                      - KEY_GATE
+                      - RECOVERY_UNACKNOWLEDGED
                       - PASSWORD_TOO_SHORT
                       - PASSWORD_TOO_LONG
                       - PASSWORD_COMMON

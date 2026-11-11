@@ -9,7 +9,7 @@ test.describe('theme control', () => {
   let server: RunningServer
 
   test.beforeAll(async () => {
-    server = await startServer(8101, path.join(mkdtempSync(path.join(tmpdir(), 'ert-theme-')), 'ert.sqlite'))
+    server = await startServer(path.join(mkdtempSync(path.join(tmpdir(), 'ert-theme-')), 'ert.sqlite'))
   })
 
   test.afterAll(async () => {

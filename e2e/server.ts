@@ -11,7 +11,34 @@ export interface RunningServer {
   dbFile: string
 }
 
-export async function startServer(port: number, dbFile: string): Promise<RunningServer> {
+let originPort = 0
+
+/** Base URL of the server started most recently in this process. */
+export function apiOrigin(): string {
+  return originPort ? `http://127.0.0.1:${originPort}` : ''
+}
+
+async function healthOk(port: number): Promise<boolean> {
+  try {
+    return (await fetch(`http://127.0.0.1:${port}/api/v1/health`)).ok
+  } catch {
+    return false
+  }
+}
+
+function readyPort(log: string): number | undefined {
+  const match = /ERT_READY (\{.*\})/.exec(log)
+  if (!match) return undefined
+  try {
+    const parsed = Number(new URL((JSON.parse(match[1]) as { url?: string }).url ?? '').port)
+    return parsed > 0 ? parsed : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/** Start the API. Port 0 asks the OS for a free port. A restart can pass the same port. */
+export async function startServer(dbFile: string, extraEnv: NodeJS.ProcessEnv = {}, port = 0): Promise<RunningServer> {
   const child = spawn(process.execPath, ['--import', 'tsx', 'packages/server/src/index.ts'], {
     cwd: root,
     env: {
@@ -23,6 +50,7 @@ export async function startServer(port: number, dbFile: string): Promise<Running
       ERT_TEST_MODE: '1',
       ERT_DB: dbFile,
       ERT_WEB_DIST: path.join(root, 'packages/web/dist'),
+      ...extraEnv,
       // One browser reloads the UI many times from this address. Production stays at 300 and 5.
       ERT_RATE_GLOBAL_MAX: '10000',
       ERT_RATE_STRICT_MAX: '10000',
@@ -39,12 +67,12 @@ export async function startServer(port: number, dbFile: string): Promise<Running
   const deadline = Date.now() + 20_000
   while (Date.now() < deadline) {
     if (child.exitCode != null) throw new Error(`server exited\n${log}`)
-    try {
-      const response = await fetch(`http://127.0.0.1:${port}/api/v1/health`)
-      if (response.ok) return { child, port, dbFile }
-    } catch {
-      await new Promise((resolve) => setTimeout(resolve, 200))
+    const chosen = readyPort(log)
+    if (chosen && await healthOk(chosen)) {
+      originPort = chosen
+      return { child, port: chosen, dbFile }
     }
+    await new Promise((resolve) => setTimeout(resolve, 200))
   }
   child.kill('SIGKILL')
   throw new Error(`server did not start\n${log}`)

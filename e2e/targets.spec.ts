@@ -12,7 +12,7 @@ test.describe('touch targets', () => {
   let server: RunningServer
 
   test.beforeAll(async () => {
-    server = await startServer(8102, path.join(mkdtempSync(path.join(tmpdir(), 'ert-targets-')), 'ert.sqlite'))
+    server = await startServer(path.join(mkdtempSync(path.join(tmpdir(), 'ert-targets-')), 'ert.sqlite'))
   })
 
   test.afterAll(async () => {

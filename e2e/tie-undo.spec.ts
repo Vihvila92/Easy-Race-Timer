@@ -3,13 +3,13 @@ import { expect, test } from './fixtures.ts'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { authorize, killServer, startServer, type RunningServer } from './server.ts'
+import { apiOrigin, authorize, killServer, startServer, type RunningServer } from './server.ts'
 
 test.describe('tie undo', () => {
   let server: RunningServer
 
   test.beforeAll(async () => {
-    server = await startServer(8099, path.join(mkdtempSync(path.join(tmpdir(), 'ert-tie-')), 'ert.sqlite'))
+    server = await startServer(path.join(mkdtempSync(path.join(tmpdir(), 'ert-tie-')), 'ert.sqlite'))
   })
 
   test.afterAll(async () => {
@@ -40,7 +40,7 @@ test.describe('tie undo', () => {
     await request.post('/api/v1/timing-events', { data: { id: 'T1', timeMs: start + 10_000, bib: 1, mode: 'time_first' } })
     await request.post('/api/v1/timing-events', { data: { id: 'T2', timeMs: start + 10_400, bib: 2, mode: 'time_first' } })
 
-    await page.goto('/#/ties')
+    await page.goto(`${apiOrigin()}/#/ties`)
     const card = page.getByTestId('tie-R1-0:10')
     await card.getByTestId('tie-up-2').focus()
     await page.keyboard.press('Enter')

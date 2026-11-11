@@ -72,21 +72,35 @@ async function saveTap(input: {
   await input.reload()
 }
 
-const CHECKLIST_NOTICES = ['before_start', 'unknown_bib', 'duplicate'] as const
+type NoticeFlag = 'before_start' | 'unknown_bib' | 'duplicate'
 
-function checklistNotice(flags: string[], bib: number | null, t: Text): string {
-  const notice = CHECKLIST_NOTICES.find((flag) => flags.includes(flag))
+/**
+ * One notice for a finish flag.
+ * The checklist mentions an unknown bib before a duplicate.
+ * The toast mentions a duplicate first, and only when the tap has a bib number.
+ * `finish.recorded` stays at the toast call: the checklist never falls through to it.
+ */
+function finishNotice(input: {
+  flags: string[]
+  bib: number | null
+  t: Text
+  order: readonly NoticeFlag[]
+  requireBib: boolean
+}): string | undefined {
+  const { flags, bib, t, order, requireBib } = input
+  const notice = order.find((flag) => flags.includes(flag) && (!requireBib || flag === 'before_start' || bib != null))
   if (notice === 'before_start') return t('finish.beforeStart', { bib: bib ?? '' })
   if (notice === 'unknown_bib') return t('finish.unknown', { bib: bib ?? '' })
   if (notice === 'duplicate') return t('finish.duplicate', { bib: bib ?? '' })
-  return t('finish.recorded')
+  return undefined
+}
+
+function checklistNotice(flags: string[], bib: number | null, t: Text): string {
+  return finishNotice({ flags, bib, t, order: ['before_start', 'unknown_bib', 'duplicate'], requireBib: false }) ?? ''
 }
 
 function toastNotice(flags: string[], numeric: number | null, t: Text): string {
-  if (flags.includes('before_start')) return t('finish.beforeStart', { bib: numeric ?? '' })
-  if (numeric != null && flags.includes('duplicate')) return t('finish.duplicate', { bib: numeric })
-  if (numeric != null && flags.includes('unknown_bib')) return t('finish.unknown', { bib: numeric })
-  return t('finish.recorded')
+  return finishNotice({ flags, bib: numeric, t, order: ['before_start', 'duplicate', 'unknown_bib'], requireBib: true }) ?? t('finish.recorded')
 }
 
 function FinishLists() {
