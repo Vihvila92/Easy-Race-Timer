@@ -36,7 +36,7 @@ function text(html: string): string {
   return holder.textContent ?? ''
 }
 
-const PAPER = 'Print it on paper. Do not save it as a PDF.'
+const PAPER = 'Print the recovery key on paper. Do not save it as a PDF.'
 
 describe('recovery guide', () => {
   it('shows the unrecoverable-data warning and the paper instruction', () => {
@@ -59,6 +59,19 @@ describe('recovery guide', () => {
     expect(fi['keys.guide.lost']).toContain('kisatiedosto')
     expect(fi['keys.guide.lost']).not.toContain('tietokanta')
     expect(fi['unlock.failed']).toBe('Tiedosto ei auennut. Tarkista salasana tai käytä tulostettua palautusavainta.')
+    expect(en['unlock.lead']).toBe('Type your admin password.')
+    expect(fi['unlock.lead']).toBe('Kirjoita oma ylläpitäjän salasanasi.')
+    expect(en['unlock.hint.password']).toContain('The program does not tell whose password was wrong.')
+    expect(fi['unlock.hint.password']).toContain('Ohjelma ei kerro, kenen salasana oli väärä.')
+    expect(en['keys.rotate']).toBe('Change the data key')
+    expect(en['keys.lead']).toContain('changing the data key')
+    expect(en['keys.oldCopies']).toContain('Changing the data key')
+    expect(en['keys.ack']).toBe('I have printed or written down this key')
+    expect(fi['keys.ack']).toBe('Olen tulostanut tai kirjoittanut ylös tämän avaimen')
+    expect(en['keys.rotateLeftover']).toContain('USB stick')
+    expect(fi['keys.rotateLeftover']).toContain('muistitikkua')
+    expect(fi['keys.guide.print'].startsWith('Tulostus.')).toBe(true)
+    expect(fi['keys.guide.print']).toContain('Tulosta palautusavain paperille.')
     expect(body).not.toContain('XXXX-XXXX')
   })
 })
