@@ -26,6 +26,8 @@ export interface ArgonChoice {
 
 export const keyHooks: {
   beforeAttach?: () => void
+  /** Test seam. Production leaves this unset. A false result stands in for a failed integrity check. */
+  integrityOk?: () => boolean
 } = {}
 
 interface HeldDek {
@@ -206,28 +208,39 @@ function rejectedKeyFile(error: unknown): boolean {
   return error.kind === 'open' && error.causeCode === 'SQLITE_NOTADB'
 }
 
+function logsMismatch(error: unknown): boolean {
+  if (error instanceof KeyError) return error.code === 'KEY_FILE_MISMATCH' || error.code === 'RACE_FILE_CORRUPT'
+  return rejectedKeyFile(error)
+}
+
 function rethrowOpen(error: unknown): never {
   if (error instanceof KeyError) throw error
   if (error instanceof RaceFileError && error.kind === 'newer') throw error
   if (rejectedKeyFile(error)) throw new KeyError('KEY_FILE_MISMATCH')
+  if (error instanceof RaceFileError && error.kind === 'open') throw new KeyError('RACE_FILE_CORRUPT')
   throw new KeyError('UNLOCK_FAILED')
+}
+
+function bindSession(db: AppDb, input: { envelope: Buffer; filePath: string; kind: 'password' | 'recovery'; slotIndex: 0 | 1 | 2 }): void {
+  const parsed = parseEnvelope(input.envelope)
+  const stored = db.get<{ file_id: string | null }>('SELECT file_id FROM schema_meta WHERE id = 1')?.file_id ?? ''
+  if (!fileIdsMatch(stored, parsed.fileId)) throw new KeyError('KEY_FILE_MISMATCH')
+  const columns = ensureKeyColumns(db.raw)
+  if (columns.keyGeneration !== parsed.keyGeneration) throw new KeyError('KEY_FILE_MISMATCH')
+  const intact = keyHooks.integrityOk ? keyHooks.integrityOk() : db.raw.pragma('integrity_check', { simple: true }) === 'ok'
+  if (!intact) throw new KeyError('RACE_FILE_CORRUPT')
+  resetAttempts(input.filePath)
+  db.keySession = sessionFor(columns.temporarySlot, input.kind, input.slotIndex)
+  if (columns.recoveryUnshown && db.keySession.kind === 'admin') {
+    db.keySession = { kind: 'recovery-unshown', slotIndex: db.keySession.slotIndex }
+  }
 }
 
 async function finishOpen(input: { filePath: string; envelope: Buffer; dek: Buffer; kind: 'password' | 'recovery'; slotIndex: 0 | 1 | 2 }): Promise<AppDb> {
   let db: AppDb | undefined
   try {
     db = await openDatabase(input.filePath, { dataKey: input.dek })
-    const parsed = parseEnvelope(input.envelope)
-    const stored = db.get<{ file_id: string | null }>('SELECT file_id FROM schema_meta WHERE id = 1')?.file_id ?? ''
-    if (!fileIdsMatch(stored, parsed.fileId)) throw new KeyError('KEY_FILE_MISMATCH')
-    const columns = ensureKeyColumns(db.raw)
-    if (columns.keyGeneration !== parsed.keyGeneration) throw new KeyError('KEY_FILE_MISMATCH')
-    if (db.raw.pragma('integrity_check', { simple: true }) !== 'ok') throw new KeyError('UNLOCK_FAILED')
-    resetAttempts(input.filePath)
-    db.keySession = sessionFor(columns.temporarySlot, input.kind, input.slotIndex)
-    if (columns.recoveryUnshown && db.keySession.kind === 'admin') {
-      db.keySession = { kind: 'recovery-unshown', slotIndex: db.keySession.slotIndex }
-    }
+    bindSession(db, input)
     logUnlock('unlock ok', 0)
     keyHooks.beforeAttach?.()
     const opened = db
@@ -235,6 +248,7 @@ async function finishOpen(input: { filePath: string; envelope: Buffer; dek: Buff
     return opened
   } catch (error) {
     closeQuiet(db)
+    if (logsMismatch(error)) logUnlock('unlock mismatch')
     rethrowOpen(error)
   }
 }

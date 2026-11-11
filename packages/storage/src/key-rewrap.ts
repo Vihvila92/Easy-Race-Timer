@@ -20,6 +20,7 @@ function copyDek(db: AppDb): Buffer {
 
 function requireRewrapSession(db: AppDb, slot: 0 | 1): KeySession {
   const session = db.keySession
+  if (session?.kind === 'recovery-unshown') throw new KeyError('RECOVERY_UNACKNOWLEDGED')
   if (session?.kind === 'admin' || session?.kind === 'recovery-gate') return session
   if (session?.kind === 'temporary-password' && session.slotIndex === slot) return session
   throw new KeyError('UNLOCK_FAILED')
