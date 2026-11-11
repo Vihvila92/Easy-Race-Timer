@@ -5,6 +5,7 @@ import { plaintextQuarantinePending } from '@ert/storage'
 import { isLoopbackAddress } from './access.js'
 import { workspace, type HttpCtx } from './http-context.js'
 import { issueToken, sessionCookie } from './session.js'
+import type { RaceService } from './service.js'
 
 const clockBody = z.object({ at: z.string().nullable().optional() })
 
