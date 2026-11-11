@@ -5,7 +5,9 @@ import { AppError } from '@ert/core'
 import {
   type AppDb,
   acknowledgeRecoveryKeyShown,
+  confirmActingPassword,
   KeyError,
+  RaceFileError,
   regenerateRecoveryKey,
   rewrapAdminSlot,
   rotateDataKey,
@@ -13,6 +15,7 @@ import {
   unlockWithRecovery,
 } from '@ert/storage'
 import { envelopeReady, type DatabaseSlot } from './database-slot.js'
+import { isLoopbackAddress } from './access.js'
 import { sessionSecret } from './session.js'
 
 type KeyStateName =
@@ -32,11 +35,14 @@ export interface KeyRouteContext {
 }
 
 const passwordBody = z.object({
-  target: z.enum(['self', 'other']),
+  target: z.enum(['self', 'other']).optional(),
+  slot: z.union([z.literal(0), z.literal(1)]).optional(),
   password: z.string(),
   confirm: z.string(),
   currentPassword: z.string().optional(),
+  actingPassword: z.string().optional(),
 })
+const recoveryIssueBody = z.object({ actingPassword: z.string() })
 
 const unlockBody = z.object({ password: z.string() })
 const recoveryBody = z.object({ recoveryKey: z.string() })
@@ -47,6 +53,11 @@ const rotateBody = z.object({
   password: z.string(),
   confirm: z.string(),
 })
+
+export function raceApiOpen(db: AppDb, racePath: string): boolean {
+  const { state } = describeKeys(db, racePath)
+  return state === 'admin' || state === 'dev'
+}
 
 function describeKeys(db: AppDb, racePath: string): { state: KeyStateName } {
   if (db.filePath === ':memory:' && envelopeReady(racePath)) return { state: 'locked' }
@@ -64,6 +75,9 @@ function parseBody<T>(schema: z.ZodType<T>, body: unknown): T {
 }
 
 function sendKeyError(reply: FastifyReply, error: unknown): unknown {
+  if (error instanceof RaceFileError && error.kind === 'newer') {
+    return reply.status(409).send({ error: { code: 'RACE_FILE_NEWER', message: 'This race file was saved by a newer version.' } })
+  }
   if (!(error instanceof KeyError)) throw error
   const status = new AppError(error.code, error.message).status
   const retryAfterMs = error.retryAfterMs
@@ -76,16 +90,19 @@ function sendKeyError(reply: FastifyReply, error: unknown): unknown {
   })
 }
 
+function closePrevious(previous: AppDb): void {
+  try {
+    previous.raw.close()
+  } catch {
+    // The previous connection may already be closed.
+  }
+}
+
 function adopt(ctx: KeyRouteContext, opened: AppDb): void {
   const previous = ctx.slot.current
+  if (previous === opened) return
   ctx.slot.current = opened
-  if (previous !== opened && previous.filePath === ':memory:') {
-    try {
-      previous.raw.close()
-    } catch {
-      // The stand-in database may already be closed.
-    }
-  }
+  closePrevious(previous)
   ctx.secretBox.current = sessionSecret(opened)
   ctx.onOpen?.(opened)
 }
@@ -116,12 +133,27 @@ async function openWithRecovery(ctx: KeyRouteContext, recoveryKey: string): Prom
   return describeKeys(opened, ctx.racePath)
 }
 
+function chosenSlot(body: z.infer<typeof passwordBody>): 0 | 1 {
+  if (body.slot === 0 || body.slot === 1) return body.slot
+  throw new AppError('VALIDATION_ERROR', 'The request was not understood')
+}
+
+async function resetFromRecovery(db: AppDb, body: z.infer<typeof passwordBody>): Promise<{ singleAdmin: boolean }> {
+  await rewrapAdminSlot(db, chosenSlot(body), { password: body.password, confirm: body.confirm })
+  return { singleAdmin: false }
+}
+
 async function changePassword(db: AppDb, body: z.infer<typeof passwordBody>): Promise<{ singleAdmin: boolean }> {
+  if (db.keySession?.kind === 'recovery-gate') return resetFromRecovery(db, body)
   const self = actingSlot(db)
-  const slot = body.target === 'other' ? (self === 0 ? 1 : 0) : self
-  const currentPassword = body.target === 'self' ? body.currentPassword : undefined
-  await rewrapAdminSlot(db, slot, { password: body.password, confirm: body.confirm }, currentPassword)
-  return { singleAdmin: body.target === 'other' }
+  const other = body.target === 'other'
+  const slot = other ? (self === 0 ? 1 : 0) : self
+  if (other) {
+    if (!body.actingPassword) throw new AppError('VALIDATION_ERROR', 'The request was not understood')
+    await confirmActingPassword(db, body.actingPassword)
+  }
+  await rewrapAdminSlot(db, slot, { password: body.password, confirm: body.confirm }, other ? undefined : body.currentPassword)
+  return { singleAdmin: other }
 }
 
 function shownKey(buffer: Buffer): string {
@@ -130,7 +162,8 @@ function shownKey(buffer: Buffer): string {
   return printed
 }
 
-async function issueRecovery(db: AppDb): Promise<{ recoveryKey: string; generation: number }> {
+async function issueRecovery(db: AppDb, actingPassword: string): Promise<{ recoveryKey: string; generation: number }> {
+  await confirmActingPassword(db, actingPassword)
   const issued = await regenerateRecoveryKey(db)
   return { recoveryKey: shownKey(issued.recoveryKey), generation: issued.generation }
 }
@@ -166,7 +199,10 @@ function registerChangeRoutes(app: FastifyInstance, ctx: KeyRouteContext, status
     const extra = await changePassword(ctx.slot.current, parseBody(passwordBody, request.body))
     return { ...status(), ...extra }
   }))
-  app.post('/api/v1/keys/recovery', ctx.strictLimit, async (_request, reply) => guard(reply, () => issueRecovery(ctx.slot.current)))
+  app.post('/api/v1/keys/recovery', ctx.strictLimit, async (request, reply) => guard(reply, () => {
+    const body = parseBody(recoveryIssueBody, request.body)
+    return issueRecovery(ctx.slot.current, body.actingPassword)
+  }))
   app.post('/api/v1/keys/recovery/ack', ctx.strictLimit, async (request, reply) => guard(reply, async () => {
     await acknowledgeRecoveryKeyShown(ctx.slot.current, parseBody(ackBody, request.body).generation)
     return status()
@@ -177,8 +213,21 @@ function registerChangeRoutes(app: FastifyInstance, ctx: KeyRouteContext, status
   })
 }
 
+function registerKeyGuards(app: FastifyInstance): void {
+  app.addHook('onRequest', async (request, reply) => {
+    if (request.url.split('?')[0].startsWith('/api/v1/keys')) reply.header('cache-control', 'no-store')
+  })
+  app.addHook('preHandler', async (request, reply) => {
+    if (reply.sent) return
+    const url = request.routeOptions.url ?? ''
+    if (!url.startsWith('/api/v1/keys') || isLoopbackAddress(request.ip)) return
+    reply.status(403).send({ error: { code: 'VALIDATION_ERROR', message: 'Not allowed' } })
+  })
+}
+
 export function registerKeyRoutes(app: FastifyInstance, ctx: KeyRouteContext): void {
   const status = () => describeKeys(ctx.slot.current, ctx.racePath)
+  registerKeyGuards(app)
   app.get('/api/v1/keys/status', async () => status())
   registerUnlockRoutes(app, ctx)
   registerChangeRoutes(app, ctx, status)

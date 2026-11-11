@@ -28,6 +28,8 @@ export const keyHooks: {
   beforeAttach?: () => void
   /** Test seam. Production leaves this unset. A false result stands in for a failed integrity check. */
   integrityOk?: () => boolean
+  /** Test seam. Thrown before the database opens. Production leaves this unset. */
+  openFailure?: unknown
 } = {}
 
 interface HeldDek {
@@ -208,8 +210,13 @@ function rejectedKeyFile(error: unknown): boolean {
   return error.kind === 'open' && error.causeCode === 'SQLITE_NOTADB'
 }
 
+function unreadableFile(error: unknown): boolean {
+  return error instanceof RaceFileError && error.kind === 'open' && error.causeCode !== 'SQLITE_NOTADB'
+}
+
 function logsMismatch(error: unknown): boolean {
   if (error instanceof KeyError) return error.code === 'KEY_FILE_MISMATCH' || error.code === 'RACE_FILE_CORRUPT'
+  if (unreadableFile(error)) return true
   return rejectedKeyFile(error)
 }
 
@@ -239,6 +246,7 @@ function bindSession(db: AppDb, input: { envelope: Buffer; filePath: string; kin
 async function finishOpen(input: { filePath: string; envelope: Buffer; dek: Buffer; kind: 'password' | 'recovery'; slotIndex: 0 | 1 | 2 }): Promise<AppDb> {
   let db: AppDb | undefined
   try {
+    if (keyHooks.openFailure) throw keyHooks.openFailure
     db = await openDatabase(input.filePath, { dataKey: input.dek })
     bindSession(db, input)
     logUnlock('unlock ok', 0)

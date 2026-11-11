@@ -31,6 +31,9 @@ export function TextField({
   type = 'text',
   inputMode,
   autoComplete,
+  spellCheck,
+  autoCorrect,
+  autoCapitalize,
   testId,
   hint,
   error,
@@ -44,6 +47,9 @@ export function TextField({
   type?: 'text' | 'time' | 'email' | 'password'
   inputMode?: 'text' | 'numeric' | 'decimal' | 'tel' | 'email'
   autoComplete?: string
+  spellCheck?: boolean
+  autoCorrect?: 'off' | 'on'
+  autoCapitalize?: 'off' | 'none' | 'sentences' | 'words' | 'characters'
   testId?: string
   hint?: string
   error?: string
@@ -62,6 +68,9 @@ export function TextField({
         value={value}
         inputMode={inputMode}
         autoComplete={autoComplete}
+        spellCheck={spellCheck}
+        autoCorrect={autoCorrect}
+        autoCapitalize={autoCapitalize}
         data-testid={testId}
         aria-invalid={error ? true : undefined}
         aria-describedby={describedBy || undefined}

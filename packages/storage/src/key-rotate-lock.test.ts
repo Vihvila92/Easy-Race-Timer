@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { KeyError } from './errors.js'
+import { KeyError, RaceFileError } from './errors.js'
 import { setKeyLogger } from './key-log.js'
 import { keyFilePath } from './key-file.js'
 import { acknowledgeRecoveryKeyShown, recoveryHooks, regenerateRecoveryKey, rewrapAdminSlot } from './key-rewrap.js'
@@ -26,6 +26,7 @@ function tempFile(): string {
 afterEach(() => {
   setKeyLogger(null)
   keyHooks.integrityOk = undefined
+  keyHooks.openFailure = undefined
   recoveryHooks.afterFlag = undefined
   recoveryHooks.afterEnvelope = undefined
   for (const dir of dirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true })
@@ -96,6 +97,12 @@ describe('key file mismatch', () => {
     expect(JSON.stringify(error)).not.toContain('KEY_FILE_MISMATCH')
     expect(logs).toContain(JSON.stringify({ event: 'unlock mismatch' }))
     expectQuiet(logs, [file, ADMIN_A, fileId, 'path', 'password', 'file_id'])
+    keyHooks.openFailure = new RaceFileError('ert.sqlite', 'open')
+    const unread = watchLogs()
+    const unreadable = await rejected(file, ADMIN_A)
+    expect(unreadable).toMatchObject({ code: 'RACE_FILE_CORRUPT' })
+    expect(unread).toContain(JSON.stringify({ event: 'unlock mismatch' }))
+    expectQuiet(unread, [file, ADMIN_A, fileId, 'path', 'password', 'file_id'])
   })
 })
 

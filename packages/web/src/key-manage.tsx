@@ -17,13 +17,17 @@ function PasswordChange({ onSingleAdmin }: { onSingleAdmin: () => void }) {
   const { t } = useApp()
   const [target, setTarget] = useState<'self' | 'other'>('self')
   const [currentPassword, setCurrent] = useState('')
+  const [actingPassword, setActing] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [notice, setNotice] = useState<MessageKey | undefined>()
   const save = () => {
     setNotice(undefined)
-    changeKeyPassword({ target, password, confirm, currentPassword: target === 'self' ? currentPassword : undefined }).then((status) => {
+    const acting = target === 'other' ? actingPassword : undefined
+    const current = target === 'self' ? currentPassword : undefined
+    changeKeyPassword({ target, password, confirm, currentPassword: current, actingPassword: acting }).then((status) => {
       setCurrent('')
+      setActing('')
       setPassword('')
       setConfirm('')
       if (status.singleAdmin) onSingleAdmin()
@@ -37,7 +41,7 @@ function PasswordChange({ onSingleAdmin }: { onSingleAdmin: () => void }) {
         { value: 'self', label: t('keys.mySlot') },
         { value: 'other', label: t('keys.otherSlot') },
       ]} />
-      {target === 'self' ? <TextField id="current-password" label={t('keys.currentPassword')} type="password" value={currentPassword} onChange={setCurrent} testId="current-password" autoComplete="current-password" /> : null}
+      {target === 'self' ? <TextField id="current-password" label={t('keys.currentPassword')} type="password" value={currentPassword} onChange={setCurrent} testId="current-password" autoComplete="current-password" /> : <TextField id="acting-change" label={t('keys.actingPassword')} type="password" value={actingPassword} onChange={setActing} testId="acting-change" autoComplete="current-password" />}
       <TextField id="new-password" label={t('keys.newPassword')} type="password" value={password} onChange={setPassword} testId="new-password" autoComplete="new-password" />
       <TextField id="confirm-password" label={t('keys.confirmPassword')} type="password" value={confirm} onChange={setConfirm} testId="confirm-password" autoComplete="new-password" />
       <Notice code={notice} />
@@ -80,22 +84,36 @@ function RotationForm({ onIssued }: { onIssued: (issued: IssuedKey) => void }) {
   )
 }
 
+function RegenerateKey({ onIssued }: { onIssued: (issued: IssuedKey) => void }) {
+  const { t } = useApp()
+  const [actingPassword, setActing] = useState('')
+  const [notice, setNotice] = useState<MessageKey | undefined>()
+  const save = () => {
+    setNotice(undefined)
+    regenerateKey(actingPassword).then((issued) => {
+      setActing('')
+      onIssued(issued)
+    }).catch((error: unknown) => setNotice(keyFailure(error).key))
+  }
+  return (
+    <section data-testid="key-regenerate" className="ui-section">
+      <TextField id="regenerate-password" label={t('keys.actingPassword')} type="password" value={actingPassword} onChange={setActing} testId="regenerate-password" autoComplete="current-password" />
+      <Notice code={notice} />
+      <Button data-testid="recovery-regenerate" onClick={save}>{t('keys.regenerate')}</Button>
+    </section>
+  )
+}
+
 export function KeyManage({ state, onChanged }: { state: KeyStateName; onChanged: () => void }) {
   const { t } = useApp()
   const [issued, setIssued] = useState<IssuedKey | null>(null)
   const [singleAdmin, setSingleAdmin] = useState(false)
-  const [notice, setNotice] = useState<MessageKey | undefined>()
   const clear = useCallback(() => setIssued(null), [])
-  const regenerate = () => {
-    setNotice(undefined)
-    regenerateKey().then(setIssued).catch((error: unknown) => setNotice(keyFailure(error).key))
-  }
   if (issued) {
     return (
       <RecoveryPrint
         recoveryKey={issued.recoveryKey}
         generation={issued.generation}
-        onClear={clear}
         onAcknowledged={() => { clear(); onChanged() }}
         extra={(
           <>
@@ -112,10 +130,9 @@ export function KeyManage({ state, onChanged }: { state: KeyStateName; onChanged
       <p className="lead">{t('keys.lead')}</p>
       {state === 'temporary-password' ? <Banner tone="warning" testId="keys-temporary">{t('keys.temporaryPassword')}</Banner> : null}
       {singleAdmin ? <Banner tone="warning" testId="keys-single-admin">{t('keys.singleAdmin')}</Banner> : null}
-      <Notice code={notice} />
       <PasswordChange onSingleAdmin={() => setSingleAdmin(true)} />
       <RecoveryGuide />
-      <Button data-testid="recovery-regenerate" onClick={regenerate}>{t('keys.regenerate')}</Button>
+      <RegenerateKey onIssued={setIssued} />
       <RotationForm onIssued={setIssued} />
     </section>
   )

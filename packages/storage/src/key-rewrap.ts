@@ -140,6 +140,19 @@ async function rewrapLocked(input: {
   }
 }
 
+/** Check the acting admin's password. The password buffer is cleared before return. */
+export async function confirmActingPassword(db: AppDb, password: string): Promise<void> {
+  const slot = db.keySession?.slotIndex
+  if (slot !== 0 && slot !== 1) throw new KeyError('UNLOCK_FAILED')
+  const dek = copyDek(db)
+  try {
+    const bytes = readKeyBytes(keyFilePath(db.filePath))
+    await confirmCurrent(bytes, parseEnvelope(bytes).slots[slot], password, dek)
+  } finally {
+    dek.fill(0)
+  }
+}
+
 /** Replace one admin wrap. The read and the write share one in-process key-file lock. */
 export async function rewrapAdminSlot(db: AppDb, slot: 0 | 1, next: ConfirmedPassword, currentPassword?: string): Promise<void> {
   const session = requireRewrapSession(db, slot)

@@ -21,6 +21,7 @@ vi.mock('./context.js', () => ({
 
 vi.mock('./key-client.js', () => ({
   acknowledgeKey: vi.fn(async () => ({ state: 'admin' })),
+  regenerateKey: vi.fn(async () => ({ recoveryKey: 'XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-CCCC', generation: 4 })),
   keyFailure: () => ({ key: 'unlock.failed' }),
   unlockWithAdminPassword: vi.fn(),
   unlockWithPaper: vi.fn(),
@@ -29,6 +30,8 @@ vi.mock('./key-client.js', () => ({
 
 const { RecoveryGuide, RecoveryPrint } = await import('./recovery-view.js')
 const { UnlockForm } = await import('./unlock-view.js')
+const { KeyManage } = await import('./key-manage.js')
+const { acknowledgeKey } = await import('./key-client.js')
 
 function text(html: string): string {
   const holder = document.createElement('div')
@@ -82,7 +85,6 @@ describe('print view', () => {
     const printed = renderToStaticMarkup(createElement(RecoveryPrint, {
       recoveryKey: secret,
       generation: 1,
-      onClear: () => undefined,
       onAcknowledged: () => undefined,
     }))
     expect(text(printed)).toContain(secret)
@@ -100,7 +102,6 @@ describe('print view', () => {
       root.render(createElement(RecoveryPrint, {
         recoveryKey: secret,
         generation: 1,
-        onClear: () => undefined,
         onAcknowledged: () => undefined,
       }))
     })
@@ -112,6 +113,37 @@ describe('print view', () => {
     await act(async () => {
       root.unmount()
     })
+    expect(host.textContent).not.toContain(secret)
+    host.remove()
+  })
+})
+
+describe('key management print', () => {
+  it('keeps the acknowledgement step after printing', async () => {
+    const secret = 'XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-CCCC'
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+    await act(async () => {
+      root.render(createElement(KeyManage, { state: 'admin', onChanged: () => undefined }))
+    })
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>('[data-testid="recovery-regenerate"]')?.click()
+    })
+    expect(host.textContent).toContain(secret)
+    await act(async () => {
+      window.dispatchEvent(new Event('afterprint'))
+    })
+    expect(host.textContent).not.toContain(secret)
+    expect(host.querySelector('[data-testid="recovery-ack-submit"]')).toBeTruthy()
+    const box = host.querySelector<HTMLInputElement>('[data-testid="recovery-ack"]')
+    await act(async () => { box?.click() })
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>('[data-testid="recovery-ack-submit"]')?.click()
+    })
+    expect(acknowledgeKey).toHaveBeenCalledWith(4)
+    expect(host.querySelector('[data-testid="key-manage"]')).toBeTruthy()
+    await act(async () => { root.unmount() })
     expect(host.textContent).not.toContain(secret)
     host.remove()
   })

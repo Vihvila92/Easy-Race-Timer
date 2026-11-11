@@ -3,7 +3,7 @@ import type { FastifyInstance } from 'fastify'
 import type { AppDb } from '@ert/storage'
 import { buildContext, DEFAULT_GLOBAL_MAX, DEFAULT_RECORDING_MAX, DEFAULT_STRICT_MAX, keyRacePath } from './app-boot.js'
 import type { DatabaseSlot } from './database-slot.js'
-import { registerRequestGuards, registerErrorHandler, registerAccessGuard } from './http-guard.js'
+import { registerRequestGuards, registerErrorHandler, registerUseGate, registerAccessGuard } from './http-guard.js'
 import { registerLaunchRoute, registerLiveSocket } from './live-socket.js'
 import { registerKeyRoutes } from './key-routes.js'
 import type { LaunchCodes } from './launch-auth.js'
@@ -45,6 +45,7 @@ export async function createApp(options: AppOptions): Promise<{ app: FastifyInst
   const ctx = await buildContext(options)
   registerRequestGuards(ctx.app, Boolean(options.launch))
   registerErrorHandler(ctx.app)
+  registerUseGate(ctx, keyRacePath(ctx))
   registerAccessGuard(ctx)
   registerRaceRoutes(ctx)
   registerKeyRoutes(ctx.app, {

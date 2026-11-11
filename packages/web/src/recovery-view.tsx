@@ -24,13 +24,11 @@ export function RecoveryGuide() {
 export function RecoveryPrint({
   recoveryKey,
   generation,
-  onClear,
   onAcknowledged,
   extra,
 }: {
   recoveryKey: string
   generation: number
-  onClear: () => void
   onAcknowledged: () => void
   extra?: ReactNode
 }) {
@@ -39,16 +37,10 @@ export function RecoveryPrint({
   const [acked, setAcked] = useState(false)
   const [notice, setNotice] = useState('')
   useEffect(() => {
-    const clear = () => {
-      setPrinted('')
-      onClear()
-    }
-    window.addEventListener('afterprint', clear)
-    return () => {
-      window.removeEventListener('afterprint', clear)
-      setPrinted('')
-    }
-  }, [onClear])
+    const hide = () => setPrinted('')
+    window.addEventListener('afterprint', hide)
+    return () => window.removeEventListener('afterprint', hide)
+  }, [])
   const confirm = () => {
     acknowledgeKey(generation).then(() => onAcknowledged()).catch((error: unknown) => {
       const failure = keyFailure(error)

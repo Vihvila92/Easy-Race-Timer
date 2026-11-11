@@ -30,6 +30,8 @@ Jokainen virhevastaus on JSON:
 | `FILE_HEADER_INVALID` | 400 | Avaintiedoston taika, versio, pituus, varatut tavut tai nonce-pituus on väärin. |
 | `KEY_FILE_MISMATCH` | 400 | Avaintiedosto ei vastaa tätä kisatiedostoa. Salasana ei ole syy. |
 | `RACE_FILE_CORRUPT` | 400 | Kisatiedostoa ei voi lukea. Palauta varmuuskopio. Tämä ei ole väärä salasana eikä väärä avaintiedosto. |
+| `RACE_FILE_NEWER` | 409 | Kisatiedosto on tallennettu uudemmalla ohjelmalla. Päivitä ohjelma ennen avaamista. |
+| `KEY_GATE` | 423 | Kisatiedosto ei ole avoinna normaaliin käyttöön. |
 | `RECOVERY_UNACKNOWLEDGED` | 409 | Uutta palautusavainta ei ole vielä kuitattu. Salasanan vaihto odottaa kuittausta. |
 | `PASSWORD_TOO_SHORT` | 422 | Salasanassa on alle 10 merkkiä NFKC-muodon jälkeen. |
 | `PASSWORD_TOO_LONG` | 422 | Salasanassa on yli 128 merkkiä tai yli 512 UTF-8-tavua. |

@@ -462,6 +462,7 @@ These are the strings for the screens. `file.keyMismatch` is in `packages/i18n/l
 | `UNLOCK_FAILED` | Wrong password, checksum-valid wrong recovery key, GCM failure, body integrity failure, or a backoff wait. No slot id in the body. `retryAfterMs` is allowed during a wait. The message tells the operator the next step. The wait sentence includes the number of seconds. |
 | `KEY_FILE_MISMATCH` | `ert.keys` does not belong to this race file. This is not `UNLOCK_FAILED`. |
 | `RACE_FILE_CORRUPT` | The race file itself cannot be read, or the integrity check fails after a slot opens. This is not `KEY_FILE_MISMATCH`. |
+| `RACE_FILE_NEWER` | The race file was saved by a newer version of the program. |
 | `RECOVERY_UNACKNOWLEDGED` | A password change arrived before the new recovery key was acknowledged. |
 | `RECOVERY_KEY_CHECKSUM` | Recovery key fails the alphabet or the checksum. No KDF and no GCM. |
 | `KEY_PARAMS_REJECTED` | Any slot is below the Argon2id minimum, above the ceiling, or using a KDF the slot type forbids. No KDF. |

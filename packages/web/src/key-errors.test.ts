@@ -7,6 +7,7 @@ const API = {
   corrupt: 'RACE_FILE_CORRUPT',
   'key-mismatch': 'KEY_FILE_MISMATCH',
   'recovery-unacknowledged': 'RECOVERY_UNACKNOWLEDGED',
+  newer: 'RACE_FILE_NEWER',
 } as const
 
 describe('RaceFileError', () => {

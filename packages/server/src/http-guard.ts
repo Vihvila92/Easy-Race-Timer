@@ -5,6 +5,7 @@ import { isLoopbackAddress, routeAccess } from './access.js'
 import { allowedOriginsFromEnv, desktopHostAllowed, desktopOriginAllowed, hostAllowed, jsonContentType, originAllowed } from './guard.js'
 import { launchCredentialMatches } from './launch-auth.js'
 import { headerValue, type HttpCtx } from './http-context.js'
+import { raceApiOpen } from './key-routes.js'
 
 function listenPort(app: FastifyInstance): number | null {
   const address = app.server.address()
@@ -111,5 +112,20 @@ export function registerAccessGuard(ctx: HttpCtx): void {
     if (!url || (!url.startsWith('/api/') && url !== '/ws')) return
     if (launchRejected(reply, ctx, request)) return
     accessRejected(reply, request, ctx.authenticated)
+  })
+}
+
+function gateExempt(url: string): boolean {
+  return url.startsWith('/api/v1/keys') || url === '/api/v1/health' || url === '/api/v1/time'
+}
+
+/** Race routes stay closed until an admin session is open. Key, health and time stay available. */
+export function registerUseGate(ctx: HttpCtx, racePath: string): void {
+  ctx.app.addHook('preHandler', async (request, reply) => {
+    if (reply.sent) return
+    const url = request.routeOptions.url ?? ''
+    if (!url.startsWith('/api/') || gateExempt(url)) return
+    if (raceApiOpen(ctx.slot.current, racePath)) return
+    reply.status(423).send({ error: { code: 'KEY_GATE', message: 'Open the race file first.' } })
   })
 }

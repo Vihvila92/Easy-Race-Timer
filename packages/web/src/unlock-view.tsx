@@ -46,7 +46,7 @@ export function UnlockForm({ onUnlocked }: { onUnlocked: () => void }) {
       <p className="lead">{t('unlock.lead')}</p>
       <HintFrame hintKey={hint} testId="unlock-hint">
         {mode === 'recovery' ? (
-          <TextField id="recovery-key" label={t('unlock.recoveryKey')} value={form.secret} onChange={form.setSecret} testId="recovery-key" autoComplete="off" />
+          <TextField id="recovery-key" label={t('unlock.recoveryKey')} value={form.secret} onChange={form.setSecret} testId="recovery-key" autoComplete="off" spellCheck={false} autoCorrect="off" autoCapitalize="characters" />
         ) : (
           <TextField id="unlock-password" label={t('unlock.password')} type="password" value={form.secret} onChange={form.setSecret} testId="unlock-password" autoComplete="current-password" />
         )}
@@ -75,8 +75,8 @@ export function RecoveryGate({ onDone }: { onDone: () => void }) {
   const [notice, setNotice] = useState<MessageKey | undefined>()
   const save = () => {
     setNotice(undefined)
-    changeKeyPassword({ target: 'self', password, confirm }).then(async () => {
-      if (otherLost) await changeKeyPassword({ target: 'other', password: other, confirm: otherConfirm })
+    changeKeyPassword({ slot: 0, password, confirm }).then(async () => {
+      if (otherLost) await changeKeyPassword({ target: 'other', actingPassword: password, password: other, confirm: otherConfirm })
       onDone()
     }).catch((error: unknown) => setNotice(keyFailure(error).key))
   }

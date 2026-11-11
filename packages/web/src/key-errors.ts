@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import type { MessageKey } from '@ert/i18n'
 
-export const RACE_FILE_CODES = ['corrupt', 'key-mismatch', 'recovery-unacknowledged'] as const
+export const RACE_FILE_CODES = ['corrupt', 'key-mismatch', 'recovery-unacknowledged', 'newer'] as const
 
 export type RaceFileErrorCode = (typeof RACE_FILE_CODES)[number]
 
@@ -9,6 +9,7 @@ const RACE_FILE_I18N: Record<RaceFileErrorCode, MessageKey> = {
   corrupt: 'file.corrupt',
   'key-mismatch': 'file.keyMismatch',
   'recovery-unacknowledged': 'keys.acknowledgeFirst',
+  newer: 'file.newer',
 }
 
 /** A user-facing open or key error. The view translates `i18nKey`; logs stay elsewhere. */
@@ -26,6 +27,7 @@ const API_RACE_FILE: Record<string, RaceFileErrorCode> = {
   RACE_FILE_CORRUPT: 'corrupt',
   KEY_FILE_MISMATCH: 'key-mismatch',
   RECOVERY_UNACKNOWLEDGED: 'recovery-unacknowledged',
+  RACE_FILE_NEWER: 'newer',
 }
 
 const OTHER_KEYS: Record<string, MessageKey> = {

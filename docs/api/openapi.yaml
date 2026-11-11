@@ -870,6 +870,8 @@ components:
                       - FILE_HEADER_INVALID
                       - KEY_FILE_MISMATCH
                       - RACE_FILE_CORRUPT
+                      - RACE_FILE_NEWER
+                      - KEY_GATE
                       - RECOVERY_UNACKNOWLEDGED
                       - PASSWORD_TOO_SHORT
                       - PASSWORD_TOO_LONG

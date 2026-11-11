@@ -55,12 +55,19 @@ export function unlockWithPaper(recoveryKey: string): Promise<KeyStatus> {
   return api<KeyStatus>('/api/v1/keys/recover', { method: 'POST', body: JSON.stringify({ recoveryKey }) })
 }
 
-export function changeKeyPassword(body: { target: 'self' | 'other'; password: string; confirm: string; currentPassword?: string }): Promise<KeyStatus> {
+export function changeKeyPassword(body: {
+  target?: 'self' | 'other'
+  slot?: 0 | 1
+  password: string
+  confirm: string
+  currentPassword?: string
+  actingPassword?: string
+}): Promise<KeyStatus> {
   return api<KeyStatus>('/api/v1/keys/password', { method: 'POST', body: JSON.stringify(body) })
 }
 
-export function regenerateKey(): Promise<IssuedKey> {
-  return api<IssuedKey>('/api/v1/keys/recovery', { method: 'POST', body: '{}' })
+export function regenerateKey(actingPassword: string): Promise<IssuedKey> {
+  return api<IssuedKey>('/api/v1/keys/recovery', { method: 'POST', body: JSON.stringify({ actingPassword }) })
 }
 
 export function acknowledgeKey(generation: number): Promise<KeyStatus> {
