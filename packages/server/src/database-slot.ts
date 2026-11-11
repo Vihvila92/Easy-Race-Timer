@@ -6,6 +6,8 @@ import { keyFilePath } from '@ert/storage'
 /** The live race database. Unlock replaces `current` so callers keep one reference. */
 export interface DatabaseSlot {
   current: AppDb
+  /** This process opened the memory stand-in because a key envelope was present. */
+  startedLocked?: boolean
 }
 
 /** Forwards every read and write to whichever database is current. */

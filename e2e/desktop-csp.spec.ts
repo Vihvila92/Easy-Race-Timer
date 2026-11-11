@@ -9,7 +9,7 @@ test.describe('desktop UI content security policy', () => {
   let server: RunningServer
 
   test.beforeAll(async () => {
-    server = await startServer(8096, path.join(mkdtempSync(path.join(tmpdir(), 'ert-csp-')), 'ert.sqlite'))
+    server = await startServer(path.join(mkdtempSync(path.join(tmpdir(), 'ert-csp-')), 'ert.sqlite'))
   })
 
   test.afterAll(async () => {

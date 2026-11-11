@@ -4,7 +4,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { screenshotDir } from './screenshot-dir.ts'
-import { authorize, killServer, startServer, type RunningServer } from './server.ts'
+import { apiOrigin, authorize, killServer, startServer, type RunningServer } from './server.ts'
 
 const out = screenshotDir()
 const dir = path.resolve('testdata/kuulan-holkka')
@@ -13,7 +13,7 @@ test.describe('screenshots', () => {
   let server: RunningServer
 
   test.beforeAll(async () => {
-    server = await startServer(8099, path.join(mkdtempSync(path.join(tmpdir(), 'ert-shot-')), 'ert.sqlite'))
+    server = await startServer(path.join(mkdtempSync(path.join(tmpdir(), 'ert-shot-')), 'ert.sqlite'))
   })
 
   test.afterAll(async () => {
@@ -33,7 +33,7 @@ test.describe('screenshots', () => {
     expect((await request.post('/api/v1/timing-events', { data: { id: 'S1', timeMs: start + 22 * 60_000 + 13_240, bib: 129 } })).ok()).toBeTruthy()
     expect((await request.post('/api/v1/timing-events', { data: { id: 'S2', timeMs: start + 22 * 60_000 + 13_780, bib: 130 } })).ok()).toBeTruthy()
 
-    await page.goto('/')
+    await page.goto(apiOrigin())
     for (const theme of ['light', 'dark'] as const) {
       await page.getByTestId(`theme-${theme}`).click()
       await page.getByTestId('nav-office').click()

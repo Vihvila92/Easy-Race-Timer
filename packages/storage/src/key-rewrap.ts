@@ -6,6 +6,7 @@ import { keyFilePath, withKeyFileLock, writePrivateBytes } from './key-file.js'
 import { BASELINE_ARGON, buffersEqual, deriveAdminKek, deriveRecoveryKek, formatRecoveryKey, passwordBytes, utf8Password } from './key-kdf.js'
 import { keyRandom } from './key-random.js'
 import { ensureKeyColumns, issueRecoveryGeneration, setRecoveryUnshown } from './schema.js'
+import { beginAttempt, resetAttempts } from './key-backoff.js'
 import { adminMaterial, freshMaterial, readKeyBytes, recoveryMaterial, unwrapAdminSlot, type ConfirmedPassword } from './key-slots.js'
 
 function requireDek(db: AppDb): Buffer {
@@ -140,14 +141,21 @@ async function rewrapLocked(input: {
   }
 }
 
-/** Check the acting admin's password. The password buffer is cleared before return. */
+function countAttempt(filePath: string): void {
+  const decision = beginAttempt(filePath)
+  if (!decision.proceed) throw new KeyError('UNLOCK_FAILED', decision.retryAfterMs)
+}
+
+/** Check the acting admin's password. A wrong password shares the unlock backoff. */
 export async function confirmActingPassword(db: AppDb, password: string): Promise<void> {
   const slot = db.keySession?.slotIndex
   if (slot !== 0 && slot !== 1) throw new KeyError('UNLOCK_FAILED')
+  countAttempt(db.filePath)
   const dek = copyDek(db)
   try {
     const bytes = readKeyBytes(keyFilePath(db.filePath))
     await confirmCurrent(bytes, parseEnvelope(bytes).slots[slot], password, dek)
+    resetAttempts(db.filePath)
   } finally {
     dek.fill(0)
   }

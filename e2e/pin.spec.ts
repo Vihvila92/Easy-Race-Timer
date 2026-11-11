@@ -3,13 +3,13 @@ import { expect, test } from './fixtures.ts'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { authorize, killServer, startServer, type RunningServer } from './server.ts'
+import { apiOrigin, authorize, killServer, startServer, type RunningServer } from './server.ts'
 
 test.describe('admin PIN', () => {
   let server: RunningServer
 
   test.beforeAll(async () => {
-    server = await startServer(8099, path.join(mkdtempSync(path.join(tmpdir(), 'ert-pin-')), 'ert.sqlite'))
+    server = await startServer(path.join(mkdtempSync(path.join(tmpdir(), 'ert-pin-')), 'ert.sqlite'))
   })
 
   test.afterAll(async () => {
@@ -31,7 +31,7 @@ test.describe('admin PIN', () => {
     })).ok()).toBeTruthy()
     expect((await request.post('/api/v1/settings/pin', { data: { pin: '2468' } })).ok()).toBeTruthy()
 
-    await page.goto('/')
+    await page.goto(apiOrigin())
     await expect(page.getByTestId('pin-gate')).toBeVisible()
     const source = await page.getByTestId('source-link').getAttribute('href')
     expect(source).toMatch(/^https:\/\/github\.com\/Vihvila92\/Easy-Race-Timer\/(commit\/[0-9a-f]{40}|tree\/[A-Za-z0-9._-]+)$/)

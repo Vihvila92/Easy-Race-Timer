@@ -11,12 +11,11 @@ const fiNotice = 'Yhteys katkesi – yhdistetään uudelleen…'
 const enNotice = 'Connection lost – reconnecting…'
 
 test.describe.configure({ mode: 'serial' })
-test.use({ baseURL: 'http://127.0.0.1:8103' })
 
 let server: RunningServer
 
 test.beforeAll(async () => {
-  server = await startServer(8103, path.join(mkdtempSync(path.join(tmpdir(), 'ert-reconnect-')), 'ert.sqlite'))
+  server = await startServer(path.join(mkdtempSync(path.join(tmpdir(), 'ert-reconnect-')), 'ert.sqlite'))
 })
 
 test.afterAll(async () => {
@@ -43,7 +42,7 @@ test('does not reconnect for 60 seconds after close 4401', async ({ page }) => {
     opened += 1
     void ws.close({ code: 4401, reason: 'expired' })
   })
-  await page.goto('/')
+  await page.goto(`http://127.0.0.1:${server.port}/`)
   await expect(page.getByTestId('pin-gate')).toBeVisible()
   await expect(page.getByTestId('connection-status')).toHaveCount(0)
   const afterGate = opened
@@ -64,7 +63,7 @@ async function openFinish(page: Page): Promise<{ accept: { value: boolean }; soc
   })
   await page.addInitScript(() => localStorage.setItem('ert-theme', 'light'))
   const opened = page.waitForEvent('websocket')
-  await page.goto('/')
+  await page.goto(`http://127.0.0.1:${server.port}/`)
   const socket = await opened
   await socket.waitForEvent('framereceived')
   await page.getByTestId('nav-finish').click()
@@ -101,7 +100,7 @@ async function recoverFreshFinish(
   gate: { accept: { value: boolean } },
 ): Promise<void> {
   await killServer(server)
-  server = await startServer(8103, server.dbFile)
+  server = await startServer(server.dbFile, {}, server.port)
   await authorize(request)
   await postFinish(request, 'F101', start + 20_000)
   gate.accept.value = true

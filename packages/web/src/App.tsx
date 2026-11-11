@@ -112,7 +112,7 @@ function useHash(): string {
 function ConnectionStatus() {
   const { connection, t } = useApp()
   return (
-    <div role="status" aria-live="polite" aria-atomic="true" data-testid="connection-status">
+    <div className="connection-status" role="status" aria-live="polite" aria-atomic="true" data-testid="connection-status">
       {connection === 'reconnecting' ? <Banner tone="info">{t('connection.reconnecting')}</Banner> : null}
     </div>
   )

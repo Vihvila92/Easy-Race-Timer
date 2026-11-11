@@ -3,7 +3,7 @@ import Fastify from 'fastify'
 import helmet from '@fastify/helmet'
 import rateLimit from '@fastify/rate-limit'
 import { AppError } from '@ert/core'
-import { databaseProxy } from './database-slot.js'
+import { databaseProxy, envelopeReady } from './database-slot.js'
 import type { AppOptions, DiscoveredRoute } from './app.js'
 import type { HttpCtx, LiveSocket } from './http-context.js'
 import { redactRequestUrl } from './launch-auth.js'
@@ -78,6 +78,8 @@ function wireBus(ctx: HttpCtx): void {
 export async function buildContext(options: AppOptions): Promise<HttpCtx> {
   const clock = new Clock()
   const slot = options.slot ?? { current: options.db }
+  const raceFile = slot.current.filePath === ':memory:' && options.runtime?.dbPath ? options.runtime.dbPath : slot.current.filePath
+  if (slot.current.filePath === ':memory:' && envelopeReady(raceFile)) slot.startedLocked = true
   const database = databaseProxy(slot)
   const service = new RaceService(database, clock)
   const secretBox = { current: sessionSecret(database) }

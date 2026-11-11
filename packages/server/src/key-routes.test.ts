@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { createProtectedRaceFile, openDatabase } from '@ert/storage'
+import { createProtectedRaceFile, keyFilePath, openDatabase, unlockWithPassword } from '@ert/storage'
 import { createApp } from './app.js'
 
 const HOST = { host: 'localhost' }
@@ -22,6 +22,16 @@ async function protectedFile() {
   const file = path.join(dir, 'ert.sqlite')
   const created = await createProtectedRaceFile(file, { password: ADMIN_A, confirm: ADMIN_A }, { password: ADMIN_B, confirm: ADMIN_B })
   return { dir, file, created }
+}
+
+async function lockedApp(keepKey: boolean) {
+  const { dir, file, created } = await protectedFile()
+  const recoveryKey = keepKey ? created.recoveryKey.toString('ascii') : ''
+  created.recoveryKey.fill(0)
+  created.db.raw.close()
+  const slot = { current: await openDatabase(':memory:') }
+  const { app } = await createApp({ db: slot.current, slot, testMode: true, runtime: { url: '', dataDir: dir, dbPath: file } })
+  return { app, slot, file, recoveryKey }
 }
 
 async function openApp() {
@@ -67,12 +77,7 @@ describe('key routes', () => {
 
 describe('recovery gate', () => {
   it('sets an admin password after recovery and then opens the race routes', async () => {
-    const { dir, file, created } = await protectedFile()
-    const recoveryKey = created.recoveryKey.toString('ascii')
-    created.recoveryKey.fill(0)
-    created.db.raw.close()
-    const slot = { current: await openDatabase(':memory:') }
-    const { app } = await createApp({ db: slot.current, slot, testMode: true, runtime: { url: '', dataDir: dir, dbPath: file } })
+    const { app, slot, recoveryKey } = await lockedApp(true)
     const blocked = await app.inject({ method: 'POST', url: '/api/v1/events/import', headers: HOST, payload: {} })
     expect(blocked.statusCode).toBe(423)
     expect(blocked.json().error.code).toBe('KEY_GATE')
@@ -96,6 +101,35 @@ describe('recovery gate', () => {
     expect(() => opened.raw.prepare('select 1').get()).toThrow()
     slot.current.raw.close()
     await app.close()
+  })
+})
+
+describe('locked startup', () => {
+  it('stays locked when the key file disappears', async () => {
+    const { app, slot, file } = await lockedApp(false)
+    fs.rmSync(keyFilePath(file))
+    const status = await app.inject({ method: 'GET', url: '/api/v1/keys/status', headers: HOST })
+    expect(status.json().state).toBe('locked')
+    const blocked = await app.inject({ method: 'POST', url: '/api/v1/events/import', headers: HOST, payload: {} })
+    expect(blocked.statusCode).toBe(423)
+    slot.current.raw.close()
+    await app.close()
+  })
+
+  it('resets only the admin the operator chooses', async () => {
+    const { app, slot, file, recoveryKey } = await lockedApp(true)
+    const recovered = await app.inject({ method: 'POST', url: '/api/v1/keys/recover', headers: HOST, payload: { recoveryKey } })
+    expect(recovered.statusCode).toBe(200)
+    const next = 'replacement-admin-password'
+    const saved = await app.inject({ method: 'POST', url: '/api/v1/keys/password', headers: HOST, payload: { slot: 1, password: next, confirm: next } })
+    expect(saved.json().state).toBe('admin')
+    slot.current.raw.close()
+    await app.close()
+    const first = await unlockWithPassword(file, ADMIN_A)
+    first.raw.close()
+    const second = await unlockWithPassword(file, next)
+    second.raw.close()
+    await expect(unlockWithPassword(file, ADMIN_B)).rejects.toMatchObject({ code: 'UNLOCK_FAILED' })
   })
 })
 

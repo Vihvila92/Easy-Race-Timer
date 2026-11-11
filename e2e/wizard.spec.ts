@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: AGPL-3.0-only
+import type { Page } from '@playwright/test'
 import { expect, test } from './fixtures.ts'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -6,12 +7,13 @@ import path from 'node:path'
 import { screenshotDir } from './screenshot-dir.ts'
 import { killServer, startServer, type RunningServer } from './server.ts'
 
+let server: RunningServer
+
 test.describe('first run', () => {
   test.use({ locale: 'en-US' })
-  let server: RunningServer
 
   test.beforeAll(async () => {
-    server = await startServer(8098, path.join(mkdtempSync(path.join(tmpdir(), 'ert-wizard-')), 'ert.sqlite'))
+    server = await startServer(path.join(mkdtempSync(path.join(tmpdir(), 'ert-wizard-')), 'ert.sqlite'))
   })
 
   test.afterAll(async () => {
@@ -19,7 +21,14 @@ test.describe('first run', () => {
   })
 
   test('creates a race without a file import', async ({ page }) => {
-    await page.goto(`http://127.0.0.1:${server.port}/`)
+    await wizardAbout(page)
+    await wizardDate(page)
+    await wizardCreate(page)
+  })
+})
+
+async function wizardAbout(page: Page): Promise<void> {
+  await page.goto(`http://127.0.0.1:${server.port}/`)
     await expect(page.getByTestId('wizard')).toBeVisible()
     const source = await page.getByTestId('source-link').getAttribute('href')
     expect(source).toMatch(/^https:\/\/github\.com\/Vihvila92\/Easy-Race-Timer\/(commit\/[0-9a-f]{40}|tree\/[A-Za-z0-9._-]+)$/)
@@ -51,8 +60,11 @@ test.describe('first run', () => {
     await expect(page.getByTestId('wizard')).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Create the race' })).toBeVisible()
     await page.getByTestId('lang-fi').click()
-    await expect(page.getByRole('heading', { name: 'Luo kisa' })).toBeVisible()
-    await page.getByTestId('wizard-name').fill('Kuulan hölkkä')
+  await expect(page.getByRole('heading', { name: 'Luo kisa' })).toBeVisible()
+}
+
+async function wizardDate(page: Page): Promise<void> {
+  await page.getByTestId('wizard-name').fill('Kuulan hölkkä')
     await expect(page.getByTestId('wizard-date')).toHaveAttribute('type', 'text')
     await page.getByTestId('wizard-date').fill('2026-10-15')
     await expect(page.getByTestId('wizard-date')).toHaveValue('15.10.2026')
@@ -91,8 +103,11 @@ test.describe('first run', () => {
     await expect(page.getByTestId('wizard-date')).toHaveValue('12/06/2027')
     await page.getByTestId('lang-fi').click()
     await expect(page.getByTestId('wizard-date')).toHaveValue('12.6.2027')
-    await expect(page.getByTestId('wizard-next')).toBeEnabled()
-    await page.getByTestId('wizard-next').click()
+  await expect(page.getByTestId('wizard-next')).toBeEnabled()
+}
+
+async function wizardCreate(page: Page): Promise<void> {
+  await page.getByTestId('wizard-next').click()
     await expect(page.getByTestId('wizard-start-R4')).toHaveValue('11:00')
     await expect(page.getByTestId('wizard-start-R8')).toHaveValue('11:30')
     await page.getByTestId('wizard-next').click()
@@ -116,6 +131,5 @@ test.describe('first run', () => {
     expect(runtime.ok()).toBeTruthy()
     const body = await runtime.json() as { url: string; dbPath: string }
     expect(body.url).toBe(`http://127.0.0.1:${server.port}`)
-    expect(body.dbPath.endsWith('ert.sqlite')).toBeTruthy()
-  })
-})
+  expect(body.dbPath.endsWith('ert.sqlite')).toBeTruthy()
+}

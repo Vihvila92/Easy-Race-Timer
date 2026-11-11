@@ -220,7 +220,7 @@ th { font-size: 0.8rem; color: var(--secondary); font-weight: 600; }
   .club-full { display: none; }
 }
 @media print {
-  .nav, .footer, .settings, .ui-actions, .ui-check { display: none !important; }
+  .nav, .footer, .settings, .ui-actions, .ui-check, .connection-status { display: none !important; }
   .shell { display: block; }
   html, body, .shell, .main {
     background: #fff !important;

@@ -60,7 +60,7 @@ export function RecoveryPrint({
   return (
     <section data-testid="recovery-print" className="ui-section">
       <h1 ref={heading} tabIndex={-1}>{t('keys.printTitle')}</h1>
-      <p data-testid="recovery-print-label">{label.raceName || label.fileName}</p>
+      {label.raceName || label.fileName ? <p data-testid="recovery-print-label">{label.raceName || label.fileName}</p> : null}
       {label.raceName && label.fileName ? <p data-testid="recovery-print-file">{t('keys.printFile', { name: label.fileName })}</p> : null}
       {label.raceDate ? <p data-testid="recovery-print-race-date">{formatDate(label.raceDate, locale)}</p> : null}
       <p data-testid="recovery-print-date">{t('keys.printedOn', { date: formatDate(new Date(), locale) })}</p>

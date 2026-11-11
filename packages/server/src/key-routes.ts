@@ -55,8 +55,8 @@ const rotateBody = z.object({
   confirm: z.string(),
 })
 
-export function raceApiOpen(db: AppDb, racePath: string): boolean {
-  const { state } = describeKeys(db, racePath)
+export function raceApiOpen(db: AppDb, racePath: string, startedLocked = false): boolean {
+  const { state } = describeKeys(db, racePath, startedLocked)
   return state === 'admin' || state === 'dev'
 }
 
@@ -67,15 +67,19 @@ function raceHeading(db: AppDb): { raceName?: string; raceDate?: string } {
   return { raceName: event.name, raceDate: event.date_start }
 }
 
-function describeKeys(db: AppDb, racePath: string): { state: KeyStateName; fileName: string; raceName?: string; raceDate?: string } {
-  const fileName = path.basename(db.filePath === ':memory:' ? racePath : db.filePath)
-  const label = { fileName, ...raceHeading(db) }
-  if (db.filePath === ':memory:' && envelopeReady(racePath)) return { state: 'locked', ...label }
+const SESSION_STATES = new Set<KeyStateName>(['admin', 'recovery-gate', 'recovery-unshown', 'temporary-password'])
+
+function keyState(db: AppDb, racePath: string, startedLocked: boolean): KeyStateName {
+  const locked = db.filePath === ':memory:' && (startedLocked || envelopeReady(racePath))
+  if (locked) return 'locked'
   const kind = db.keySession?.kind
-  if (kind === 'admin' || kind === 'recovery-gate' || kind === 'recovery-unshown' || kind === 'temporary-password') {
-    return { state: kind, ...label }
-  }
-  return { state: 'dev', ...label }
+  if (kind && SESSION_STATES.has(kind)) return kind
+  return 'dev'
+}
+
+function describeKeys(db: AppDb, racePath: string, startedLocked = false): { state: KeyStateName; fileName: string; raceName?: string; raceDate?: string } {
+  const fileName = path.basename(db.filePath === ':memory:' ? racePath : db.filePath)
+  return { state: keyState(db, racePath, startedLocked), fileName, ...raceHeading(db) }
 }
 
 function parseBody<T>(schema: z.ZodType<T>, body: unknown): T {
@@ -236,7 +240,7 @@ function registerKeyGuards(app: FastifyInstance): void {
 }
 
 export function registerKeyRoutes(app: FastifyInstance, ctx: KeyRouteContext): void {
-  const status = () => describeKeys(ctx.slot.current, ctx.racePath)
+  const status = () => describeKeys(ctx.slot.current, ctx.racePath, Boolean(ctx.slot.startedLocked))
   registerKeyGuards(app)
   app.get('/api/v1/keys/status', async () => status())
   registerUnlockRoutes(app, ctx)

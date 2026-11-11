@@ -4,12 +4,12 @@ import { expect, test } from './fixtures.ts'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
-import { authorize, killServer, seedMassStart, startServer, type RunningServer } from './server.ts'
+import { apiOrigin, authorize, killServer, seedMassStart, startServer, type RunningServer } from './server.ts'
 
 let server: RunningServer
 
 test.beforeAll(async () => {
-  server = await startServer(8099, path.join(mkdtempSync(path.join(tmpdir(), 'ert-queue-')), 'ert.sqlite'))
+  server = await startServer(path.join(mkdtempSync(path.join(tmpdir(), 'ert-queue-')), 'ert.sqlite'))
 })
 
 test.afterAll(async () => {
@@ -19,7 +19,7 @@ test.afterAll(async () => {
 test('keeps a tap made offline and syncs the client timestamp', async ({ page, context, request }) => {
   await seedMassStart(request, { id: 'EV_QUEUE', name: 'Jono', bibs: [105, 106], startAgoMs: 60_000 })
 
-  await page.goto('/')
+  await page.goto(apiOrigin())
     await page.getByTestId('nav-finish').click()
     const stamped = await page.evaluate(() => Date.now())
     await context.setOffline(true)
@@ -49,10 +49,10 @@ test('keeps a tap made offline and syncs the client timestamp', async ({ page, c
 
   test('keeps finish taps from two tabs', async ({ page, request }) => {
     await authorize(request)
-    await page.goto('/')
+    await page.goto(apiOrigin())
     await page.getByTestId('nav-finish').click()
     const other = await page.context().newPage()
-    await other.goto('/')
+    await other.goto(apiOrigin())
     await other.getByTestId('nav-finish').click()
     await page.getByTestId('finish-bib').fill('106')
     await page.getByTestId('finish-tap').click()
@@ -79,7 +79,7 @@ test('keeps a tap made offline and syncs the client timestamp', async ({ page, c
     const real = Date.now()
     await page.clock.install({ time: real + 90_000 })
     await page.clock.resume()
-    await page.goto('/')
+    await page.goto(apiOrigin())
     await expect.poll(() => page.evaluate(() => localStorage.getItem('ert-clock-offset'))).toBeTruthy()
     await page.getByTestId('nav-finish').click()
     await expect(page.getByTestId('clock-offset')).toBeVisible()

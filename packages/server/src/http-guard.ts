@@ -125,7 +125,7 @@ export function registerUseGate(ctx: HttpCtx, racePath: string): void {
     if (reply.sent) return
     const url = request.routeOptions.url ?? ''
     if (!url.startsWith('/api/') || gateExempt(url)) return
-    if (raceApiOpen(ctx.slot.current, racePath)) return
+    if (raceApiOpen(ctx.slot.current, racePath, Boolean(ctx.slot.startedLocked))) return
     reply.status(423).send({ error: { code: 'KEY_GATE', message: 'Open the race file first.' } })
   })
 }

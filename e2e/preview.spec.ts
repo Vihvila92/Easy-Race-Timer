@@ -10,12 +10,12 @@ import { killServer, startServer, type RunningServer } from './server.ts'
 const root = path.resolve(import.meta.dirname, '..')
 const devOrigin = 'http://127.0.0.1:5174'
 
-test.describe('component preview', () => {
-  let server: RunningServer
-  let vite: ChildProcess
+let server: RunningServer
+let vite: ChildProcess
 
+test.describe('component preview', () => {
   test.beforeAll(async () => {
-    server = await startServer(8096, path.join(mkdtempSync(path.join(tmpdir(), 'ert-preview-')), 'ert.sqlite'))
+    server = await startServer(path.join(mkdtempSync(path.join(tmpdir(), 'ert-preview-')), 'ert.sqlite'))
     vite = await startVite(5174, server.port)
   })
 
@@ -27,20 +27,30 @@ test.describe('component preview', () => {
     if (server) await killServer(server)
   })
 
-  test('production build does not register the preview route', async ({ page }) => {
-    const bundled = productionJavaScript()
-    expect(bundled).not.toContain('component-preview')
-    expect(bundled).not.toContain('nav-preview')
-    expect(bundled).not.toContain('preview-hint')
-    expect(bundled).not.toContain('#/preview')
+  test('production build does not register the preview route', async ({ page }) => { await productionRoute(page) })
 
-    await openProduction(page, server.port)
-    await expect(page.getByTestId('nav-preview')).toHaveCount(0)
-    await expect(page.getByTestId('component-preview')).toHaveCount(0)
-    await expect(page.getByTestId('wizard')).toBeVisible()
-  })
+  test('shows the shared controls, both languages, and an inline guided hint', async ({ page }) => { await sharedControls(page) })
 
-  test('shows the shared controls, both languages, and an inline guided hint', async ({ page }) => {
+  test('meets contrast, target size and 375 px width in both themes', async ({ page }) => { await contrast(page) })
+
+  test('keeps a long clock on one line when the screen is narrow or zoomed', async ({ page }) => { await narrowClock(page) })
+
+  test('follows the system appearance until the user overrides it', async ({ page }) => { await systemTheme(page) })
+})
+
+async function productionRoute(page: Page): Promise<void> {
+  const bundled = productionJavaScript()
+  expect(bundled).not.toContain('component-preview')
+  expect(bundled).not.toContain('nav-preview')
+  expect(bundled).not.toContain('preview-hint')
+  expect(bundled).not.toContain('#/preview')
+  await openProduction(page, server.port)
+  await expect(page.getByTestId('nav-preview')).toHaveCount(0)
+  await expect(page.getByTestId('component-preview')).toHaveCount(0)
+  await expect(page.getByTestId('wizard')).toBeVisible()
+}
+
+async function sharedControls(page: Page): Promise<void> {
     await openDev(page)
     await expect(page.getByTestId('component-preview')).toBeVisible()
     await expect(page.getByRole('heading', { level: 1, name: 'Komponentit' })).toBeVisible()
@@ -89,10 +99,10 @@ test.describe('component preview', () => {
     await page.getByTestId('preview-row').focus()
     await page.keyboard.press('Space')
     await expect(page.getByTestId('preview-row')).toHaveAttribute('aria-pressed', 'true')
-    await expect(page.getByTestId('preview-name')).toHaveValue('Aino')
-  })
+  await expect(page.getByTestId('preview-name')).toHaveValue('Aino')
+}
 
-  test('meets contrast, target size and 375 px width in both themes', async ({ page }) => {
+async function contrast(page: Page): Promise<void> {
     await openDev(page)
     await expect(page.getByTestId('preview-hint')).toBeVisible()
     for (const theme of ['light', 'dark'] as const) {
@@ -106,11 +116,11 @@ test.describe('component preview', () => {
         client: document.documentElement.clientWidth,
       }))
       expect(overflow.scroll, theme).toBeLessThanOrEqual(overflow.client)
-      expect(await smallTargets(page), theme).toEqual([])
-    }
-  })
+    expect(await smallTargets(page), theme).toEqual([])
+  }
+}
 
-  test('keeps a long clock on one line when the screen is narrow or zoomed', async ({ page }) => {
+async function narrowClock(page: Page): Promise<void> {
     await openDev(page)
     await page.locator('.ui-clock-value').evaluate((el) => {
       el.textContent = '10:59:59,9'
@@ -121,10 +131,10 @@ test.describe('component preview', () => {
     }
     await page.setViewportSize({ width: 375, height: 800 })
     await page.evaluate(() => { document.documentElement.style.zoom = '200%' })
-    expect(await clockLine(page), '200% zoom').toMatchObject({ lines: 1, nowrap: true, tabular: true })
-  })
+  expect(await clockLine(page), '200% zoom').toMatchObject({ lines: 1, nowrap: true, tabular: true })
+}
 
-  test('follows the system appearance until the user overrides it', async ({ page }) => {
+async function systemTheme(page: Page): Promise<void> {
     await openDev(page)
     await page.getByTestId('theme-system').click()
     await page.emulateMedia({ colorScheme: 'dark' })
@@ -134,9 +144,8 @@ test.describe('component preview', () => {
     await page.getByTestId('theme-dark').click()
     await page.emulateMedia({ colorScheme: 'light' })
     await expect.poll(() => page.evaluate(() => document.documentElement.dataset.theme)).toBe('dark')
-    await expect(page.getByTestId('preview-name')).toHaveValue('')
-  })
-})
+  await expect(page.getByTestId('preview-name')).toHaveValue('')
+}
 
 function productionJavaScript(): string {
   const dist = path.join(root, 'packages/web/dist')

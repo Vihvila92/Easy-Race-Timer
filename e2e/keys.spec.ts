@@ -6,13 +6,12 @@ import path from 'node:path'
 import type { Page } from '@playwright/test'
 import { smallTargets, violations } from './a11y.ts'
 import { expect, test } from './fixtures.ts'
-import { killServer, startServer, type RunningServer } from './server.ts'
+import { apiOrigin, killServer, startServer, type RunningServer } from './server.ts'
 
 const root = path.resolve(import.meta.dirname, '..')
 const FIRST = 'correct-horse-battery'
 const SECOND = 'staple-river-margin'
 const NEXT = 'replacement-admin-password'
-const PORT = 8104
 
 function protectedFile(file: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -45,11 +44,11 @@ async function expectClean(page: Page, label: string): Promise<void> {
 
 async function restart(server: RunningServer, file: string): Promise<RunningServer> {
   await killServer(server)
-  return startServer(PORT, file, { ERT_DEV_KEY: '' })
+  return startServer(file, { ERT_DEV_KEY: '' }, server.port)
 }
 
 async function openWithPassword(page: Page, password: string): Promise<void> {
-  await page.goto(`http://127.0.0.1:${PORT}/`)
+  await page.goto(`${apiOrigin()}/`)
   await expect(page.getByTestId('unlock-panel')).toBeVisible()
   await expect(page.getByRole('heading', { level: 1 })).toBeFocused()
   await page.getByTestId('lang-en').click()
@@ -63,26 +62,36 @@ async function openWithPassword(page: Page, password: string): Promise<void> {
   await expect(page.getByTestId('wizard')).toBeVisible()
 }
 
+async function unlockOnly(page: Page, password: string): Promise<void> {
+  await page.goto(`${apiOrigin()}/`)
+  await page.getByTestId('lang-en').click()
+  await page.getByTestId('unlock-password').fill(password)
+  await page.getByTestId('unlock-open').click()
+  await expect(page.getByTestId('wizard')).toBeVisible()
+}
+
 async function setPasswordFromPaper(page: Page, recoveryKey: string): Promise<void> {
-  await page.goto(`http://127.0.0.1:${PORT}/`)
+  await page.goto(`${apiOrigin()}/`)
   await page.getByTestId('lang-en').click()
   await page.getByTestId('unlock-recovery').click()
   await page.getByTestId('recovery-key').fill(recoveryKey)
   await page.getByTestId('recovery-key').press('Enter')
   await expect(page.getByTestId('recovery-gate')).toBeVisible()
   await expect(page.getByRole('heading', { level: 1 })).toBeFocused()
+  await expect(page.getByTestId('gate-admin')).toHaveValue('')
+  await page.getByTestId('gate-admin').selectOption('1')
   await page.getByTestId('gate-password').fill(NEXT)
   await page.getByTestId('gate-confirm').fill(NEXT)
   await page.getByTestId('gate-confirm').press('Enter')
   await expect(page.getByTestId('wizard')).toBeVisible()
   await expect(page.getByTestId('recovery-gate')).toHaveCount(0)
-  const status = await page.request.get(`http://127.0.0.1:${PORT}/api/v1/keys/status`)
+  const status = await page.request.get(`${apiOrigin()}/api/v1/keys/status`)
   expect(status.ok()).toBeTruthy()
   expect(await status.json()).toMatchObject({ state: 'admin' })
 }
 
 async function printAndAcknowledge(page: Page): Promise<void> {
-  await page.goto(`http://127.0.0.1:${PORT}/#/keys`)
+  await page.goto(`${apiOrigin()}/#/keys`)
   const rotation = page.getByTestId('key-rotation')
   await expect(rotation.getByLabel("The other admin's current password")).toBeVisible()
   await page.getByTestId('other-mode').selectOption('temporary')
@@ -121,7 +130,7 @@ test.describe('key views', () => {
   test.beforeAll(async () => {
     file = path.join(mkdtempSync(path.join(tmpdir(), 'ert-keys-')), 'ert.sqlite')
     recoveryKey = await protectedFile(file)
-    server = await startServer(PORT, file, { ERT_DEV_KEY: '' })
+    server = await startServer(file, { ERT_DEV_KEY: '' })
   })
 
   test.afterAll(async () => {
@@ -134,10 +143,8 @@ test.describe('key views', () => {
     await setPasswordFromPaper(page, recoveryKey)
     await printAndAcknowledge(page)
     server = await restart(server, file)
-    await page.goto(`http://127.0.0.1:${PORT}/`)
-    await page.getByTestId('lang-en').click()
-    await page.getByTestId('unlock-password').fill(NEXT)
-    await page.getByTestId('unlock-open').click()
-    await expect(page.getByTestId('wizard')).toBeVisible()
+    await unlockOnly(page, FIRST)
+    server = await restart(server, file)
+    await unlockOnly(page, NEXT)
   })
 })

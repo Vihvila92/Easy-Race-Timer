@@ -29,9 +29,9 @@ vi.mock('./key-client.js', () => ({
 }))
 
 const { RecoveryGuide, RecoveryPrint } = await import('./recovery-view.js')
-const { UnlockForm } = await import('./unlock-view.js')
+const { RecoveryGate, UnlockForm } = await import('./unlock-view.js')
 const { KeyManage } = await import('./key-manage.js')
-const { acknowledgeKey, keyFailure, unlockWithAdminPassword } = await import('./key-client.js')
+const { acknowledgeKey, changeKeyPassword, keyFailure, unlockWithAdminPassword } = await import('./key-client.js')
 
 function text(html: string): string {
   const holder = document.createElement('div')
@@ -89,6 +89,12 @@ describe('print view', () => {
       onKeyHidden: () => undefined,
     }))
     expect(text(printed)).toContain(secret)
+    expect(printed).not.toContain('recovery-print-label')
+    const keyNode = document.createElement('div')
+    keyNode.innerHTML = printed
+    const copied = keyNode.querySelector('[data-testid="recovery-key-display"]')?.textContent ?? ''
+    expect(copied).toBe(secret)
+    expect(copied).not.toMatch(/\s/)
     expect(text(printed)).toContain(PAPER)
     expect(text(printed)).toContain(en['unlock.unrecoverable'])
     const locked = renderToStaticMarkup(createElement(UnlockForm, { onUnlocked: () => undefined }))
@@ -200,6 +206,35 @@ describe('key state banners', () => {
     expect(unshown).toContain(en['keys.recoveryUnshown'])
     expect(holder).toContain(en['keys.temporaryHolder'])
     expect(holder).not.toContain(en['keys.temporaryPassword'])
+  })
+})
+
+describe('recovery gate slot', () => {
+  it('does not choose an admin until the operator does', async () => {
+    vi.mocked(changeKeyPassword).mockResolvedValue({ state: 'admin' })
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+    await act(async () => { root.render(createElement(RecoveryGate, { onDone: () => undefined })) })
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="gate-save"]')?.disabled).toBe(true)
+    await act(async () => { host.querySelector<HTMLFormElement>('form')?.requestSubmit() })
+    expect(changeKeyPassword).not.toHaveBeenCalled()
+    const select = host.querySelector<HTMLSelectElement>('[data-testid="gate-admin"]')
+    await act(async () => {
+      if (!select) return
+      select.value = '1'
+      select.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    const password = host.querySelector<HTMLInputElement>('[data-testid="gate-password"]')
+    const confirm = host.querySelector<HTMLInputElement>('[data-testid="gate-confirm"]')
+    await act(async () => {
+      if (password) setInput(password, 'replacement-admin-password')
+      if (confirm) setInput(confirm, 'replacement-admin-password')
+    })
+    await act(async () => { host.querySelector<HTMLFormElement>('form')?.requestSubmit() })
+    expect(changeKeyPassword).toHaveBeenCalledWith(expect.objectContaining({ slot: 1 }))
+    await act(async () => { root.unmount() })
+    host.remove()
   })
 })
 

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useApp } from './context.js'
 import { useHeadingFocus } from './focus-heading.js'
 import { changeKeyPassword, keyFailure, openFileFailure, unlockWithAdminPassword, unlockWithPaper } from './key-client.js'
-import { Banner, Button, Checkbox, HintFrame, PasswordPair, TextField } from './ui/components.js'
+import { Banner, Button, Checkbox, HintFrame, PasswordPair, Select, TextField } from './ui/components.js'
 import { RecoveryGuide } from './recovery-view.js'
 
 function useSecretForm(submit: (secret: string) => Promise<void>) {
@@ -88,15 +88,18 @@ export function UnlockForm({ onUnlocked }: { onUnlocked: () => void }) {
 export function RecoveryGate({ onDone }: { onDone: () => void }) {
   const { t } = useApp()
   const heading = useHeadingFocus()
+  const [slot, setSlot] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
   const [otherLost, setOtherLost] = useState(false)
   const [other, setOther] = useState('')
   const [otherConfirm, setOtherConfirm] = useState('')
   const [notice, setNotice] = useState<MessageKey | undefined>()
+  const chosen = slot === '0' || slot === '1' ? slot : undefined
   const save = () => {
+    if (!chosen) return
     setNotice(undefined)
-    changeKeyPassword({ slot: 0, password, confirm }).then(async () => {
+    changeKeyPassword({ slot: chosen === '0' ? 0 : 1, password, confirm }).then(async () => {
       if (otherLost) await changeKeyPassword({ target: 'other', actingPassword: password, password: other, confirm: otherConfirm })
       onDone()
     }).catch((error: unknown) => setNotice(openFileFailure(error, 'keys.passwordWrong').key))
@@ -107,13 +110,18 @@ export function RecoveryGate({ onDone }: { onDone: () => void }) {
       <RecoveryGuide />
       <form className="ui-section" onSubmit={(event) => { event.preventDefault(); save() }}>
         <Banner tone="warning" testId="keys-old-copies">{t('keys.oldCopies')}</Banner>
+        <Select id="gate-admin" label={t('unlock.whichAdmin')} value={slot} onChange={setSlot} testId="gate-admin" options={[
+          { value: '', label: t('unlock.chooseAdmin') },
+          { value: '0', label: t('unlock.admin1') },
+          { value: '1', label: t('unlock.admin2') },
+        ]} />
         <PasswordPair passwordId="gate-password" confirmId="gate-confirm" passwordLabel={t('keys.newPassword')} confirmLabel={t('keys.confirmPassword')} password={password} confirm={confirm} onPassword={setPassword} onConfirm={setConfirm} passwordTestId="gate-password" confirmTestId="gate-confirm" />
         <Checkbox id="other-lost" label={t('unlock.otherLost')} checked={otherLost} onChange={setOtherLost} testId="other-lost" />
         {otherLost ? (
           <PasswordPair passwordId="gate-other" confirmId="gate-other-confirm" passwordLabel={t('keys.otherSlot')} confirmLabel={t('keys.confirmPassword')} password={other} confirm={otherConfirm} onPassword={setOther} onConfirm={setOtherConfirm} passwordTestId="gate-other" confirmTestId="gate-other-confirm" />
         ) : null}
         {notice ? <Banner tone="danger" role="alert" testId="unlock-notice">{t(notice)}</Banner> : null}
-        <Button type="submit" data-testid="gate-save">{t('unlock.setPassword')}</Button>
+        <Button type="submit" data-testid="gate-save" disabled={!chosen}>{t('unlock.setPassword')}</Button>
       </form>
     </section>
   )

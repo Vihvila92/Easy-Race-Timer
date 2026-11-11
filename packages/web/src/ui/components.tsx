@@ -175,10 +175,7 @@ export function RecoveryKeyDisplay({ value, testId = 'recovery-key-display' }: {
   return (
     <p className="ui-key" data-testid={testId} translate="no">
       {groups.map((group, index) => (
-        <span key={`${index}-${group}`}>
-          {index > 0 ? <span className="ui-key-sep">-</span> : null}
-          <span className="ui-key-group">{group}</span>
-        </span>
+        <span className="ui-key-group" key={`${index}-${group}`}>{index > 0 ? `-${group}` : group}</span>
       ))}
     </p>
   )

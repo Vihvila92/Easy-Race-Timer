@@ -4,6 +4,7 @@ import { type AppDb, rekeyDataFile } from './db.js'
 import { KeyError } from './errors.js'
 import { type ParsedSlot, parseEnvelope } from './key-envelope.js'
 import { keyFilePath, withKeyFileLock, writePrivateBytes } from './key-file.js'
+import { beginAttempt, resetAttempts } from './key-backoff.js'
 import { buffersEqual, formatRecoveryKey, passwordBytes, utf8Password } from './key-kdf.js'
 import { keyRandom } from './key-random.js'
 import { type ConfirmedPassword, sealEnvelope, unwrapAdminSlot } from './key-slots.js'
@@ -82,7 +83,10 @@ export async function rotateDataKey(db: AppDb, options: {
   const recoveryKey = Buffer.from(formatRecoveryKey(secret), 'ascii')
   try {
     if (buffersEqual(acting, other)) throw new KeyError('PASSWORD_MISMATCH')
+    const decision = beginAttempt(db.filePath)
+    if (!decision.proceed) throw new KeyError('UNLOCK_FAILED', decision.retryAfterMs)
     const generation = await withKeyFileLock(keyFilePath(db.filePath), () => sealRotation({ db, actingSlot, acting, other, otherKind: options.other.kind, nextDek, secret }))
+    resetAttempts(db.filePath)
     db.recoveryKeyIssued = true
     const session = db.keySession
     if (session?.kind === 'admin') db.keySession = { kind: 'recovery-unshown', slotIndex: session.slotIndex }

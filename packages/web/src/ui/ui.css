@@ -213,7 +213,7 @@ a.ui-text-link > span {
 .ui-key {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2) var(--space-3);
+  gap: 0;
   margin: 0;
   max-width: 100%;
   font-family: ui-monospace, "SF Mono", "Cascadia Mono", "Segoe UI Mono", Menlo, Consolas, monospace;
@@ -222,8 +222,7 @@ a.ui-text-link > span {
   letter-spacing: 0.04em;
 }
 
-.ui-key-group,
-.ui-key-sep {
+.ui-key-group {
   white-space: nowrap;
 }
 
