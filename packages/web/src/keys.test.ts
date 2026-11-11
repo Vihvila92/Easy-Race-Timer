@@ -4,7 +4,7 @@ import { act, createElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
-import { en } from '@ert/i18n'
+import { en, fi } from '@ert/i18n'
 
 const guidance = { current: 'guided' as 'guided' | 'expert' }
 
@@ -46,6 +46,19 @@ describe('recovery guide', () => {
     expect(body).toContain(en['unlock.unrecoverable'])
     expect(body).toContain(en['keys.guide.store'])
     expect(body).toContain(en['keys.pairFiles'])
+    expect(body).toContain('You can type the letter O instead of 0, and I or L instead of 1.')
+    expect(en['keys.pairFiles']).toContain('race file')
+    expect(en['keys.pairFiles']).not.toContain('database')
+    expect(en['keys.guide.lost']).toContain('race file')
+    expect(fi['keys.guide.use']).toContain('O-kirjaimen nollan sijaan')
+    expect(fi['keys.guide.use']).toContain('Valitse lukitulla näytöllä')
+    expect(fi['keys.guide.store']).toContain('talon vara-avain')
+    expect(fi['keys.guide.store']).toContain('merkityssä kirjekuoressa')
+    expect(fi['keys.pairFiles']).toContain('kisatiedosto')
+    expect(fi['keys.pairFiles']).not.toContain('kisatietokanta')
+    expect(fi['keys.guide.lost']).toContain('kisatiedosto')
+    expect(fi['keys.guide.lost']).not.toContain('tietokanta')
+    expect(fi['unlock.failed']).toBe('Tiedosto ei auennut. Tarkista salasana tai käytä tulostettua palautusavainta.')
     expect(body).not.toContain('XXXX-XXXX')
   })
 })
