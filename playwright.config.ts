@@ -14,5 +14,8 @@ export default defineConfig({
     viewport: { width: 1280, height: 800 },
     trace: 'retain-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name: 'chromium', testIgnore: '**/keys.spec.ts', use: { ...devices['Desktop Chrome'] } },
+    { name: 'keys', testMatch: '**/keys.spec.ts', use: { ...devices['Desktop Chrome'], baseURL: 'http://127.0.0.1:8104' } },
+  ],
 })

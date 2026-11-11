@@ -5,7 +5,8 @@ const config = {
   // main.tsx registers this script by the URL /sw.js. It is not imported.
   // The Kuulan spec under testdata is a draft scenario beside the oracle, not a suite entry.
   // Cargo writes src-tauri/target. It is gitignored build output, not a source file.
-  ignore: ['packages/web/public/sw.js', 'testdata/**', 'src-tauri/target/**'],
+  // e2e/keys.spec.ts starts e2e/create-protected.ts by path.
+  ignore: ['packages/web/public/sw.js', 'testdata/**', 'src-tauri/target/**', 'e2e/create-protected.ts'],
   // node-gyp is loaded by path from scripts/build-sidecar.ts.
   // postject is started with `pnpm exec postject` from that same script.
   // jscpd is started from scripts/check-duplication.ts via createRequire, which knip does not follow.

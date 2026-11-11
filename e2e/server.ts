@@ -11,7 +11,7 @@ export interface RunningServer {
   dbFile: string
 }
 
-export async function startServer(port: number, dbFile: string): Promise<RunningServer> {
+export async function startServer(port: number, dbFile: string, extraEnv: NodeJS.ProcessEnv = {}): Promise<RunningServer> {
   const child = spawn(process.execPath, ['--import', 'tsx', 'packages/server/src/index.ts'], {
     cwd: root,
     env: {
@@ -23,6 +23,7 @@ export async function startServer(port: number, dbFile: string): Promise<Running
       ERT_TEST_MODE: '1',
       ERT_DB: dbFile,
       ERT_WEB_DIST: path.join(root, 'packages/web/dist'),
+      ...extraEnv,
       // One browser reloads the UI many times from this address. Production stays at 300 and 5.
       ERT_RATE_GLOBAL_MAX: '10000',
       ERT_RATE_STRICT_MAX: '10000',

@@ -437,7 +437,7 @@ The KDF input is the NFKC UTF-8 bytes with case preserved.
 
 ## User-facing strings
 
-These are the strings for the screens. `file.keyMismatch` is in `packages/i18n/locales/en.json` and `fi.json`. The other keys below are the copy for screens that are not built yet, so they are not in the locale files. Guided hints use `HintFrame` and render only while guided mode is on.
+These are the strings for the screens. The same sentences are in `packages/i18n/locales/en.json` and `fi.json`. Guided hints use `HintFrame` and render only while guided mode is on.
 
 | Key | English | Finnish |
 |---|---|---|
@@ -447,6 +447,14 @@ These are the strings for the screens. `file.keyMismatch` is in `packages/i18n/l
 | `file.keyMismatch` | This key file does not belong to this race file, or the race file is damaged. Use the key file that was saved together with the race file, or restore a backup. | Avaintiedosto ei kuulu tähän kisatiedostoon tai kisatiedosto on vaurioitunut. Käytä kisatiedoston kanssa samaan aikaan tallennettua avaintiedostoa tai palauta varmuuskopio. |
 | `file.corrupt` | This race file could not be read. Restore a backup. The backup has to include the race file and the key file that were saved together. | Tätä kisatiedostoa ei voitu lukea. Palauta varmuuskopio. Varmuuskopiossa on oltava kisatiedosto ja sen kanssa samaan aikaan tallennettu avaintiedosto. |
 | `keys.acknowledgeFirst` | First confirm that you have printed or written down the new recovery key. | Vahvista ensin, että olet tulostanut tai kirjoittanut ylös uuden palautusavaimen. |
+| `keys.continue` | Continue | Jatka |
+| `keys.printTitle` | Recovery key | Palautusavain |
+| `keys.passwordTarget` | Which password | Mikä salasana |
+| `keys.otherMode` | The other admin | Toinen ylläpitäjä |
+| `keys.otherCurrent` | The other admin's current password | Toisen ylläpitäjän nykyinen salasana |
+| `keys.otherCurrentAgain` | Type that password again | Kirjoita se salasana uudelleen |
+| `keys.confirmRotate` | Yes, change the data key | Kyllä, vaihda salausavain |
+| `keys.confirmRegenerate` | Yes, create a new recovery key | Kyllä, luo uusi palautusavain |
 | `keys.oldCopies` | Changing the data key protects new copies only. A copy that someone else already has stays readable with the old password or paper. Destroy the copies you hold, and change the data key so new copies need the new passwords. | Salausavaimen vaihto suojaa vain uudet kopiot. Kopio, joka on jo jollakulla toisella, pysyy luettavana vanhalla salasanalla tai paperilla. Hävitä kopiot, jotka sinulla on, ja vaihda avain, jotta uudet kopiot tarvitsevat uudet salasanat. |
 | `keys.rotateLeftover` | A copy you do not have anymore stays readable. This program cannot erase someone else's USB stick. | Kopio, joka ei ole enää sinulla, pysyy luettavana. Ohjelma ei voi hävittää toisen henkilön muistitikkua. |
 | `keys.singleAdmin` | Both passwords are now held by one person. Ask a second admin to set their own password as soon as you can. | Molemmat salasanat ovat nyt yhdellä henkilöllä. Pyydä toista ylläpitäjää asettamaan oma salasanansa heti kun se on mahdollista. |

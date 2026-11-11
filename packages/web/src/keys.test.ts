@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 // @vitest-environment happy-dom
-import { act, createElement } from 'react'
+import { act, createElement, StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it, vi } from 'vitest'
@@ -22,8 +22,8 @@ vi.mock('./context.js', () => ({
 vi.mock('./key-client.js', () => ({
   acknowledgeKey: vi.fn(async () => ({ state: 'admin' })),
   regenerateKey: vi.fn(async () => ({ recoveryKey: 'XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-CCCC', generation: 4 })),
-  keyFailure: () => ({ key: 'unlock.failed' }),
-  unlockWithAdminPassword: vi.fn(),
+  keyFailure: vi.fn(() => ({ key: 'unlock.failed' })),
+  unlockWithAdminPassword: vi.fn(async () => ({ state: 'admin' })),
   unlockWithPaper: vi.fn(),
   changeKeyPassword: vi.fn(),
 }))
@@ -31,7 +31,7 @@ vi.mock('./key-client.js', () => ({
 const { RecoveryGuide, RecoveryPrint } = await import('./recovery-view.js')
 const { UnlockForm } = await import('./unlock-view.js')
 const { KeyManage } = await import('./key-manage.js')
-const { acknowledgeKey } = await import('./key-client.js')
+const { acknowledgeKey, keyFailure, unlockWithAdminPassword } = await import('./key-client.js')
 
 function text(html: string): string {
   const holder = document.createElement('div')
@@ -86,6 +86,7 @@ describe('print view', () => {
       recoveryKey: secret,
       generation: 1,
       onAcknowledged: () => undefined,
+      onKeyHidden: () => undefined,
     }))
     expect(text(printed)).toContain(secret)
     expect(text(printed)).toContain(PAPER)
@@ -103,6 +104,7 @@ describe('print view', () => {
         recoveryKey: secret,
         generation: 1,
         onAcknowledged: () => undefined,
+        onKeyHidden: () => undefined,
       }))
     })
     expect(host.textContent).toContain(secret)
@@ -127,8 +129,16 @@ describe('key management print', () => {
     await act(async () => {
       root.render(createElement(KeyManage, { state: 'admin', onChanged: () => undefined }))
     })
+    expect(host.textContent).toContain(en['keys.passwordTarget'])
+    expect(host.textContent).toContain(en['keys.otherMode'])
+    expect(host.textContent).toContain(en['keys.otherCurrent'])
+    expect(host.querySelector('[data-testid="rotate-save"]')?.className).toContain('ui-button-danger')
+    expect(host.querySelector('[data-testid="recovery-regenerate"]')?.className).toContain('ui-button-danger')
     await act(async () => {
       host.querySelector<HTMLButtonElement>('[data-testid="recovery-regenerate"]')?.click()
+    })
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>('[data-testid="recovery-regenerate-confirm"]')?.click()
     })
     expect(host.textContent).toContain(secret)
     await act(async () => {
@@ -145,6 +155,76 @@ describe('key management print', () => {
     expect(host.querySelector('[data-testid="key-manage"]')).toBeTruthy()
     await act(async () => { root.unmount() })
     expect(host.textContent).not.toContain(secret)
+    host.remove()
+  })
+})
+
+describe('print view remount', () => {
+  it('keeps the key through a strict remount and hides it only after printing', async () => {
+    const secret = 'XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX-CCCC'
+    const hidden = vi.fn()
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+    await act(async () => {
+      root.render(createElement(StrictMode, null, createElement(RecoveryPrint, {
+        recoveryKey: secret,
+        generation: 1,
+        onAcknowledged: () => undefined,
+        onKeyHidden: hidden,
+      })))
+    })
+    expect(host.textContent).toContain(secret)
+    expect(host.querySelector('h1')?.textContent).toBe(en['keys.printTitle'])
+    expect(host.querySelectorAll('.ui-key-group').length).toBe(9)
+    expect(hidden).not.toHaveBeenCalled()
+    await act(async () => { window.dispatchEvent(new Event('afterprint')) })
+    expect(host.textContent).not.toContain(secret)
+    expect(host.querySelector('[data-testid="recovery-ack-submit"]')).toBeTruthy()
+    expect(hidden).toHaveBeenCalled()
+    await act(async () => { root.unmount() })
+    host.remove()
+  })
+})
+
+function setInput(input: HTMLInputElement, value: string) {
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')?.set
+  setter?.call(input, value)
+  input.dispatchEvent(new Event('input', { bubbles: true }))
+}
+
+describe('unlock form', () => {
+  it('clears the typed secret when the mode changes', async () => {
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+    await act(async () => {
+      root.render(createElement(UnlockForm, { onUnlocked: () => undefined }))
+    })
+    const password = host.querySelector<HTMLInputElement>('[data-testid="unlock-password"]')
+    await act(async () => { if (password) setInput(password, 'correct-horse-battery') })
+    await act(async () => {
+      host.querySelector<HTMLButtonElement>('[data-testid="unlock-recovery"]')?.click()
+    })
+    expect(host.querySelector<HTMLInputElement>('[data-testid="recovery-key"]')?.value).toBe('')
+    expect(host.textContent).not.toContain('correct-horse-battery')
+    await act(async () => { root.unmount() })
+    host.remove()
+  })
+
+  it('disables opening while a wait is in progress', async () => {
+    const host = document.createElement('div')
+    document.body.append(host)
+    const root = createRoot(host)
+    vi.mocked(unlockWithAdminPassword).mockRejectedValueOnce(new Error('wait'))
+    vi.mocked(keyFailure).mockReturnValueOnce({ key: 'unlock.wait', seconds: 9 })
+    await act(async () => {
+      root.render(createElement(UnlockForm, { onUnlocked: () => undefined }))
+    })
+    await act(async () => { host.querySelector<HTMLFormElement>('form')?.requestSubmit() })
+    expect(host.querySelector<HTMLButtonElement>('[data-testid="unlock-open"]')?.disabled).toBe(true)
+    expect(host.textContent).toContain('Wait 9 seconds')
+    await act(async () => { root.unmount() })
     host.remove()
   })
 })

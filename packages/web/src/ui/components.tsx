@@ -137,6 +137,53 @@ export function TextLink({ className, testId, children, ...rest }: TextLinkProps
   return <a className={classes} data-testid={testId} {...rest}><span>{children}</span></a>
 }
 
+export function PasswordPair({
+  passwordId,
+  confirmId,
+  passwordLabel,
+  confirmLabel,
+  password,
+  confirm,
+  onPassword,
+  onConfirm,
+  passwordTestId,
+  confirmTestId,
+}: {
+  passwordId: string
+  confirmId: string
+  passwordLabel: string
+  confirmLabel: string
+  password: string
+  confirm: string
+  onPassword: (value: string) => void
+  onConfirm: (value: string) => void
+  passwordTestId: string
+  confirmTestId: string
+}) {
+  return (
+    <>
+      <TextField id={passwordId} label={passwordLabel} type="password" value={password} onChange={onPassword} testId={passwordTestId} autoComplete="new-password" />
+      <TextField id={confirmId} label={confirmLabel} type="password" value={confirm} onChange={onConfirm} testId={confirmTestId} autoComplete="new-password" />
+    </>
+  )
+}
+
+/** Monospace groups. An empty value renders nothing, and a group does not wrap. */
+export function RecoveryKeyDisplay({ value, testId = 'recovery-key-display' }: { value: string; testId?: string }) {
+  const groups = value.split('-').filter((group) => group.length > 0)
+  if (groups.length === 0) return null
+  return (
+    <p className="ui-key" data-testid={testId} translate="no">
+      {groups.map((group, index) => (
+        <span key={`${index}-${group}`}>
+          {index > 0 ? <span className="ui-key-sep">-</span> : null}
+          <span className="ui-key-group">{group}</span>
+        </span>
+      ))}
+    </p>
+  )
+}
+
 export function Checkbox({
   id,
   label,
