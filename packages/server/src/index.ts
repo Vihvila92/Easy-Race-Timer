@@ -4,15 +4,16 @@ import { writeSync } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-import { holdExclusiveLock, type AppDb, type HeldLock } from '@ert/storage'
+import { holdExclusiveLock, openDatabase, type AppDb, type HeldLock } from '@ert/storage'
 import { createApp, DEFAULT_GLOBAL_MAX, DEFAULT_RECORDING_MAX, DEFAULT_STRICT_MAX } from './app.js'
-import { formatRaceFileError } from './race-file.js'
 import { startBackupSchedule, writeBackup } from './backup.js'
 import { assertCanListen, resolveDataDir, resolveDbPath, resolveListenPort } from './config.js'
+import { databaseProxy, envelopeReady, type DatabaseSlot } from './database-slot.js'
 import { openRaceDatabase } from './database.js'
 import { LaunchCodes, readLaunchHandshake } from './launch-auth.js'
 import { watchParent } from './parent-watch.js'
 import { ensurePrivateDirectory } from './private-dir.js'
+import { formatRaceFileError } from './race-file.js'
 import { formatReadyLine } from './ready-line.js'
 
 function rateMax(name: string, fallback: number): number {
@@ -42,70 +43,117 @@ function requestShutdown() {
   pending.then(() => process.exit(0), () => process.exit(0))
 }
 
-/** Bind the local API. A second call does nothing. */
-export async function startServer(): Promise<void> {
-  if (started) return
-  started = true
-  let token: string | null
+function exitWith(error: unknown): never {
+  console.error(error instanceof Error ? error.message : error)
+  process.exit(1)
+}
+
+async function readLaunchToken(): Promise<string | null> {
   try {
-    token = await readLaunchHandshake(process.stdin)
+    return await readLaunchHandshake(process.stdin)
   } catch {
     console.error('Invalid launch token')
     process.exit(1)
   }
-  if (token) {
-    process.stdin.on('end', () => requestShutdown())
-    process.stdin.on('close', () => requestShutdown())
-    stopParentWatch = watchParent(() => requestShutdown())
+}
+
+function armShutdown(token: string | null): void {
+  if (!token) return
+  process.stdin.on('end', () => requestShutdown())
+  process.stdin.on('close', () => requestShutdown())
+  stopParentWatch = watchParent(() => requestShutdown())
+}
+
+function lockDataDir(token: string | null, dataDir: string): void {
+  if (!token) return
+  try {
+    ensurePrivateDirectory(dataDir)
+    lock = holdExclusiveLock(path.join(dataDir, 'server.lock'))
+  } catch (error) {
+    exitWith(error)
   }
+}
 
-  const host = process.env.HOST ?? '127.0.0.1'
-  const dataDir = resolveDataDir(process.env, process.platform, os.homedir())
-  const dbPath = resolveDbPath(process.env, dataDir)
-  const requestedPort = resolveListenPort(process.env)
-  const testMode = process.env.ERT_TEST_MODE === '1'
-  const configuredDist = process.env.ERT_WEB_DIST?.trim()
-  const webDist = configuredDist || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../web/dist')
-  const runtime = { url: '', dataDir, dbPath }
-
-  if (token) {
-    try {
-      ensurePrivateDirectory(dataDir)
-      lock = holdExclusiveLock(path.join(dataDir, 'server.lock'))
-    } catch (error) {
-      console.error(error instanceof Error ? error.message : error)
+async function openInitial(dbPath: string, token: string | null): Promise<AppDb> {
+  try {
+    return await openRaceDatabase(dbPath, {
+      production: process.env.NODE_ENV === 'production',
+      desktop: Boolean(token),
+      env: process.env,
+    })
+  } catch (error) {
+    if (!envelopeReady(dbPath)) {
+      console.error(formatRaceFileError(error))
       process.exit(1)
     }
+    return openDatabase(':memory:')
   }
+}
 
-  const db: AppDb = await openRaceDatabase(dbPath, {
-    production: process.env.NODE_ENV === 'production',
-    desktop: Boolean(token),
-    env: process.env,
-  }).catch((error: unknown) => {
-    console.error(formatRaceFileError(error))
-    process.exit(1)
-  })
-
-  const pinConfigured = Boolean(db.get<{ pin_hash: string | null }>('SELECT pin_hash FROM event WHERE pin_hash IS NOT NULL LIMIT 1')?.pin_hash)
+function assertListen(host: string, db: AppDb): void {
+  const pinConfigured = db.filePath !== ':memory:' && Boolean(db.get<{ pin_hash: string | null }>('SELECT pin_hash FROM event WHERE pin_hash IS NOT NULL LIMIT 1')?.pin_hash)
   try {
     assertCanListen(host, pinConfigured)
   } catch (error) {
-    console.error(error instanceof Error ? error.message : error)
-    process.exit(1)
+    exitWith(error)
   }
+}
 
+function scheduleBackup(slot: DatabaseSlot, backupDir: string): () => void {
+  let timer: ReturnType<typeof setInterval> | undefined
+  const start = () => {
+    if (timer || slot.current.filePath === ':memory:') return
+    timer = startBackupSchedule(databaseProxy(slot), backupDir)
+  }
+  start()
+  return start
+}
+
+function webDistPath(): string {
+  const configured = process.env.ERT_WEB_DIST?.trim()
+  if (configured) return configured
+  return path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../web/dist')
+}
+
+function listen(input: {
+  app: { listen: (opts: { port: number; host: string }) => Promise<unknown>; server: { address: () => unknown } }
+  host: string
+  requestedPort: number
+  runtime: { url: string; dataDir: string; dbPath: string }
+  code: string | undefined
+}): void {
+  input.app.listen({ port: input.requestedPort, host: input.host }).then(() => {
+    const address = input.app.server.address()
+    const port = typeof address === 'object' && address ? (address as { port: number }).port : input.requestedPort
+    input.runtime.url = `http://${input.host}:${port}`
+    writeSync(1, `${formatReadyLine({ url: input.runtime.url, dataDir: input.runtime.dataDir, dbPath: input.runtime.dbPath, authCode: input.code })}\n`)
+  }).catch((error: unknown) => exitWith(error))
+}
+
+/** Bind the local API. A second call does nothing. */
+export async function startServer(): Promise<void> {
+  if (started) return
+  started = true
+  const token = await readLaunchToken()
+  armShutdown(token)
+  const host = process.env.HOST ?? '127.0.0.1'
+  const dataDir = resolveDataDir(process.env, process.platform, os.homedir())
+  const dbPath = resolveDbPath(process.env, dataDir)
+  lockDataDir(token, dataDir)
+  const slot: DatabaseSlot = { current: await openInitial(dbPath, token) }
+  assertListen(host, slot.current)
   const backupDir = path.join(dataDir, 'backups')
-  const backup = (reason: string) => writeBackup(db, backupDir, reason)
-  startBackupSchedule(db, backupDir)
+  const startBackup = scheduleBackup(slot, backupDir)
   const codes = token ? new LaunchCodes(randomBytes(32).toString('hex')) : undefined
-
+  const runtime = { url: '', dataDir, dbPath }
   const { app } = await createApp({
-    db,
-    testMode,
-    webDist,
+    db: slot.current,
+    slot,
+    testMode: process.env.ERT_TEST_MODE === '1',
+    webDist: webDistPath(),
     runtime,
-    backup,
+    backup: (reason) => slot.current.filePath === ':memory:' ? Promise.resolve() : writeBackup(slot.current, backupDir, reason),
+    onOpen: () => startBackup(),
     launch: token && codes ? { token, codes } : undefined,
     rateLimit: {
       globalMax: rateMax('ERT_RATE_GLOBAL_MAX', DEFAULT_GLOBAL_MAX),
@@ -114,23 +162,10 @@ export async function startServer(): Promise<void> {
     },
   })
   serverApp = app
-
-  app.listen({ port: requestedPort, host }).then(() => {
-    const address = app.server.address()
-    const port = typeof address === 'object' && address ? address.port : requestedPort
-    runtime.url = `http://${host}:${port}`
-    // writeSync bypasses the pipe buffer so the shell sees the line immediately.
-    writeSync(1, `${formatReadyLine({ url: runtime.url, dataDir, dbPath, authCode: codes?.code })}\n`)
-  }).catch((error) => {
-    console.error(error instanceof Error ? error.message : error)
-    process.exit(1)
-  })
+  listen({ app, host, requestedPort: resolveListenPort(process.env), runtime, code: codes?.code })
 }
 
 const cli = process.argv[1] ? pathToFileURL(path.resolve(process.argv[1])).href : ''
 if (cli === import.meta.url) {
-  startServer().catch((error: unknown) => {
-    console.error(error instanceof Error ? error.message : error)
-    process.exit(1)
-  })
+  startServer().catch((error: unknown) => exitWith(error))
 }

@@ -219,6 +219,11 @@ th { font-size: 0.8rem; color: var(--secondary); font-weight: 600; }
   .club-abbr { display: inline; }
   .club-full { display: none; }
 }
+@media print {
+  .nav, .footer, .settings { display: none; }
+  .shell { display: block; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   * { scroll-behavior: auto; transition: none !important; }
 }
